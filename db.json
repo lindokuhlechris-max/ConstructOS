@@ -1,0 +1,240 @@
+{
+  "projects": [
+    {
+      "name": "Tournee",
+      "client": "RedRocket",
+      "contractNumber": "",
+      "location": "South Africa",
+      "engineer": "Ngimi lo",
+      "contractValue": 0,
+      "startDate": "2026-08-10",
+      "finishDate": "2027-02-06",
+      "status": "Not Started",
+      "progress": 0,
+      "id": "PRJ-9348"
+    }
+  ],
+  "activities": [
+    {
+      "projectId": "PRJ-9348",
+      "name": "OHL",
+      "description": "Plinth",
+      "workPackage": "General",
+      "area": "",
+      "priority": "Critical",
+      "discipline": "Electrical",
+      "assignedTo": "",
+      "supervisor": "",
+      "targetQuantity": 50,
+      "actualQuantity": 17,
+      "unit": "m",
+      "status": "In Progress",
+      "startDate": "2026-08-10",
+      "finishDate": "2026-08-17",
+      "plannedHours": 0,
+      "actualHours": 0,
+      "progress": 0,
+      "id": "ACT-6381",
+      "subtasks": [
+        {
+          "id": "SUB-7982",
+          "title": "Pole Installation",
+          "category": "Electrical & MEP",
+          "status": "Not Started",
+          "targetQuantity": 4,
+          "completedQuantity": 0,
+          "unit": "Poles",
+          "assignedEquipment": "CAT"
+        },
+        {
+          "id": "SUB-7645",
+          "title": "Pull cables",
+          "category": "Electrical & MEP",
+          "status": "In Progress",
+          "targetQuantity": 850,
+          "completedQuantity": 400,
+          "unit": "meter",
+          "assignedEquipment": "CAT"
+        }
+      ],
+      "methodStatement": "Complete execution according to engineering specifications and approved site drawings.",
+      "explainerItems": [
+        {
+          "id": "EXP-1786392810335",
+          "title": "Curing",
+          "discipline": "Civil",
+          "scopeDescription": "Here we will be waiting for the grass to grow",
+          "methodSpecs": "Complete execution according to engineering specifications and approved site drawings.",
+          "status": "Not Started",
+          "targetDate": "2026-08-17"
+        },
+        {
+          "id": "EXP-1",
+          "title": "OHL",
+          "discipline": "Electrical",
+          "scopeDescription": "Plinth",
+          "methodSpecs": "Complete execution according to engineering specifications and approved site drawings.",
+          "status": "Not Started",
+          "targetDate": "2026-08-17"
+        }
+      ]
+    },
+    {
+      "projectId": "PRJ-9348",
+      "name": "dwd",
+      "description": "",
+      "workPackage": "General",
+      "area": "",
+      "priority": "Medium",
+      "discipline": "Civil",
+      "assignedTo": "",
+      "supervisor": "",
+      "targetQuantity": 0,
+      "actualQuantity": 0,
+      "unit": "m²",
+      "status": "Not Started",
+      "startDate": "2026-08-10",
+      "finishDate": "2026-08-17",
+      "plannedHours": 0,
+      "actualHours": 0,
+      "progress": 0,
+      "id": "ACT-8805"
+    }
+  ],
+  "reports": [],
+  "labourLogs": [
+    {
+      "id": "LAB-1786375686606",
+      "projectId": "PRJ-9348",
+      "activityId": "ACT-6381",
+      "date": "2026-08-10",
+      "workerType": "Electrician",
+      "workerName": "Mnisi",
+      "startTime": "08:00",
+      "endTime": "16:00",
+      "hours": 8
+    }
+  ],
+  "labourAllocations": [],
+  "workerCheckIns": [],
+  "auditLogs": [
+    {
+      "id": "AL-2ru2t3fag",
+      "projectId": "PRJ-9348",
+      "userId": "Current User",
+      "action": "Equipment Added",
+      "details": "Added equipment \"CAT\" (TLB-01)",
+      "timestamp": "2026-08-10T12:09:04.783Z"
+    },
+    {
+      "id": "AL-n2d4oxc3t",
+      "projectId": "PRJ-9348",
+      "userId": "Current User",
+      "action": "Equipment Updated",
+      "details": "Updated equipment \"CAT\" (TLB-01)",
+      "timestamp": "2026-08-10T12:09:26.470Z"
+    },
+    {
+      "id": "AL-eebgmudr7",
+      "projectId": "PRJ-9348",
+      "userId": "Pieter",
+      "action": "Equipment Log (Maintenance)",
+      "details": "Maintenance logged for equipment TLB-01: Routine Service completed",
+      "timestamp": "2026-08-10T12:45:52.480Z"
+    },
+    {
+      "id": "AL-8q4dkjp2z",
+      "projectId": "PRJ-9348",
+      "userId": "Pieter",
+      "action": "Equipment Log (Maintenance)",
+      "details": "Maintenance logged for equipment TLB-01: Routine Service completed",
+      "timestamp": "2026-08-10T12:46:03.264Z"
+    },
+    {
+      "id": "AL-9cbljf4gf",
+      "projectId": "PRJ-9348",
+      "userId": "Current User",
+      "action": "Labour Logged",
+      "details": "8 hours logged (Electrician) for Activity ACT-6381",
+      "timestamp": "2026-08-10T15:28:06.606Z"
+    },
+    {
+      "id": "AL-6okdi5las",
+      "projectId": "PRJ-9348",
+      "userId": "Current User",
+      "action": "Status Change",
+      "details": "Activity \"OHL\" status changed from Completed to In Progress",
+      "timestamp": "2026-08-10T15:30:11.933Z"
+    }
+  ],
+  "allocations": [],
+  "safetyIncidents": [],
+  "materials": [],
+  "materialReceipts": [],
+  "materialUsages": [],
+  "customFieldDefinitions": [],
+  "employees": [
+    {
+      "id": "EMP-2735",
+      "firstName": "Lindokuhle",
+      "lastName": "Mnisi",
+      "position": "CM",
+      "department": "Engineering",
+      "email": "Imnipanda@gmail.com",
+      "phone": "0792896223",
+      "status": "Active",
+      "hireDate": "2026-08-10",
+      "leaveRecords": [],
+      "leaveBalance": {
+        "annualTotal": 15,
+        "annualUsed": 3,
+        "sickTotal": 10,
+        "sickUsed": 0,
+        "casualTotal": 5,
+        "casualUsed": 0
+      }
+    }
+  ],
+  "teams": [],
+  "equipment": [
+    {
+      "id": "TLB-01",
+      "name": "CAT",
+      "type": "eEEFECSC",
+      "category": "eEEFECSC",
+      "operator": "Pieter",
+      "location": "Block 18",
+      "engineHours": 0,
+      "status": "Operating",
+      "fuelLevel": 100,
+      "fuelColor": "bg-emerald-500",
+      "lastService": "2026-08-10"
+    }
+  ],
+  "equipmentLogs": [
+    {
+      "id": "EQL-5778",
+      "equipmentId": "TLB-01",
+      "type": "Maintenance",
+      "date": "2026-08-10 14:45",
+      "loggedBy": "Pieter",
+      "notes": "Routine Service completed",
+      "maintenanceType": "Routine Service"
+    },
+    {
+      "id": "EQL-7988",
+      "equipmentId": "TLB-01",
+      "type": "Maintenance",
+      "date": "2026-08-10 14:46",
+      "loggedBy": "Pieter",
+      "notes": "Routine Service completed",
+      "maintenanceType": "Routine Service"
+    }
+  ],
+  "safetyRequirements": [],
+  "safetyPolicies": [],
+  "activityInspections": [],
+  "ppeItems": [],
+  "qaInspections": [],
+  "userProfiles": []
+}
