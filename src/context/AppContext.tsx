@@ -140,53 +140,92 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [units, setUnitsState] = useState<'metric' | 'imperial'>('metric');
 
   React.useEffect(() => {
-    // Clear legacy browser localStorage cache containing old mock data
-    try {
-      localStorage.removeItem('projects');
-      localStorage.removeItem('activities');
-      localStorage.removeItem('reports');
-      localStorage.removeItem('employees');
-      localStorage.removeItem('equipment');
-      localStorage.removeItem('materials');
-      localStorage.removeItem('teams');
-      localStorage.removeItem('safetyIncidents');
-      localStorage.removeItem('safetyRequirements');
-      localStorage.removeItem('safetyPolicies');
-      localStorage.removeItem('qaInspections');
-      localStorage.removeItem('reminders');
-    } catch (e) {}
+    // Helper to safely parse localStorage
+    const loadLocal = <T,>(key: string, fallback: T): T => {
+      try {
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed as T;
+        }
+      } catch (e) {
+        console.warn(`Failed to parse localStorage key "${key}":`, e);
+      }
+      return fallback;
+    };
 
-    fetch('/api/state')
-      .then(res => res.json())
-      .then(data => {
-        setProjects(data.projects || []);
-        setActivities(data.activities || []);
-        setReports(data.reports || []);
-        setLabourLogs(data.labourLogs || []);
-        setLabourAllocations(data.labourAllocations || []);
-        setWorkerCheckIns(data.workerCheckIns || []);
-        setAuditLogs(data.auditLogs || []);
-        setSafetyIncidents(data.safetyIncidents || []);
-        setAllocations(data.allocations || []);
-        setMaterials(data.materials || []);
-        setMaterialReceipts(data.materialReceipts || []);
-        setMaterialUsages(data.materialUsages || []);
-        setCustomFieldDefinitions(data.customFieldDefinitions || []);
-        setEmployees(data.employees || []);
-        setEquipment(data.equipment || []);
-        setEquipmentLogs(data.equipmentLogs || []);
-        setSafetyRequirements(data.safetyRequirements || []);
-        setSafetyPolicies(data.safetyPolicies || []);
-        setActivityInspections(data.activityInspections || []);
-        setPPEItems(data.ppeItems || []);
-        setQAInspections(data.qaInspections || []);
-        setReminders(data.reminders || []);
-        setIsLoaded(true);
-      })
-      .catch(err => {
-        console.log('Backend offline, initialized with clean state:', err);
-        setIsLoaded(true);
-      });
+    // Check if we have ANY data saved locally
+    const localProjects = loadLocal<Project[]>('projects', []);
+    const localActivities = loadLocal<Activity[]>('activities', []);
+    const localReports = loadLocal<DailyReport[]>('reports', []);
+    const localEmployees = loadLocal<Employee[]>('employees', []);
+
+    const hasLocalData = localProjects.length > 0 || localActivities.length > 0 || localReports.length > 0 || localEmployees.length > 0;
+
+    if (hasLocalData) {
+      // Load everything from localStorage (primary source)
+      console.log('📂 Loading data from localStorage...');
+      setProjects(localProjects);
+      setActivities(localActivities);
+      setReports(localReports);
+      setLabourLogs(loadLocal<LabourLog[]>('labourLogs', []));
+      setLabourAllocations(loadLocal<LabourAllocation[]>('labourAllocations', []));
+      setWorkerCheckIns(loadLocal<WorkerCheckIn[]>('workerCheckIns', []));
+      setAuditLogs(loadLocal<AuditLog[]>('auditLogs', []));
+      setSafetyIncidents(loadLocal<SafetyIncident[]>('safetyIncidents', []));
+      setAllocations(loadLocal<ResourceAllocation[]>('allocations', []));
+      setMaterials(loadLocal<MaterialInventory[]>('materials', []));
+      setMaterialReceipts(loadLocal<MaterialReceipt[]>('materialReceipts', []));
+      setMaterialUsages(loadLocal<MaterialUsage[]>('materialUsages', []));
+      setCustomFieldDefinitions(loadLocal<CustomFieldDefinition[]>('customFieldDefinitions', []));
+      setEmployees(localEmployees);
+      setEquipment(loadLocal<Equipment[]>('equipment', []));
+      setEquipmentLogs(loadLocal<EquipmentLog[]>('equipmentLogs', []));
+      setSafetyRequirements(loadLocal<SafetyRequirement[]>('safetyRequirements', []));
+      setSafetyPolicies(loadLocal<SafetyPolicy[]>('safetyPolicies', []));
+      setActivityInspections(loadLocal<ActivitySafetyInspection[]>('activityInspections', []));
+      setPPEItems(loadLocal<PPEMaterialItem[]>('ppeItems', []));
+      setQAInspections(loadLocal<QAInspectionItem[]>('qaInspections', []));
+      setTeams(loadLocal<Team[]>('teams', []));
+      setReminders(loadLocal<Reminder[]>('reminders', []));
+      setIsLoaded(true);
+      console.log('✅ Data restored from localStorage successfully.');
+    } else {
+      // No local data — try loading from API server as fallback
+      console.log('🌐 No local data found, fetching from server...');
+      fetch('/api/state')
+        .then(res => res.json())
+        .then(data => {
+          setProjects(data.projects || []);
+          setActivities(data.activities || []);
+          setReports(data.reports || []);
+          setLabourLogs(data.labourLogs || []);
+          setLabourAllocations(data.labourAllocations || []);
+          setWorkerCheckIns(data.workerCheckIns || []);
+          setAuditLogs(data.auditLogs || []);
+          setSafetyIncidents(data.safetyIncidents || []);
+          setAllocations(data.allocations || []);
+          setMaterials(data.materials || []);
+          setMaterialReceipts(data.materialReceipts || []);
+          setMaterialUsages(data.materialUsages || []);
+          setCustomFieldDefinitions(data.customFieldDefinitions || []);
+          setEmployees(data.employees || []);
+          setEquipment(data.equipment || []);
+          setEquipmentLogs(data.equipmentLogs || []);
+          setSafetyRequirements(data.safetyRequirements || []);
+          setSafetyPolicies(data.safetyPolicies || []);
+          setActivityInspections(data.activityInspections || []);
+          setPPEItems(data.ppeItems || []);
+          setQAInspections(data.qaInspections || []);
+          setReminders(data.reminders || []);
+          setIsLoaded(true);
+          console.log('✅ Data loaded from server.');
+        })
+        .catch(err => {
+          console.log('📭 Backend offline, starting with clean state:', err);
+          setIsLoaded(true);
+        });
+    }
   }, []);
 
   React.useEffect(() => {
@@ -258,6 +297,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   React.useEffect(() => {
     localStorage.setItem('allocations', JSON.stringify(allocations));
   }, [allocations]);
+  React.useEffect(() => {
+    localStorage.setItem('employees', JSON.stringify(employees));
+  }, [employees]);
+  React.useEffect(() => {
+    localStorage.setItem('userProfiles', JSON.stringify(userProfiles));
+  }, [userProfiles]);
+  React.useEffect(() => {
+    localStorage.setItem('currentUserProfile', JSON.stringify(currentUserProfile));
+  }, [currentUserProfile]);
 
   const syncToServer = (type: string, data: any) => {
     // This fetch request will be intercepted by the Service Worker if offline
