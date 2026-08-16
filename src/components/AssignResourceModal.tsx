@@ -69,6 +69,10 @@ export function AssignResourceModal({
     updateActivity, 
     addMaterialUsage,
     addAuditLog,
+    addLabourLog,
+    addEquipmentLog,
+    labourLogs,
+    equipmentLogs,
     currentUserProfile,
     userRole
   } = useAppContext();
@@ -386,6 +390,26 @@ export function AssignResourceModal({
           ...targetActivity,
           assignedLabour: updatedLabour
         });
+
+        // Automatically register onto Labour Tracking Panel if not already logged today
+        const hasExistingLog = (labourLogs || []).some(
+          l => l.activityId === selectedActivityId && l.workerName?.toLowerCase() === workerName.toLowerCase() && l.date === employeeStartDate
+        );
+        if (!hasExistingLog) {
+          addLabourLog({
+            id: `LAB-AUTO-${Date.now()}`,
+            projectId: selectedProjectId,
+            activityId: selectedActivityId,
+            date: employeeStartDate,
+            workerType: workerRole || 'Site Worker',
+            workerName: workerName,
+            startTime: '08:00',
+            endTime: '16:00',
+            hours: Number(plannedHours) || 8,
+            hoursWorked: Number(plannedHours) || 8,
+            notes: `Allocated to task "${activityName}" (${plannedHours || 8}h/shift)`
+          });
+        }
       }
 
       // Add Audit Log
@@ -456,6 +480,32 @@ export function AssignResourceModal({
           ...targetActivity,
           assignedEquipment: updatedEq
         });
+
+        // Automatically register onto Equipment Hour Tracking Panel if not already logged today
+        const hasExistingEqLog = (equipmentLogs || []).some(
+          l => l.activityId === selectedActivityId && l.equipmentId === (selectedEquipmentId || taskEqAssignment.equipmentId) && l.date === equipmentStartDate
+        );
+        if (!hasExistingEqLog) {
+          addEquipmentLog({
+            id: `EQL-AUTO-${Date.now()}`,
+            equipmentId: selectedEquipmentId || taskEqAssignment.equipmentId,
+            activityId: selectedActivityId,
+            activityName,
+            projectId: selectedProjectId,
+            type: 'Hours',
+            date: equipmentStartDate,
+            loggedBy: currentUserProfile?.name || 'Site Supervisor',
+            hoursAdded: Number(equipmentPlannedHours) || 8,
+            hours: Number(equipmentPlannedHours) || 8,
+            startTime: '08:00',
+            endTime: '16:00',
+            driverOperator: operatorName || 'Assigned Operator',
+            operator: operatorName || 'Assigned Operator',
+            status: 'Operating',
+            setStatus: 'Operating',
+            notes: `Allocated to task "${activityName}" (${equipmentPlannedHours || 8} hrs shift)`
+          });
+        }
       }
 
       // Add Audit Log

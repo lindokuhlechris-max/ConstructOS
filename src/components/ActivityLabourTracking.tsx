@@ -1,15 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from './ui';
-import { LabourLog, canUserEditSection } from '../types';
+import { LabourLog, canUserEditSection, Activity } from '../types';
 import { useAppContext } from '../context/AppContext';
-import { Users, Clock, Plus, Trash2, Edit3, User, ShieldCheck, Lock, CheckCircle2 } from 'lucide-react';
+import { Users, Clock, Plus, Trash2, Edit3, User, ShieldCheck, Lock, CheckCircle2, HardHat } from 'lucide-react';
 
 interface ActivityLabourTrackingProps {
   activityId: string;
   projectId: string;
+  activity?: Activity;
 }
 
-export function ActivityLabourTracking({ activityId, projectId }: ActivityLabourTrackingProps) {
+export function ActivityLabourTracking({ activityId, projectId, activity }: ActivityLabourTrackingProps) {
   const { labourLogs, addLabourLog, updateLabourLog, deleteLabourLog, currentUserProfile, employees } = useAppContext();
   
   const canEditLabour = canUserEditSection(currentUserProfile, 'labour');
@@ -30,14 +31,13 @@ export function ActivityLabourTracking({ activityId, projectId }: ActivityLabour
     hours: 8,
   });
 
-  const workerTypes = ['General Laborer', 'Carpenter', 'Electrician', 'Plumber', 'Mason', 'Foreman', 'Engineer'];
+  const workerTypes = ['General Laborer', 'Carpenter', 'Electrician', 'Plumber', 'Mason', 'Foreman', 'Engineer', 'Surveyor', 'Construction Manager', 'Operator', 'Safety Officer'];
 
   const calculateHours = (start: string, end: string) => {
     if (!start || !end) return 0;
     const [startH, startM] = start.split(':').map(Number);
     const [endH, endM] = end.split(':').map(Number);
     let diff = (endH + endM / 60) - (startH + startM / 60);
-    // basic lunch deduction logic could be added here, but keep it simple
     if (diff < 0) diff += 24;
     return Math.round(diff * 10) / 10;
   };
@@ -49,6 +49,23 @@ export function ActivityLabourTracking({ activityId, projectId }: ActivityLabour
         newData.hours = calculateHours(newData.startTime, newData.endTime);
       }
       return newData;
+    });
+  };
+
+  const handleQuickLogAssignedLabour = (assignedPerson: { name: string; role?: string; hours?: number }) => {
+    const defaultHours = assignedPerson.hours || 8;
+    addLabourLog({
+      id: `LAB-${Date.now()}`,
+      projectId,
+      activityId,
+      date: new Date().toISOString().split('T')[0],
+      workerType: assignedPerson.role || 'General Laborer',
+      workerName: assignedPerson.name,
+      startTime: '08:00',
+      endTime: '16:00',
+      hours: defaultHours,
+      hoursWorked: defaultHours,
+      notes: `Standard shift log (${defaultHours}h) for ${assignedPerson.name}`
     });
   };
 
@@ -88,28 +105,96 @@ export function ActivityLabourTracking({ activityId, projectId }: ActivityLabour
     }
 
     setIsAdding(false);
-    setFormData(prev => ({ ...prev, workerName: '' })); // reset mostly just the name for consecutive adds
+    setFormData(prev => ({ ...prev, workerName: '' }));
   };
 
   const totalHours = activityLogs.reduce((sum, log) => sum + log.hours, 0);
 
   return (
-    <Card className="rounded-2xl border border-slate-200 dark:border-slate-800">
+    <Card className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
       <CardHeader className="flex flex-row items-center justify-between py-4">
         <CardTitle className="text-sm font-bold uppercase text-slate-500 tracking-wider flex items-center gap-2">
-          <Users className="h-4 w-4 text-[#0B5FFF]" />
+          <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           Team & Labour Tracking
         </CardTitle>
         {!isAdding && (
-          <Button onClick={() => setIsAdding(true)} size="sm" className="h-8 text-xs gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-lg">
+          <Button 
+            onClick={() => {
+              setFormData({
+                date: new Date().toISOString().split('T')[0],
+                workerType: activity?.assignedLabour?.[0]?.role || 'General Laborer',
+                workerName: activity?.assignedLabour?.[0]?.name || '',
+                startTime: '08:00',
+                endTime: '16:00',
+                hours: activity?.assignedLabour?.[0]?.hours || 8,
+              });
+              setEditingLog(null);
+              setIsAdding(true);
+            }} 
+            size="sm" 
+            className="h-8 text-xs gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 dark:text-emerald-300 rounded-lg font-semibold"
+          >
             <Plus className="h-3.5 w-3.5" /> Log Time
           </Button>
         )}
       </CardHeader>
       
       <CardContent className="flex flex-col gap-4">
+        {/* Allocated Personnel Quick-Log Strip */}
+        {activity?.assignedLabour && activity.assignedLabour.length > 0 && !isAdding && (
+          <div className="p-3 rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 flex flex-col gap-2">
+            <span className="text-[11px] font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
+              <HardHat className="h-3.5 w-3.5 text-emerald-600" />
+              Allocated Personnel Quick-Log:
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {activity.assignedLabour.map(labAssigned => {
+                const isLoggedToday = activityLogs.some(l => 
+                  l.workerName?.toLowerCase() === labAssigned.name.toLowerCase() && 
+                  l.date === new Date().toISOString().split('T')[0]
+                );
+
+                return (
+                  <div 
+                    key={labAssigned.id} 
+                    className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 shadow-2xs text-xs"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center font-bold text-[10px] shrink-0">
+                      {labAssigned.name.split(' ').map(n => n[0]).join('')}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[130px]">
+                        {labAssigned.name}
+                      </span>
+                      <span className="text-[10px] text-slate-500 truncate">
+                        {labAssigned.role} ({labAssigned.hours || 8}h/shift)
+                      </span>
+                    </div>
+
+                    {isLoggedToday ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-1 rounded-md border border-emerald-200 dark:border-emerald-800">
+                        <CheckCircle2 className="h-3 w-3" /> Logged Today
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleQuickLogAssignedLabour(labAssigned)}
+                        className="h-7 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md gap-1"
+                      >
+                        <Plus className="h-3 w-3" /> Log {labAssigned.hours || 8}h
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {isAdding && (
-          <form onSubmit={handleSubmit} className="bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-4 border border-blue-100 dark:border-blue-900/40 mb-2 flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="bg-emerald-50/40 dark:bg-emerald-950/20 rounded-xl p-4 border border-emerald-100 dark:border-emerald-900/40 mb-2 flex flex-col gap-4 animate-in fade-in duration-150">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-semibold text-slate-500 block mb-1">Date</label>
@@ -129,21 +214,34 @@ export function ActivityLabourTracking({ activityId, projectId }: ActivityLabour
                   onChange={(e) => {
                     const selectedName = e.target.value;
                     const employee = employees.find(emp => `${emp.firstName} ${emp.lastName}` === selectedName);
+                    const assignedLabourItem = activity?.assignedLabour?.find(l => l.name === selectedName);
                     
                     setFormData({ 
                       ...formData, 
                       workerName: selectedName,
-                      workerType: employee?.position || formData.workerType
+                      workerType: assignedLabourItem?.role || employee?.position || formData.workerType,
+                      hours: assignedLabourItem?.hours || formData.hours || 8
                     });
                   }}
                   className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B5FFF]"
                 >
                   <option value="">Select an employee...</option>
-                  {employees.filter(emp => emp.status !== 'Terminated').map(emp => (
-                    <option key={emp.id} value={`${emp.firstName} ${emp.lastName}`}>
-                      {emp.firstName} {emp.lastName} {emp.position ? `- ${emp.position}` : ''}
-                    </option>
-                  ))}
+                  {activity?.assignedLabour && activity.assignedLabour.length > 0 && (
+                    <optgroup label="Allocated to This Task">
+                      {activity.assignedLabour.map(lab => (
+                        <option key={`assigned-lab-${lab.id}`} value={lab.name}>
+                          ⭐ {lab.name} - {lab.role} ({lab.hours || 8} hrs/shift)
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="All Site Employees">
+                    {employees.filter(emp => emp.status !== 'Terminated').map(emp => (
+                      <option key={emp.id} value={`${emp.firstName} ${emp.lastName}`}>
+                        {emp.firstName} {emp.lastName} {emp.position ? `- ${emp.position}` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
 

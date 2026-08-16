@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, Badge, ProgressBar, Button } 
 import { InteractiveProgress } from './InteractiveProgress';
 import { CameraCapture } from './CameraCapture';
 import { ActivityLabourTracking } from './ActivityLabourTracking';
+import { ActivityEquipmentTracking } from './ActivityEquipmentTracking';
 import { SubTaskManager } from './SubTaskManager';
 import { ActivityExplainerBreakdown } from './ActivityExplainerBreakdown';
 import { RecordActivityForTaskModal } from './RecordActivityForTaskModal';
@@ -82,7 +83,10 @@ interface ActivityDetailProps {
 
 export function ActivityDetail({ activity: initialActivity, onSave, onClose, onDelete, onDuplicate, isEditable = true }: ActivityDetailProps) {
   const navigate = useNavigate();
-  const { projects, materials, employees, equipment, documents, updateActivity, addReport, addAuditLog, addAllocation, userRole, currentUserProfile, labourLogs } = useAppContext();
+  const { 
+    projects, materials, employees, equipment, documents, updateActivity, addReport, addAuditLog, addAllocation, 
+    userRole, currentUserProfile, labourLogs, addLabourLog, deleteLabourLog, equipmentLogs, addEquipmentLog, deleteEquipmentLog 
+  } = useAppContext();
   const canEditActivities = canUserEditSection(currentUserProfile, 'activities');
   const [activity, setActivity] = useState<Activity>(initialActivity);
   const [isEditing, setIsEditing] = useState(false);
@@ -98,6 +102,13 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
       .filter(log => log?.activityId === activity.id)
       .reduce((sum, log) => sum + (log.hours || 0), 0);
   }, [labourLogs, activity.id, activity.actualHours]);
+
+  const calculatedMachineHours = React.useMemo(() => {
+    if (!equipmentLogs) return 0;
+    return equipmentLogs
+      .filter(log => log?.activityId === activity.id && log?.type === 'Hours')
+      .reduce((sum, log) => sum + (log.hoursAdded || log.hours || 0), 0);
+  }, [equipmentLogs, activity.id]);
   const [newComment, setNewComment] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -441,16 +452,34 @@ ${subtaskSummaryLines}
     const empObj = employees.find(emp => emp.id === selectedEmployeeId);
     const workerName = empObj ? `${empObj.firstName} ${empObj.lastName}` : (customWorkerName || 'Site Worker');
     const workerRole = empObj ? empObj.position : assignLabourRole;
+    const assignedHours = Number(assignLabourHours) || 8;
+    const autoLabourLogId = `LAB-AUTO-${Date.now()}`;
 
     const newAssignment: TaskLabourAssignment = {
       id: `TLA-${Date.now()}`,
       employeeId: selectedEmployeeId,
       name: workerName,
       role: workerRole,
-      hours: Number(assignLabourHours) || 8,
+      hours: assignedHours,
       startDate: new Date().toISOString().split('T')[0],
       notes: assignLabourNotes,
+      labourLogId: autoLabourLogId
     };
+
+    // Automatically register onto Labour Tracking Panel
+    addLabourLog({
+      id: autoLabourLogId,
+      projectId: activity.projectId,
+      activityId: activity.id,
+      date: newAssignment.startDate,
+      workerType: workerRole,
+      workerName: workerName,
+      startTime: '08:00',
+      endTime: '16:00',
+      hours: assignedHours,
+      hoursWorked: assignedHours,
+      notes: `Allocated to task "${activity.name}" (${assignedHours}h/shift)`
+    });
 
     const updatedLabour = [newAssignment, ...(activity.assignedLabour || [])];
     const updatedActivity = { ...activity, assignedLabour: updatedLabour };
@@ -463,7 +492,7 @@ ${subtaskSummaryLines}
       projectId: activity.projectId,
       userId: userRole === 'Manager' ? 'Current User' : 'Current User',
       action: 'Labour Assigned to Task',
-      details: `Assigned ${workerName} (${workerRole}) to Task "${activity.name}" (${activity.id})`,
+      details: `Assigned ${workerName} (${workerRole}) to Task "${activity.name}" (${activity.id}) and registered on Labour Tracking`,
       timestamp: new Date().toISOString()
     });
 
@@ -476,15 +505,39 @@ ${subtaskSummaryLines}
     e.preventDefault();
     const eqObj = equipment.find(eq => eq.id === selectedEquipmentId);
     const eqName = eqObj ? eqObj.name : 'Site Equipment';
+    const assignedOperator = assignEqOperator || eqObj?.operator || 'Assigned Operator';
+    const autoEqLogId = `EQL-AUTO-${Date.now()}`;
 
     const newAssignment: TaskEquipmentAssignment = {
       id: `TEA-${Date.now()}`,
       equipmentId: selectedEquipmentId || `EQ-${Date.now()}`,
       name: eqName,
-      operator: assignEqOperator || eqObj?.operator || 'Assigned Operator',
+      operator: assignedOperator,
       startDate: new Date().toISOString().split('T')[0],
       notes: assignEqNotes,
+      equipmentLogId: autoEqLogId
     };
+
+    // Automatically register onto Equipment Hour Tracking Panel
+    addEquipmentLog({
+      id: autoEqLogId,
+      equipmentId: newAssignment.equipmentId,
+      activityId: activity.id,
+      activityName: activity.name,
+      projectId: activity.projectId,
+      type: 'Hours',
+      date: newAssignment.startDate,
+      loggedBy: currentUserProfile?.name || 'Site Supervisor',
+      hoursAdded: 8,
+      hours: 8,
+      startTime: '08:00',
+      endTime: '16:00',
+      driverOperator: assignedOperator,
+      operator: assignedOperator,
+      status: 'Operating',
+      setStatus: 'Operating',
+      notes: `Allocated to task "${activity.name}" (8 hrs shift)`
+    });
 
     const updatedEquipment = [newAssignment, ...(activity.assignedEquipment || [])];
     const updatedActivity = { ...activity, assignedEquipment: updatedEquipment };
@@ -497,7 +550,7 @@ ${subtaskSummaryLines}
       projectId: activity.projectId,
       userId: userRole === 'Manager' ? 'Current User' : 'Current User',
       action: 'Equipment Assigned to Task',
-      details: `Assigned equipment ${eqName} to Task "${activity.name}" (${activity.id})`,
+      details: `Assigned equipment ${eqName} to Task "${activity.name}" (${activity.id}) and registered on Equipment Hour Tracking`,
       timestamp: new Date().toISOString()
     });
 
@@ -515,6 +568,10 @@ ${subtaskSummaryLines}
   };
 
   const handleRemoveLabourAssignment = (assignmentId: string) => {
+    const targetLabour = (activity.assignedLabour || []).find(l => l.id === assignmentId);
+    if (targetLabour?.labourLogId) {
+      deleteLabourLog(targetLabour.labourLogId);
+    }
     const updated = (activity.assignedLabour || []).filter(l => l.id !== assignmentId);
     const updatedActivity = { ...activity, assignedLabour: updated };
     setActivity(updatedActivity);
@@ -523,6 +580,10 @@ ${subtaskSummaryLines}
   };
 
   const handleRemoveEquipmentAssignment = (assignmentId: string) => {
+    const targetEquipment = (activity.assignedEquipment || []).find(e => e.id === assignmentId);
+    if (targetEquipment?.equipmentLogId) {
+      deleteEquipmentLog(targetEquipment.equipmentLogId);
+    }
     const updated = (activity.assignedEquipment || []).filter(e => e.id !== assignmentId);
     const updatedActivity = { ...activity, assignedEquipment: updated };
     setActivity(updatedActivity);
@@ -664,9 +725,95 @@ ${subtaskSummaryLines}
       }
     }
 
+    // Auto-sync workers and equipment from subtasks into activity resources & tracking panels
+    let updatedAssignedLabour = [...(activity.assignedLabour || [])];
+    let updatedAssignedEquipment = [...(activity.assignedEquipment || [])];
+
+    updatedSubtasks.forEach(s => {
+      const workers = [...(s.assignedWorkers || []), ...(s.assignedPerson ? [s.assignedPerson] : [])];
+      workers.forEach(wName => {
+        if (!wName || wName.trim() === '') return;
+        const exists = updatedAssignedLabour.some(l => l.name.toLowerCase() === wName.toLowerCase());
+        if (!exists) {
+          const emp = employees.find(e => `${e.firstName} ${e.lastName}`.toLowerCase() === wName.toLowerCase());
+          const autoLabId = `LAB-AUTO-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+          const newLab: TaskLabourAssignment = {
+            id: `TLA-SUB-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            employeeId: emp?.id,
+            name: wName,
+            role: emp?.position || 'Site Worker',
+            hours: 8,
+            startDate: s.startDate || activity.startDate || new Date().toISOString().split('T')[0],
+            notes: `Assigned via subtask "${s.title}"`,
+            labourLogId: autoLabId
+          };
+          updatedAssignedLabour.push(newLab);
+
+          // Register in Labour Tracking
+          addLabourLog({
+            id: autoLabId,
+            projectId: activity.projectId,
+            activityId: activity.id,
+            date: newLab.startDate,
+            workerType: newLab.role,
+            workerName: wName,
+            startTime: '08:00',
+            endTime: '16:00',
+            hours: 8,
+            hoursWorked: 8,
+            notes: `Assigned via subtask "${s.title}" on task "${activity.name}"`
+          });
+        }
+      });
+
+      const eqList = [...(s.assignedEquipmentList || []), ...(s.assignedEquipment ? [s.assignedEquipment] : [])];
+      eqList.forEach(eqIdentifier => {
+        if (!eqIdentifier || eqIdentifier.trim() === '') return;
+        const exists = updatedAssignedEquipment.some(e => e.name.toLowerCase() === eqIdentifier.toLowerCase() || e.equipmentId === eqIdentifier);
+        if (!exists) {
+          const eqObj = equipment.find(e => e.name.toLowerCase() === eqIdentifier.toLowerCase() || e.id === eqIdentifier);
+          const eqName = eqObj ? eqObj.name : eqIdentifier;
+          const autoEqId = `EQL-AUTO-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+          const newEq: TaskEquipmentAssignment = {
+            id: `TEA-SUB-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            equipmentId: eqObj?.id || `EQ-${Date.now()}`,
+            name: eqName,
+            operator: eqObj?.operator || 'Assigned Operator',
+            startDate: s.startDate || activity.startDate || new Date().toISOString().split('T')[0],
+            notes: `Allocated via subtask "${s.title}"`,
+            equipmentLogId: autoEqId
+          };
+          updatedAssignedEquipment.push(newEq);
+
+          // Register in Equipment Tracking
+          addEquipmentLog({
+            id: autoEqId,
+            equipmentId: newEq.equipmentId,
+            activityId: activity.id,
+            activityName: activity.name,
+            projectId: activity.projectId,
+            type: 'Hours',
+            date: newEq.startDate,
+            loggedBy: currentUserProfile?.name || 'Site Supervisor',
+            hoursAdded: 8,
+            hours: 8,
+            startTime: '08:00',
+            endTime: '16:00',
+            driverOperator: newEq.operator,
+            operator: newEq.operator,
+            status: 'Operating',
+            setStatus: 'Operating',
+            notes: `Allocated via subtask "${s.title}" on task "${activity.name}"`
+          });
+        }
+      });
+    });
+
     const updated = { 
       ...activity, 
       subtasks: updatedSubtasks,
+      assignedLabour: updatedAssignedLabour,
+      assignedEquipment: updatedAssignedEquipment,
       progress: calculatedProgress,
       status: newStatus
     };
@@ -1492,7 +1639,10 @@ ${subtaskSummaryLines}
           </Card>
 
           {/* Labour Tracking */}
-          <ActivityLabourTracking activityId={activity.id} projectId={activity.projectId} />
+          <ActivityLabourTracking activityId={activity.id} projectId={activity.projectId} activity={activity} />
+
+          {/* Equipment & Machinery Hour Tracking */}
+          <ActivityEquipmentTracking activityId={activity.id} projectId={activity.projectId} activity={activity} />
 
         </div>
 
@@ -1550,6 +1700,30 @@ ${subtaskSummaryLines}
                 ) : (
                   <div>{getPriorityBadge(activity.priority)}</div>
                 )}
+              </div>
+
+              {/* Resource Tracking Summary */}
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+                <span className="text-[10px] font-bold uppercase text-slate-400">Resource Hours Logged</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 flex flex-col">
+                    <span className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                      <Users className="h-3 w-3 text-emerald-600" /> Labour Hours
+                    </span>
+                    <span className="text-base font-black text-emerald-950 dark:text-emerald-100 mt-0.5">
+                      {calculatedActualHours} <span className="text-xs font-medium text-emerald-600">hrs</span>
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 flex flex-col">
+                    <span className="text-[10px] font-semibold text-blue-800 dark:text-blue-300 flex items-center gap-1">
+                      <Truck className="h-3 w-3 text-blue-600" /> Machine Hours
+                    </span>
+                    <span className="text-base font-black text-blue-950 dark:text-blue-100 mt-0.5">
+                      {calculatedMachineHours} <span className="text-xs font-medium text-blue-600">hrs</span>
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* QR & Barcode Section */}

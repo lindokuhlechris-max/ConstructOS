@@ -124,6 +124,7 @@ interface AppContextType {
   updateEquipment: (equipment: Equipment) => void;
   deleteEquipment: (id: string) => void;
   addEquipmentLog: (log: EquipmentLog) => void;
+  updateEquipmentLog: (log: EquipmentLog) => void;
   deleteEquipmentLog: (id: string) => void;
   addSafetyRequirement: (req: SafetyRequirement) => void;
   updateSafetyRequirement: (req: SafetyRequirement) => void;
@@ -1705,6 +1706,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const updateEquipmentLog = (updatedLog: EquipmentLog) => {
+    const existingLog = equipmentLogs.find(l => l.id === updatedLog.id);
+    const targetEq = equipment.find(e => e.id === updatedLog.equipmentId);
+    const enrichedLog: EquipmentLog = { ...updatedLog };
+
+    if (updatedLog.type === 'Hours' && updatedLog.hoursAdded !== undefined) {
+      const hasCostTracking = targetEq?.trackOperationalCost !== false && Boolean(targetEq?.hourlyRate);
+      if (enrichedLog.hourlyRateApplied === undefined) {
+        enrichedLog.hourlyRateApplied = hasCostTracking ? (targetEq?.hourlyRate || 0) : 0;
+      }
+      if (enrichedLog.calculatedOperatingCost === undefined) {
+        enrichedLog.calculatedOperatingCost = (enrichedLog.hourlyRateApplied || 0) > 0 
+          ? ((updatedLog.hoursAdded || 0) * (enrichedLog.hourlyRateApplied || 0)) 
+          : 0;
+      }
+    }
+
+    setEquipmentLogs(prev => prev.map(l => l.id === updatedLog.id ? enrichedLog : l));
+    syncToServer('update_equipment_log', enrichedLog);
+
+    // Adjust equipment engine hours if hours changed
+    if (existingLog && existingLog.type === 'Hours' && enrichedLog.type === 'Hours') {
+      const oldHours = existingLog.hoursAdded || 0;
+      const newHours = enrichedLog.hoursAdded || 0;
+      const delta = newHours - oldHours;
+      if (delta !== 0) {
+        setEquipment(prev => prev.map(eq => {
+          if (eq.id !== enrichedLog.equipmentId) return eq;
+          const currentHours = typeof eq.engineHours === 'number' ? eq.engineHours : (parseInt(String(eq.engineHours)) || 0);
+          const updatedHours = Math.max(0, currentHours + delta);
+          const updated = { ...eq, engineHours: updatedHours };
+          syncToServer('update_equipment', updated);
+          return updated;
+        }));
+      }
+    }
+
+    addAuditLog({
+      id: `AL-${Math.random().toString(36).substr(2, 9)}`,
+      projectId: projects[0]?.id || '',
+      userId: userRole === 'Manager' ? 'Current User' : 'Current User',
+      action: 'Equipment Log Updated',
+      details: `Updated ${updatedLog.type} log for equipment ${updatedLog.equipmentId}`,
+      timestamp: new Date().toISOString()
+    });
+  };
+
   const deleteEquipmentLog = (id: string) => {
     const logToDelete = equipmentLogs.find(l => l.id === id);
     setEquipmentLogs(prev => prev.filter(l => l.id !== id));
@@ -2623,7 +2671,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addLabourLog, updateLabourLog, deleteLabourLog, addLabourAllocation, updateLabourAllocation, deleteLabourAllocation, addWorkerCheckIn, deleteWorkerCheckIn, addAuditLog, addAllocation, updateAllocation, deleteAllocation,
       addSafetyIncident, updateSafetyIncident, deleteSafetyIncident, addMaterialReceipt, addMaterialUsage, addMaterial, addMaterials, updateMaterial, deleteMaterial,
       addCustomFieldDefinition, updateCustomFieldDefinition, addEmployee, updateEmployee, deleteEmployee, addTeam, updateTeam, deleteTeam,
-      addEquipment, updateEquipment, deleteEquipment, addEquipmentLog, deleteEquipmentLog,
+      addEquipment, updateEquipment, deleteEquipment, addEquipmentLog, updateEquipmentLog, deleteEquipmentLog,
       addSafetyRequirement, updateSafetyRequirement, deleteSafetyRequirement,
       addSafetyPolicy, updateSafetyPolicy, deleteSafetyPolicy,
       addActivityInspection, updateActivityInspection, deleteActivityInspection, addSiteInspectionPhoto, deleteSiteInspectionPhoto,

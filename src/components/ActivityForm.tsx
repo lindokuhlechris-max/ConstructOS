@@ -169,9 +169,47 @@ export function ActivityForm({ onClose, onSubmit, initialValues, isDuplicate }: 
       setIsSubmitting(true);
       const activityId = formData.id || `ACT-${Math.floor(1000 + Math.random() * 9000)}`;
       const today = new Date().toISOString().split('T')[0];
+
+      let assignedLabour = [...(formData.assignedLabour || [])];
+      let assignedEquipment = [...(formData.assignedEquipment || [])];
+
+      (formData.subtasks || []).forEach(s => {
+        const workers = [...(s.assignedWorkers || []), ...(s.assignedPerson ? [s.assignedPerson] : [])];
+        workers.forEach(wName => {
+          if (!wName || wName.trim() === '') return;
+          if (!assignedLabour.some(l => l.name.toLowerCase() === wName.toLowerCase())) {
+            assignedLabour.push({
+              id: `TLA-SUB-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              name: wName,
+              role: 'Site Worker',
+              hours: 8,
+              startDate: s.startDate || formData.startDate || today,
+              notes: `Assigned via subtask "${s.title}"`
+            });
+          }
+        });
+
+        const eqList = [...(s.assignedEquipmentList || []), ...(s.assignedEquipment ? [s.assignedEquipment] : [])];
+        eqList.forEach(eqName => {
+          if (!eqName || eqName.trim() === '') return;
+          if (!assignedEquipment.some(e => e.name.toLowerCase() === eqName.toLowerCase())) {
+            assignedEquipment.push({
+              id: `TEA-SUB-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              equipmentId: `EQ-${Date.now()}`,
+              name: eqName,
+              operator: 'Assigned Operator',
+              startDate: s.startDate || formData.startDate || today,
+              notes: `Allocated via subtask "${s.title}"`
+            });
+          }
+        });
+      });
+
       const newActivity: Activity = {
         ...formData as Activity,
         id: activityId,
+        assignedLabour,
+        assignedEquipment,
         createdAt: formData.createdAt || today,
         updatedAt: today
       };

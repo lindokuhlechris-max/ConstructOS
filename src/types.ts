@@ -260,6 +260,7 @@ export interface TaskLabourAssignment {
   startDate: string;
   endDate?: string;
   notes?: string;
+  labourLogId?: string;
 }
 
 export interface TaskEquipmentAssignment {
@@ -270,6 +271,7 @@ export interface TaskEquipmentAssignment {
   startDate: string;
   endDate?: string;
   notes?: string;
+  equipmentLogId?: string;
 }
 
 export interface ActivityTrackerFilter {
@@ -876,11 +878,17 @@ export type EquipmentLogType = 'Hours' | 'Mileage' | 'Loads & Trips' | 'Power Ou
 export interface EquipmentLog {
   id: string;
   equipmentId: string;
+  activityId?: string;
+  activityName?: string;
+  projectId?: string;
   type: EquipmentLogType;
   date: string;
   loggedBy: string;
   hoursAdded?: number;
+  hours?: number; // alias for hoursAdded for consistent activity tracking
   totalHours?: number;
+  startTime?: string;
+  endTime?: string;
   mileageAdded?: number;
   odometerReading?: number;
   loadsAdded?: number;
@@ -897,8 +905,10 @@ export interface EquipmentLog {
   cost?: number; // Direct maintenance or refuel cost
   tripRoute?: string;
   driverOperator?: string;
+  operator?: string; // alias for driverOperator
   maintenanceType?: string;
   notes?: string;
+  status?: EquipmentStatus;
   setStatus?: EquipmentStatus;
 }
 
