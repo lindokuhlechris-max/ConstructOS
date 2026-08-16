@@ -658,15 +658,45 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       {/* Log Modal */}
       {logModalEq && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl p-6 shadow-xl space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-4xl p-6 shadow-xl space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">Log Activity ({logModalEq.id})</h3>
               <Button variant="ghost" size="icon" onClick={() => setLogModalEq(null)}><X className="h-4 w-4" /></Button>
             </div>
-            <div className="flex border-b border-slate-200 dark:border-slate-800 text-xs font-semibold gap-2">
-              <button onClick={() => setLogTab('Hours')} className={`pb-2 px-2 border-b-2 ${logTab === 'Hours' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>Hours & Cost</button>
-              <button onClick={() => setLogTab('Refuel')} className={`pb-2 px-2 border-b-2 ${logTab === 'Refuel' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400'}`}>Refueling</button>
-              <button onClick={() => setLogTab('Maintenance')} className={`pb-2 px-2 border-b-2 ${logTab === 'Maintenance' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-400'}`}>Maintenance & Wash</button>
+            <div className="grid grid-cols-3 bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-xl text-xs font-semibold gap-1.5">
+              <button 
+                type="button"
+                onClick={() => setLogTab('Hours')} 
+                className={`py-2 px-3 rounded-lg transition-all text-center flex items-center justify-center gap-1.5 ${
+                  logTab === 'Hours' 
+                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-700 font-bold' 
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Clock className="h-3.5 w-3.5" /> Engine Hours & Cost
+              </button>
+              <button 
+                type="button"
+                onClick={() => setLogTab('Refuel')} 
+                className={`py-2 px-3 rounded-lg transition-all text-center flex items-center justify-center gap-1.5 ${
+                  logTab === 'Refuel' 
+                    ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm border border-slate-200 dark:border-slate-700 font-bold' 
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Fuel className="h-3.5 w-3.5" /> Refueling
+              </button>
+              <button 
+                type="button"
+                onClick={() => setLogTab('Maintenance')} 
+                className={`py-2 px-3 rounded-lg transition-all text-center flex items-center justify-center gap-1.5 ${
+                  logTab === 'Maintenance' 
+                    ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm border border-slate-200 dark:border-slate-700 font-bold' 
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Wrench className="h-3.5 w-3.5" /> Maintenance & Wash
+              </button>
             </div>
             <form onSubmit={handleLogSubmit} className="space-y-3 text-xs">
               {logTab === 'Hours' && (
