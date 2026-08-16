@@ -309,26 +309,26 @@ export function SubTaskManager({
   activityName,
   projectId
 }: SubTaskManagerProps) {
-  const { employees = [], equipment = [], teams = [], addAuditLog, userRole, surveyRecords = [], linkSurveyRecordToActivity, unlinkSurveyRecordFromActivity, updateSurveyRecord } = useAppContext();
+  const { activities = [], updateActivity, employees = [], equipment = [], teams = [], addAuditLog, userRole } = useAppContext();
   
   const [isExpanded, setIsExpanded] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
-  const [isImportSurveyModalOpen, setIsImportSurveyModalOpen] = useState(false);
-  const [selectedSurveyToImportId, setSelectedSurveyToImportId] = useState('');
   
-  // Auto-detect if this activity matches an advance surveyed section (e.g. PTS 1 - PTS 2)
-  const unlinkedMatchingSurvey = React.useMemo(() => {
-    if (!activityName && !activityId) return null;
-    const actNameLower = (activityName || '').toLowerCase();
-    const existingLinkedSurveyIds = new Set((subtasks || []).map(s => s.surveyRecordId).filter(Boolean));
-    return surveyRecords.find(r => {
-      if (r.linkedActivityId && r.linkedActivityId === activityId) return false;
-      if (existingLinkedSurveyIds.has(r.id)) return false;
-      const spanLower = r.spanName.toLowerCase();
-      return (actNameLower.includes(spanLower) || spanLower.includes(actNameLower)) && !r.linkedActivityId;
-    }) || null;
-  }, [surveyRecords, activityName, activityId, subtasks]);
+  // Cross-Activity Linking Memos: group other activities by discipline/workPackage/category
+  const otherActivities = React.useMemo(() => {
+    return (activities || []).filter(a => a.id !== activityId);
+  }, [activities, activityId]);
+
+  const groupedActivities = React.useMemo(() => {
+    const groups: Record<string, typeof activities> = {};
+    otherActivities.forEach(act => {
+      const groupKey = act.discipline || act.workPackage || 'General';
+      if (!groups[groupKey]) groups[groupKey] = [];
+      groups[groupKey].push(act);
+    });
+    return groups;
+  }, [otherActivities]);
 
   // Validation alert banner state
   const [validationAlert, setValidationAlert] = useState<{
@@ -355,6 +355,7 @@ export function SubTaskManager({
   const [predecessorId, setPredecessorId] = useState<string | ''>('');
   const [requiresPhotoEvidence, setRequiresPhotoEvidence] = useState(false);
   const [requiresSupervisorSignOff, setRequiresSupervisorSignOff] = useState(false);
+  const [linkedActivityId, setLinkedActivityId] = useState<string>('');
 
   // Editing subtask form state
   const [editTitle, setEditTitle] = useState('');
@@ -376,12 +377,106 @@ export function SubTaskManager({
   const [editPredecessorId, setEditPredecessorId] = useState<string | ''>('');
   const [editRequiresPhotoEvidence, setEditRequiresPhotoEvidence] = useState(false);
   const [editRequiresSupervisorSignOff, setEditRequiresSupervisorSignOff] = useState(false);
+  const [editLinkedActivityId, setEditLinkedActivityId] = useState<string>('');
 
   // QA Hold Point Sign-Off Modal State
   const [signOffSubtask, setSignOffSubtask] = useState<SubTask | null>(null);
   const [signOffInspectorName, setSignOffInspectorName] = useState('Site QA/QC Engineer');
   const [signOffNotes, setSignOffNotes] = useState('');
   const [signOffPhotoUrl, setSignOffPhotoUrl] = useState('');
+
+  // Bi-directional Cross-Activity Subtask Sync Helper
+  const syncSubtaskToLinkedActivity = (
+    subtask: SubTask, 
+    action: 'update' | 'delete', 
+    previousLinkedActId?: string
+  ) => {
+    if (!updateActivity || !activities) return;
+
+    // Handle Unlinking or re-linking to a different activity
+    if (previousLinkedActId && previousLinkedActId !== subtask.linkedActivityId) {
+      const oldAct = activities.find(a => a.id === previousLinkedActId);
+      if (oldAct && oldAct.subtasks) {
+        const cleanedSubs = oldAct.subtasks.filter(
+          s => s.linkedSubtaskId !== subtask.id && s.id !== `ST-SYNC-${subtask.id}`
+        );
+        const doneCount = cleanedSubs.filter(s => s.status === 'Completed').length;
+        const newProg = cleanedSubs.length > 0 ? Math.round((doneCount / cleanedSubs.length) * 100) : oldAct.progress;
+        updateActivity({
+          ...oldAct,
+          subtasks: cleanedSubs,
+          progress: newProg,
+          updatedAt: new Date().toISOString().split('T')[0]
+        });
+      }
+    }
+
+    if (!subtask.linkedActivityId) return;
+    const targetAct = activities.find(a => a.id === subtask.linkedActivityId);
+    if (!targetAct) return;
+
+    const currentTargetSubs = targetAct.subtasks || [];
+    let updatedTargetSubs: SubTask[];
+
+    if (action === 'delete') {
+      updatedTargetSubs = currentTargetSubs.filter(
+        s => s.linkedSubtaskId !== subtask.id && s.id !== `ST-SYNC-${subtask.id}`
+      );
+    } else {
+      const existingIdx = currentTargetSubs.findIndex(
+        s => s.linkedSubtaskId === subtask.id || s.id === `ST-SYNC-${subtask.id}` || (subtask.linkedSubtaskId && s.id === subtask.linkedSubtaskId)
+      );
+
+      const counterpartData: SubTask = {
+        id: existingIdx >= 0 ? currentTargetSubs[existingIdx].id : `ST-SYNC-${subtask.id}`,
+        title: `${subtask.title} [From: ${activityName || activityId || 'Activity'}]`,
+        category: subtask.category,
+        status: subtask.status,
+        completedQuantity: subtask.completedQuantity,
+        targetQuantity: subtask.targetQuantity,
+        unit: subtask.unit || 'units',
+        assignedWorkers: subtask.assignedWorkers,
+        assignedPerson: subtask.assignedPerson,
+        assignedEquipmentList: subtask.assignedEquipmentList,
+        assignedEquipment: subtask.assignedEquipment,
+        assignedTeams: subtask.assignedTeams,
+        assignedTeam: subtask.assignedTeam,
+        startDate: subtask.startDate,
+        endDate: subtask.endDate,
+        notes: subtask.notes,
+        isMilestone: subtask.isMilestone,
+        milestoneCriteria: subtask.milestoneCriteria,
+        isHoldPoint: subtask.isHoldPoint,
+        isLinkedDiscipline: true,
+        linkedActivityId: activityId,
+        linkedActivityName: activityName,
+        linkedSubtaskId: subtask.id,
+        sourceActivityId: activityId,
+        sourceActivityName: activityName
+      };
+
+      if (existingIdx >= 0) {
+        updatedTargetSubs = [...currentTargetSubs];
+        updatedTargetSubs[existingIdx] = {
+          ...currentTargetSubs[existingIdx],
+          ...counterpartData,
+          id: currentTargetSubs[existingIdx].id
+        };
+      } else {
+        updatedTargetSubs = [...currentTargetSubs, counterpartData];
+      }
+    }
+
+    const doneCount = updatedTargetSubs.filter(s => s.status === 'Completed').length;
+    const newProg = updatedTargetSubs.length > 0 ? Math.round((doneCount / updatedTargetSubs.length) * 100) : targetAct.progress;
+
+    updateActivity({
+      ...targetAct,
+      subtasks: updatedTargetSubs,
+      progress: newProg,
+      updatedAt: new Date().toISOString().split('T')[0]
+    });
+  };
 
   // Checklist catalog items
   const workerItems: ChecklistItem[] = (employees || []).map(emp => ({
@@ -506,7 +601,6 @@ export function SubTaskManager({
   const holdPointCount = subtasks.filter(s => s.isHoldPoint).length;
   const signedOffHoldPointCount = subtasks.filter(s => s.isHoldPoint && s.holdPointSignOff?.approved).length;
   const progressPercent = calculateOverallProgress(subtasks);
-
   const handleSubtasksChange = (updated: SubTask[]) => {
     onChange(updated);
     if (onAutoSyncProgress) {
@@ -548,13 +642,17 @@ export function SubTaskManager({
     // Status change with cascading rules
     const updated = subtasks.map(st => {
       if (st.id === id) {
-        return {
+        const updatedItem: SubTask = {
           ...st,
           status: nextStatus,
           completedQuantity: nextStatus === 'Completed' 
             ? (st.targetQuantity || st.completedQuantity || 0) 
             : nextStatus === 'Not Started' ? 0 : st.completedQuantity
         };
+        if (updatedItem.linkedActivityId) {
+          syncSubtaskToLinkedActivity(updatedItem, 'update');
+        }
+        return updatedItem;
       }
       return st;
     });
@@ -565,19 +663,6 @@ export function SubTaskManager({
     }
 
     handleSubtasksChange(updated);
-
-    // Two-way sync: If this subtask is linked to a Survey Section in the Survey Hub, update the Survey Hub record
-    if (target.surveyRecordId) {
-      const matchSurvey = surveyRecords.find(r => r.id === target.surveyRecordId);
-      if (matchSurvey) {
-        updateSurveyRecord({
-          ...matchSurvey,
-          status: nextStatus,
-          completedMeters: nextStatus === 'Completed' ? matchSurvey.distanceMeters : nextStatus === 'Not Started' ? 0 : Math.round(matchSurvey.distanceMeters * 0.5),
-          updatedAt: new Date().toISOString().split('T')[0]
-        });
-      }
-    }
 
     if (addAuditLog) {
       addAuditLog({
@@ -622,13 +707,17 @@ export function SubTaskManager({
 
     const updated = subtasks.map(st => {
       if (st.id === id) {
-        return {
+        const updatedItem: SubTask = {
           ...st,
           status: newStatus,
           completedQuantity: newStatus === 'Completed' 
             ? (st.targetQuantity || st.completedQuantity || 0) 
             : newStatus === 'Not Started' ? 0 : st.completedQuantity
         };
+        if (updatedItem.linkedActivityId) {
+          syncSubtaskToLinkedActivity(updatedItem, 'update');
+        }
+        return updatedItem;
       }
       return st;
     });
@@ -707,11 +796,15 @@ export function SubTaskManager({
 
     const updated = subtasks.map(st => {
       if (st.id === id) {
-        return {
+        const updatedItem: SubTask = {
           ...st,
           completedQuantity: safeQty,
           status: newStatus
         };
+        if (updatedItem.linkedActivityId) {
+          syncSubtaskToLinkedActivity(updatedItem, 'update');
+        }
+        return updatedItem;
       }
       return st;
     });
@@ -742,11 +835,15 @@ export function SubTaskManager({
     const targetQty = st.targetQuantity || st.completedQuantity || 1;
     const updated = subtasks.map(s => {
       if (s.id === st.id) {
-        return {
+        const updatedItem: SubTask = {
           ...s,
           status: 'Completed' as const,
           completedQuantity: targetQty
         };
+        if (updatedItem.linkedActivityId) {
+          syncSubtaskToLinkedActivity(updatedItem, 'update');
+        }
+        return updatedItem;
       }
       return s;
     });
@@ -784,7 +881,7 @@ export function SubTaskManager({
     const targetQty = signOffSubtask.targetQuantity || signOffSubtask.completedQuantity || 1;
     const updated = subtasks.map(st => {
       if (st.id === signOffSubtask.id) {
-        return {
+        const updatedItem: SubTask = {
           ...st,
           status: 'Completed' as const,
           completedQuantity: targetQty,
@@ -796,6 +893,10 @@ export function SubTaskManager({
             approved: true
           }
         };
+        if (updatedItem.linkedActivityId) {
+          syncSubtaskToLinkedActivity(updatedItem, 'update');
+        }
+        return updatedItem;
       }
       return st;
     });
@@ -829,11 +930,15 @@ export function SubTaskManager({
     const targetSub = subtasks.find(s => s.id === id);
     const updated = subtasks.map(st => {
       if (st.id === id) {
-        return {
+        const updatedItem: SubTask = {
           ...st,
           status: 'In Progress' as const,
           holdPointSignOff: undefined
         };
+        if (updatedItem.linkedActivityId) {
+          syncSubtaskToLinkedActivity(updatedItem, 'update');
+        }
+        return updatedItem;
       }
       return st;
     });
@@ -867,6 +972,8 @@ export function SubTaskManager({
     }
     if (!title.trim()) return;
 
+    const targetActivity = activities.find(a => a.id === linkedActivityId);
+
     const newSub: SubTask = {
       id: `SUB-${Math.floor(1000 + Math.random() * 9000)}`,
       title: title.trim(),
@@ -890,8 +997,15 @@ export function SubTaskManager({
       isHoldPoint: isHoldPoint || undefined,
       predecessorId: predecessorId || undefined,
       requiresPhotoEvidence: requiresPhotoEvidence || undefined,
-      requiresSupervisorSignOff: requiresSupervisorSignOff || undefined
+      requiresSupervisorSignOff: requiresSupervisorSignOff || undefined,
+      linkedActivityId: linkedActivityId || undefined,
+      linkedActivityName: targetActivity ? targetActivity.name : undefined,
+      isLinkedDiscipline: Boolean(linkedActivityId)
     };
+
+    if (newSub.linkedActivityId) {
+      syncSubtaskToLinkedActivity(newSub, 'update');
+    }
 
     const updated = [...subtasks, newSub];
     handleSubtasksChange(updated);
@@ -902,7 +1016,7 @@ export function SubTaskManager({
         projectId: projectId || 'PROJ-001',
         userId: 'Current User',
         action: 'Subtask Created',
-        details: `Subtask "${newSub.title}" (${newSub.category}) added to Activity "${activityName || activityId || 'Activity'}"`,
+        details: `Subtask "${newSub.title}" (${newSub.category}) added to Activity "${activityName || activityId || 'Activity'}"${newSub.linkedActivityName ? ` (Linked to ${newSub.linkedActivityName})` : ''}`,
         entityType: 'Activity',
         entityId: activityId,
         actionType: 'create',
@@ -929,6 +1043,7 @@ export function SubTaskManager({
     setPredecessorId('');
     setRequiresPhotoEvidence(false);
     setRequiresSupervisorSignOff(false);
+    setLinkedActivityId('');
     setIsAdding(false);
   };
 
@@ -959,6 +1074,7 @@ export function SubTaskManager({
     setEditPredecessorId(st.predecessorId || '');
     setEditRequiresPhotoEvidence(!!st.requiresPhotoEvidence);
     setEditRequiresSupervisorSignOff(!!st.requiresSupervisorSignOff);
+    setEditLinkedActivityId(st.linkedActivityId || '');
   };
 
   const handleSaveEditSubtask = (id: string, e?: React.FormEvent | React.MouseEvent) => {
@@ -998,36 +1114,42 @@ export function SubTaskManager({
       }
     }
 
-    const updated = subtasks.map(st => {
-      if (st.id === id) {
-        return {
-          ...st,
-          title: editTitle.trim(),
-          category: editCategory,
-          targetQuantity: targetQ,
-          completedQuantity: compQ,
-          unit: editUnit || 'units',
-          assignedWorkers: editAssignedWorkers.length > 0 ? editAssignedWorkers : undefined,
-          assignedPerson: editAssignedWorkers.length > 0 ? editAssignedWorkers.join(', ') : undefined,
-          assignedEquipmentList: editAssignedEquipmentList.length > 0 ? editAssignedEquipmentList : undefined,
-          assignedEquipment: editAssignedEquipmentList.length > 0 ? editAssignedEquipmentList.join(', ') : undefined,
-          assignedTeams: editAssignedTeams.length > 0 ? editAssignedTeams : undefined,
-          assignedTeam: editAssignedTeams.length > 0 ? editAssignedTeams.join(', ') : undefined,
-          startDate: editStartDate || undefined,
-          endDate: editEndDate || undefined,
-          status: stat,
-          notes: editNotes || undefined,
-          parentId: editParentId || undefined,
-          isMilestone: editIsMilestone || undefined,
-          milestoneCriteria: editIsMilestone ? (editMilestoneCriteria.trim() || undefined) : undefined,
-          isHoldPoint: editIsHoldPoint || undefined,
-          predecessorId: editPredecessorId || undefined,
-          requiresPhotoEvidence: editRequiresPhotoEvidence || undefined,
-          requiresSupervisorSignOff: editRequiresSupervisorSignOff || undefined
-        };
-      }
-      return st;
-    });
+    const prevLinkedActId = currentSub?.linkedActivityId;
+    const targetActivity = activities.find(a => a.id === editLinkedActivityId);
+
+    const updatedSubtask: SubTask = {
+      ...currentSub,
+      id,
+      title: editTitle.trim(),
+      category: editCategory,
+      targetQuantity: targetQ,
+      completedQuantity: compQ,
+      unit: editUnit || 'units',
+      assignedWorkers: editAssignedWorkers.length > 0 ? editAssignedWorkers : undefined,
+      assignedPerson: editAssignedWorkers.length > 0 ? editAssignedWorkers.join(', ') : undefined,
+      assignedEquipmentList: editAssignedEquipmentList.length > 0 ? editAssignedEquipmentList : undefined,
+      assignedEquipment: editAssignedEquipmentList.length > 0 ? editAssignedEquipmentList.join(', ') : undefined,
+      assignedTeams: editAssignedTeams.length > 0 ? editAssignedTeams : undefined,
+      assignedTeam: editAssignedTeams.length > 0 ? editAssignedTeams.join(', ') : undefined,
+      startDate: editStartDate || undefined,
+      endDate: editEndDate || undefined,
+      status: stat,
+      notes: editNotes || undefined,
+      parentId: editParentId || undefined,
+      isMilestone: editIsMilestone || undefined,
+      milestoneCriteria: editIsMilestone ? (editMilestoneCriteria.trim() || undefined) : undefined,
+      isHoldPoint: editIsHoldPoint || undefined,
+      predecessorId: editPredecessorId || undefined,
+      requiresPhotoEvidence: editRequiresPhotoEvidence || undefined,
+      requiresSupervisorSignOff: editRequiresSupervisorSignOff || undefined,
+      linkedActivityId: editLinkedActivityId || undefined,
+      linkedActivityName: targetActivity ? targetActivity.name : undefined,
+      isLinkedDiscipline: Boolean(editLinkedActivityId)
+    };
+
+    syncSubtaskToLinkedActivity(updatedSubtask, 'update', prevLinkedActId);
+
+    const updated = subtasks.map(st => st.id === id ? updatedSubtask : st);
 
     if (stat !== 'Completed' && editParentId) {
       revertParentIfCompleted(updated, editParentId);
@@ -1041,7 +1163,7 @@ export function SubTaskManager({
         projectId: projectId || 'PROJ-001',
         userId: 'Current User',
         action: 'Subtask Updated',
-        details: `Subtask "${editTitle.trim()}" in Activity "${activityName || activityId || 'Activity'}" parameters updated`,
+        details: `Subtask "${editTitle.trim()}" in Activity "${activityName || activityId || 'Activity'}" parameters updated${updatedSubtask.linkedActivityName ? ` (Linked to ${updatedSubtask.linkedActivityName})` : ''}`,
         entityType: 'Activity',
         entityId: activityId,
         actionType: 'update',
@@ -1065,6 +1187,9 @@ export function SubTaskManager({
     if (readOnly) return;
 
     const target = subtasks.find(s => s.id === id);
+    if (target && target.linkedActivityId) {
+      syncSubtaskToLinkedActivity(target, 'delete');
+    }
 
     // Also remove parentId references pointing to this task
     const updated = subtasks
@@ -1104,39 +1229,6 @@ export function SubTaskManager({
     items.splice(result.destination.index, 0, reorderedItem);
 
     handleSubtasksChange(items);
-  };
-
-  const handleImportSurveySection = (surveyRec: SurveySectionRecord) => {
-    const newSubtask: SubTask = {
-      id: `ST-SURV-${Date.now().toString(36)}`,
-      title: `Trench set-out (${surveyRec.spanName})`,
-      category: 'Surveying & Set-out',
-      status: surveyRec.status,
-      targetQuantity: surveyRec.distanceMeters,
-      completedQuantity: surveyRec.completedMeters,
-      unit: 'm',
-      assignedWorkers: surveyRec.surveyors || [],
-      isMilestone: true,
-      milestoneCriteria: 'Centerline benchmarks & trench pegging verified by land surveyor',
-      isLinkedDiscipline: true,
-      linkedActivityId: activityId,
-      surveyRecordId: surveyRec.id,
-      sectionSpan: surveyRec.spanName,
-      chainage: surveyRec.chainageStart && surveyRec.chainageEnd ? `${surveyRec.chainageStart} - ${surveyRec.chainageEnd}` : undefined,
-      surveyData: {
-        peggingNotes: surveyRec.peggingNotes,
-        coordinates: surveyRec.coordinates,
-        benchMarkRef: surveyRec.benchmarkRef,
-        surveyorName: (surveyRec.surveyors || []).join(', '),
-        surveyDate: surveyRec.surveyDate,
-        elevation: surveyRec.elevation
-      }
-    };
-
-    handleSubtasksChange([newSubtask, ...subtasks]);
-    linkSurveyRecordToActivity(surveyRec.id, activityId || 'ACT-DEFAULT', newSubtask.id);
-    setIsImportSurveyModalOpen(false);
-    setSelectedSurveyToImportId('');
   };
 
   const getCategoryBadgeColor = (cat: SubTaskCategory) => {
@@ -1203,64 +1295,21 @@ export function SubTaskManager({
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
           {!readOnly && (
-            <>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setIsImportSurveyModalOpen(true)}
-                className="text-xs gap-1.5 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
-              >
-                <Compass className="h-3.5 w-3.5 text-indigo-500" /> Link Survey Hub
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => {
-                  setIsAdding(!isAdding);
-                  setEditingSubtaskId(null);
-                  if (!isExpanded) setIsExpanded(true);
-                }}
-                className="text-xs gap-1.5 bg-[#0B5FFF] hover:bg-blue-600 text-white shadow-sm"
-              >
-                <Plus className="h-3.5 w-3.5" /> Add Subtask
-              </Button>
-            </>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setIsAdding(!isAdding);
+                setEditingSubtaskId(null);
+                if (!isExpanded) setIsExpanded(true);
+              }}
+              className="text-xs gap-1.5 bg-[#0B5FFF] hover:bg-blue-600 text-white shadow-sm"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add Subtask
+            </Button>
           )}
         </div>
       </div>
-
-      {/* Advance Survey Banner (Auto-detect matching corridor section like PTS 1 - PTS 2) */}
-      {unlinkedMatchingSurvey && (
-        <div className="p-3.5 rounded-xl bg-gradient-to-r from-indigo-50/90 via-blue-50/80 to-white dark:from-indigo-950/40 dark:via-blue-950/30 dark:to-slate-900/50 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-sm animate-in fade-in">
-          <div className="flex items-start sm:items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 sm:mt-0">
-              <Compass className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-slate-900 dark:text-white">
-                  Advance Survey Set-Out Available ({unlinkedMatchingSurvey.spanName})
-                </span>
-                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 text-[10px] font-bold">
-                  {unlinkedMatchingSurvey.distanceMeters}m • {unlinkedMatchingSurvey.status}
-                </Badge>
-              </div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
-                Surveyed by {(unlinkedMatchingSurvey.surveyors || []).join(', ') || 'Survey Team'} {unlinkedMatchingSurvey.surveyDate ? `on ${unlinkedMatchingSurvey.surveyDate}` : ''}. Benchmark: {unlinkedMatchingSurvey.benchmarkRef || 'Ref set'}.
-              </p>
-            </div>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => handleImportSurveySection(unlinkedMatchingSurvey)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shrink-0 gap-1.5 rounded-xl shadow-sm w-full sm:w-auto"
-          >
-            <Link2 className="h-3.5 w-3.5" /> Bind Survey to WBS
-          </Button>
-        </div>
-      )}
 
       {/* Validation Alert Notification Banner */}
       {validationAlert && (
@@ -1323,7 +1372,7 @@ export function SubTaskManager({
                   <label className="text-xs font-medium text-slate-500">Subtask Title *</label>
                   <input
                     type="text"
-                    placeholder="e.g. Pole Installation, Trenching, Cable Pulling"
+                    placeholder="e.g. Trench set-out, Pipe laying, Cable pulling"
                     value={title}
                     onChange={e => setTitle(e.target.value)}
                     onKeyDown={e => {
@@ -1362,7 +1411,7 @@ export function SubTaskManager({
                   <label className="text-xs font-medium text-slate-500">Target Qty (Optional)</label>
                   <input
                     type="number"
-                    placeholder="e.g. 4"
+                    placeholder="e.g. 433"
                     value={targetQuantity}
                     onChange={e => setTargetQuantity(e.target.value ? Number(e.target.value) : '')}
                     className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
@@ -1372,7 +1421,7 @@ export function SubTaskManager({
                   <label className="text-xs font-medium text-slate-500">Unit</label>
                   <input
                     type="text"
-                    placeholder="Poles, m³, m, units"
+                    placeholder="m, m³, tons, units"
                     value={unit}
                     onChange={e => setUnit(e.target.value)}
                     className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
@@ -1448,7 +1497,7 @@ export function SubTaskManager({
                 </div>
               </div>
 
-              {/* Predecessor Dependency Selection */}
+              {/* Predecessor Dependency & Cross-Activity Linking */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
@@ -1468,16 +1517,49 @@ export function SubTaskManager({
                     ))}
                   </select>
                 </div>
+
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-500">Notes / Scope Description</label>
-                  <input
-                    type="text"
-                    placeholder="Optional notes or reference specifications..."
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
-                  />
+                  <label className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+                    <Link2 className="h-3.5 w-3.5 text-indigo-500" />
+                    Link Subtask to Activity (Cross-Activity Sync)
+                  </label>
+                  <select
+                    value={linkedActivityId}
+                    onChange={e => setLinkedActivityId(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    <option value="">None (Standalone Subtask)</option>
+                    {Object.entries(groupedActivities).map(([groupCategory, acts]) => (
+                      <optgroup key={groupCategory} label={`📁 ${groupCategory}`}>
+                        {acts.map(act => (
+                          <option key={act.id} value={act.id}>
+                            {act.name} {act.workPackage ? `[${act.workPackage}]` : ''} ({act.status || 'Active'})
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
                 </div>
+              </div>
+
+              {linkedActivityId && (
+                <div className="p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-700 dark:text-indigo-300 flex items-center gap-2">
+                  <Link2 className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                  <span>
+                    🔗 This subtask will automatically share status and progress with <strong>"{activities.find(a => a.id === linkedActivityId)?.name || linkedActivityId}"</strong>.
+                  </span>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-500">Notes / Scope Description</label>
+                <input
+                  type="text"
+                  placeholder="Optional notes or reference specifications..."
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
+                />
               </div>
 
               {/* Milestone Checkpoint Option */}
@@ -1788,16 +1870,49 @@ export function SubTaskManager({
                                         ))}
                                       </select>
                                     </div>
+
                                     <div className="space-y-1">
-                                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Notes / Scope Description</label>
-                                      <input
-                                        type="text"
-                                        value={editNotes}
-                                        onChange={e => setEditNotes(e.target.value)}
-                                        placeholder="Optional notes..."
-                                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
-                                      />
+                                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                                        <Link2 className="h-3.5 w-3.5 text-indigo-500" />
+                                        Link Subtask to Activity (Cross-Activity Sync)
+                                      </label>
+                                      <select
+                                        value={editLinkedActivityId}
+                                        onChange={e => setEditLinkedActivityId(e.target.value)}
+                                        className="w-full h-9 px-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                      >
+                                        <option value="">None (Standalone Subtask)</option>
+                                        {Object.entries(groupedActivities).map(([groupCategory, acts]) => (
+                                          <optgroup key={groupCategory} label={`📁 ${groupCategory}`}>
+                                            {acts.map(act => (
+                                              <option key={act.id} value={act.id}>
+                                                {act.name} {act.workPackage ? `[${act.workPackage}]` : ''} ({act.status || 'Active'})
+                                              </option>
+                                            ))}
+                                          </optgroup>
+                                        ))}
+                                      </select>
                                     </div>
+                                  </div>
+
+                                  {editLinkedActivityId && (
+                                    <div className="p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-700 dark:text-indigo-300 flex items-center gap-2">
+                                      <Link2 className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                                      <span>
+                                        🔗 This subtask is linked to <strong>"{activities.find(a => a.id === editLinkedActivityId)?.name || editLinkedActivityId}"</strong>. Progress & completion sync automatically across both activities.
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Notes / Scope Description</label>
+                                    <input
+                                      type="text"
+                                      value={editNotes}
+                                      onChange={e => setEditNotes(e.target.value)}
+                                      placeholder="Optional notes..."
+                                      className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
+                                    />
                                   </div>
 
                                   {/* Milestone Toggle for Edit Form */}
@@ -1951,16 +2066,27 @@ export function SubTaskManager({
                                                 {st.category}
                                               </span>
 
-                                              {/* Linked Survey Section Badge */}
-                                              {(st.isLinkedDiscipline || st.surveyRecordId || st.category === 'Surveying & Set-out') && (
-                                                <span 
-                                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-xs"
-                                                  title={st.surveyData ? `Surveyor: ${st.surveyData.surveyorName || 'Survey Team'} | Pegs: ${st.surveyData.peggingNotes || 'N/A'} | BM: ${st.surveyData.benchMarkRef || 'N/A'}` : 'Linked to Master Survey Corridor Hub'}
-                                                >
-                                                  <Compass className="h-3 w-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                                                  {st.sectionSpan ? `Survey Section: ${st.sectionSpan}` : 'Survey Hub Linked'}
-                                                </span>
-                                              )}
+                                               {/* Cross-Activity Linked Badge */}
+                                               {st.linkedActivityId && (
+                                                 <span 
+                                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-xs"
+                                                   title={`Linked to Activity: ${st.linkedActivityName || activities.find(a => a.id === st.linkedActivityId)?.name || st.linkedActivityId}`}
+                                                 >
+                                                   <Link2 className="h-3 w-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                                                   Linked: {st.linkedActivityName || activities.find(a => a.id === st.linkedActivityId)?.name || st.linkedActivityId}
+                                                 </span>
+                                               )}
+
+                                               {/* Cross-Activity Source Badge */}
+                                               {st.sourceActivityId && !st.linkedActivityId && (
+                                                 <span 
+                                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] dark:text-blue-300 border-blue-200 dark:border-blue-800 shadow-xs"
+                                                   title={`Synced from Source Activity: ${st.sourceActivityName || activities.find(a => a.id === st.sourceActivityId)?.name || st.sourceActivityId}`}
+                                                 >
+                                                   <Link2 className="h-3 w-3 text-[#0B5FFF] shrink-0" />
+                                                   Source: {st.sourceActivityName || activities.find(a => a.id === st.sourceActivityId)?.name || st.sourceActivityId}
+                                                 </span>
+                                               )}
 
                                               {/* Milestone Checkpoint Badge */}
                                               {st.isMilestone && (
@@ -2396,75 +2522,6 @@ export function SubTaskManager({
                   <ShieldCheck className="h-4 w-4" /> Approve & Sign Off QA Hold Point
                 </Button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Link / Import Section from Survey Hub */}
-      {isImportSurveyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-                <Compass className="h-5 w-5 text-indigo-600" /> Link Survey Corridor Section
-              </h3>
-              <button type="button" onClick={() => setIsImportSurveyModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-500">
-              Select an advance surveyed corridor section (e.g. from PTS 1 to PTS 20) to bind as a subtask in this activity with verified coordinates and pegging benchmarks.
-            </p>
-
-            <div className="space-y-3 text-xs">
-              <label className="text-slate-600 dark:text-slate-300 font-semibold block">Available Survey Sections</label>
-              <select
-                value={selectedSurveyToImportId}
-                onChange={e => setSelectedSurveyToImportId(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm font-medium"
-              >
-                <option value="">-- Choose a survey section --</option>
-                {surveyRecords.map(rec => (
-                  <option key={rec.id} value={rec.id}>
-                    {rec.spanName} ({rec.distanceMeters}m - {rec.status}) {rec.linkedActivityId ? `[Linked: ${rec.linkedActivityName || rec.linkedActivityId}]` : '[Available]'}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {selectedSurveyToImportId && (() => {
-              const previewRec = surveyRecords.find(r => r.id === selectedSurveyToImportId);
-              if (!previewRec) return null;
-              return (
-                <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-xl border border-indigo-200 dark:border-indigo-800/40 text-xs space-y-1">
-                  <div className="font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
-                    <Compass className="h-3.5 w-3.5 text-indigo-600" /> {previewRec.spanName} ({previewRec.distanceMeters}m)
-                  </div>
-                  <div className="text-[11px] text-indigo-700 dark:text-indigo-300">
-                    Chainage: {previewRec.chainageStart || 'CH 0+000'} to {previewRec.chainageEnd || '+433m'}
-                  </div>
-                  <div className="text-[11px] text-slate-600 dark:text-slate-400">
-                    Crew: {(previewRec.surveyors || []).join(', ') || 'Survey Team'} | Benchmark: {previewRec.benchmarkRef || 'BM Ref'}
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-              <Button type="button" variant="outline" onClick={() => setIsImportSurveyModalOpen(false)}>Cancel</Button>
-              <Button 
-                type="button" 
-                disabled={!selectedSurveyToImportId} 
-                onClick={() => {
-                  const targetRec = surveyRecords.find(r => r.id === selectedSurveyToImportId);
-                  if (targetRec) handleImportSurveySection(targetRec);
-                }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white"
-              >
-                Bind to WBS
-              </Button>
             </div>
           </div>
         </div>
