@@ -110,6 +110,8 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
       .reduce((sum, log) => sum + (log.hoursAdded || log.hours || 0), 0);
   }, [equipmentLogs, activity.id]);
   const [newComment, setNewComment] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Task Resource Assign Modal States
@@ -668,12 +670,21 @@ ${subtaskSummaryLines}
   const handlePostComment = () => {
     if (!newComment.trim()) return;
 
-    const comment = {
-      id: `CMT-${Date.now()}`,
-      author: 'Current User',
+    const authorName = currentUserProfile?.name || (userRole === 'Admin' ? 'Administrator' : 'Current User');
+    const authorId = currentUserProfile?.id || 'current-user';
+    const authorRole = currentUserProfile?.role || userRole || 'Worker';
+    const authorInitials = currentUserProfile?.initials || authorName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    const authorAvatar = currentUserProfile?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authorName)}`;
+
+    const comment: Comment = {
+      id: `CMT-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      author: authorName,
+      userId: authorId,
+      userRole: authorRole,
+      userInitials: authorInitials,
       text: newComment.trim(),
       timestamp: new Date().toISOString(),
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=CurrentUser'
+      avatar: authorAvatar
     };
 
     const updatedComments = [...(activity.comments || []), comment];
@@ -684,6 +695,88 @@ ${subtaskSummaryLines}
     
     if (onSave) {
       onSave(updatedActivity);
+    } else {
+      updateActivity(updatedActivity);
+    }
+
+    addAuditLog({
+      id: `AL-${Math.random().toString(36).substr(2, 9)}`,
+      projectId: activity.projectId,
+      userId: authorName,
+      action: 'Comment Added',
+      details: `Added comment on Activity "${activity.name}" (${activity.id}): "${comment.text.slice(0, 50)}${comment.text.length > 50 ? '...' : ''}"`,
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleDeleteComment = (commentId: string) => {
+    const commentToDelete = (activity.comments || []).find(c => c.id === commentId);
+    if (!commentToDelete) return;
+
+    const currentUserName = currentUserProfile?.name || 'Current User';
+    const currentUserId = currentUserProfile?.id;
+    const isAuthor = (currentUserId && commentToDelete.userId === currentUserId) || 
+      commentToDelete.author.toLowerCase() === currentUserName.toLowerCase();
+    const isAdminOrManager = userRole === 'Admin' || userRole === 'Manager' || 
+      currentUserProfile?.role === 'Admin' || currentUserProfile?.role === 'Manager';
+
+    if (!isAuthor && !isAdminOrManager) {
+      alert('Permission Denied: You can only delete your own comments.');
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to delete this comment?')) {
+      return;
+    }
+
+    const updatedComments = (activity.comments || []).filter(c => c.id !== commentId);
+    const updatedActivity = { ...activity, comments: updatedComments };
+
+    setActivity(updatedActivity);
+    if (onSave) {
+      onSave(updatedActivity);
+    } else {
+      updateActivity(updatedActivity);
+    }
+
+    addAuditLog({
+      id: `AL-${Math.random().toString(36).substr(2, 9)}`,
+      projectId: activity.projectId,
+      userId: currentUserName,
+      action: 'Comment Deleted',
+      details: `Deleted comment by ${commentToDelete.author} on Activity "${activity.name}" (${activity.id})`,
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleStartEditComment = (comment: Comment) => {
+    setEditingCommentId(comment.id);
+    setEditingCommentText(comment.text);
+  };
+
+  const handleSaveEditComment = (commentId: string) => {
+    if (!editingCommentText.trim()) return;
+
+    const updatedComments = (activity.comments || []).map(c => {
+      if (c.id === commentId) {
+        return {
+          ...c,
+          text: editingCommentText.trim(),
+          editedAt: new Date().toISOString()
+        };
+      }
+      return c;
+    });
+
+    const updatedActivity = { ...activity, comments: updatedComments };
+    setActivity(updatedActivity);
+    setEditingCommentId(null);
+    setEditingCommentText('');
+
+    if (onSave) {
+      onSave(updatedActivity);
+    } else {
+      updateActivity(updatedActivity);
     }
   };
 
@@ -1582,42 +1675,167 @@ ${subtaskSummaryLines}
           </Card>
 
           {/* Discussion / Comments */}
-          <Card className="rounded-2xl">
-            <CardHeader>
+          <Card className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between py-4">
               <CardTitle className="text-sm font-bold uppercase text-slate-500 tracking-wider flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-[#0B5FFF]" />
-                Team Discussion
+                Comments & Discussions
               </CardTitle>
+              {activity.comments && activity.comments.length > 0 && (
+                <Badge variant="outline" className="text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                  {activity.comments.length} {activity.comments.length === 1 ? 'Comment' : 'Comments'}
+                </Badge>
+              )}
             </CardHeader>
+
             <CardContent className="flex flex-col gap-4">
-              <div className="flex flex-col gap-4 max-h-[300px] overflow-y-auto pr-2">
+              {/* Comment Thread List */}
+              <div className="flex flex-col gap-3 max-h-[350px] overflow-y-auto pr-1">
                 {activity.comments && activity.comments.length > 0 ? (
-                  activity.comments.map(comment => (
-                    <div key={comment.id} className="flex gap-3">
-                      <img src={comment.avatar} alt={comment.author} className="w-8 h-8 rounded-full bg-slate-100" />
-                      <div className="flex-1 bg-slate-50 dark:bg-slate-800 rounded-2xl rounded-tl-none p-3 border border-slate-100 dark:border-slate-700">
-                        <div className="flex justify-between items-start mb-1">
-                          <span className="text-xs font-bold">{comment.author}</span>
-                          <span className="text-[10px] text-slate-400">
-                            {new Date(comment.timestamp).toLocaleDateString()} {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                  activity.comments.map(comment => {
+                    const currentUserName = currentUserProfile?.name || 'Current User';
+                    const currentUserId = currentUserProfile?.id;
+                    const isAuthor = Boolean(
+                      (currentUserId && comment.userId && comment.userId === currentUserId) || 
+                      (comment.author && comment.author.toLowerCase() === currentUserName.toLowerCase())
+                    );
+                    const isAdminOrManager = userRole === 'Admin' || userRole === 'Manager' || 
+                      currentUserProfile?.role === 'Admin' || currentUserProfile?.role === 'Manager';
+                    const canDelete = isAuthor || isAdminOrManager;
+                    const canEdit = isAuthor;
+                    const isEditingThis = editingCommentId === comment.id;
+
+                    const formattedDate = new Date(comment.timestamp).toLocaleDateString([], {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric'
+                    });
+                    const formattedTime = new Date(comment.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    });
+
+                    return (
+                      <div key={comment.id} className="flex gap-3 group">
+                        {comment.avatar ? (
+                          <img 
+                            src={comment.avatar} 
+                            alt={comment.author} 
+                            className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0 border border-slate-200 dark:border-slate-700 object-cover" 
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-950/60 text-[#0B5FFF] font-bold text-xs flex items-center justify-center shrink-0 border border-blue-200 dark:border-blue-800">
+                            {comment.userInitials || comment.author.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+
+                        <div className="flex-1 bg-slate-50 dark:bg-slate-800/80 rounded-2xl rounded-tl-none p-3.5 border border-slate-200/80 dark:border-slate-700/80 relative transition-all">
+                          <div className="flex justify-between items-start mb-1.5 gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                {comment.author}
+                              </span>
+                              {comment.userRole && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100/70 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300">
+                                  {comment.userRole}
+                                </span>
+                              )}
+                              {isAuthor && (
+                                <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                  You
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-medium text-slate-400">
+                                {formattedDate} • {formattedTime}
+                              </span>
+                              {comment.editedAt && (
+                                <span className="text-[9px] text-slate-400 italic">
+                                  (edited)
+                                </span>
+                              )}
+
+                              {/* Comment Actions (Edit & Delete) */}
+                              <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                {canEdit && !isEditingThis && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditComment(comment)}
+                                    className="p-1 rounded text-slate-400 hover:text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
+                                    title="Edit Comment"
+                                  >
+                                    <Edit3 className="h-3 w-3" />
+                                  </button>
+                                )}
+                                {canDelete && !isEditingThis && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteComment(comment.id)}
+                                    className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                    title={isAuthor ? "Delete Your Comment" : "Delete Comment (Manager/Admin)"}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Comment Content / Inline Edit */}
+                          {isEditingThis ? (
+                            <div className="flex flex-col gap-2 mt-2">
+                              <textarea
+                                value={editingCommentText}
+                                onChange={(e) => setEditingCommentText(e.target.value)}
+                                className="w-full bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B5FFF] min-h-[60px] resize-none"
+                                autoFocus
+                              />
+                              <div className="flex justify-end items-center gap-1.5">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditingCommentId(null)}
+                                  className="h-7 text-xs px-2"
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => handleSaveEditComment(comment.id)}
+                                  className="h-7 text-xs px-3 bg-[#0B5FFF] hover:bg-blue-600 text-white font-bold"
+                                >
+                                  Save
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words leading-relaxed">
+                              {comment.text}
+                            </p>
+                          )}
                         </div>
-                        <p className="text-sm text-slate-700 dark:text-slate-300">{comment.text}</p>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
-                  <div className="text-center p-6 text-sm text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-                    No comments yet. Start the discussion!
+                  <div className="text-center p-6 text-sm text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl flex flex-col items-center gap-1.5">
+                    <MessageSquare className="h-6 w-6 text-slate-300 dark:text-slate-600" />
+                    <span>No comments yet. Start the conversation with your team!</span>
                   </div>
                 )}
               </div>
-              <div className="flex items-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 mt-2">
+
+              {/* Comment Input Form */}
+              <div className="flex items-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 mt-1">
                 <div className="flex-1">
                   <textarea
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Add a comment or update..."
+                    placeholder="Add a comment, note, or update... (Press Enter to post)"
                     className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B5FFF] focus:border-[#0B5FFF] min-h-[60px] resize-none"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -1630,9 +1848,10 @@ ${subtaskSummaryLines}
                 <Button 
                   onClick={handlePostComment}
                   disabled={!newComment.trim()}
-                  className="bg-[#0B5FFF] rounded-xl h-[60px] px-6"
+                  className="bg-[#0B5FFF] hover:bg-blue-600 text-white font-bold rounded-xl h-[60px] px-5 flex items-center gap-1.5 shrink-0"
                 >
                   <Send className="h-4 w-4" />
+                  <span className="hidden sm:inline text-xs font-bold">Post</span>
                 </Button>
               </div>
             </CardContent>

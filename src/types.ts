@@ -60,9 +60,13 @@ export interface Project {
 export interface Comment {
   id: string;
   author: string;
+  userId?: string;
+  userRole?: string;
+  userInitials?: string;
   text: string;
   timestamp: string;
   avatar?: string;
+  editedAt?: string;
 }
 
 export type SubTaskCategory = 
