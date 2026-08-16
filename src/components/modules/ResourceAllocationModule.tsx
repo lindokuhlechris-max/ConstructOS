@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Users, 
   Truck, 
+  Package,
   Layers, 
   Calendar, 
   Clock, 
@@ -26,11 +27,13 @@ import {
   Wrench,
   Sparkles,
   Info,
-  Check
+  Check,
+  Boxes,
+  Tag
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../ui';
 import { useAppContext } from '../../context/AppContext';
-import { LabourAllocation, ResourceAllocation, Activity, Employee, Equipment, canManage } from '../../types';
+import { LabourAllocation, ResourceAllocation, Activity, Employee, Equipment, MaterialInventory, canManage } from '../../types';
 import { AssignResourceModal } from '../AssignResourceModal';
 import { PrintPreview } from '../PrintPreview';
 import jsPDF from 'jspdf';
@@ -52,6 +55,7 @@ export function ResourceAllocationModule({
     activities, 
     employees, 
     equipment, 
+    materials,
     labourAllocations, 
     allocations, 
     deleteLabourAllocation, 
@@ -64,13 +68,13 @@ export function ResourceAllocationModule({
     currentUserProfile
   } = useAppContext();
 
-  // Active View Tab: 'tasks' | 'employees' | 'equipment' | 'timeline'
-  const [activeTab, setActiveTab] = useState<'tasks' | 'employees' | 'equipment' | 'timeline'>('tasks');
+  // Active View Tab: 'tasks' | 'employees' | 'equipment' | 'materials' | 'timeline'
+  const [activeTab, setActiveTab] = useState<'tasks' | 'employees' | 'equipment' | 'materials' | 'timeline'>('tasks');
 
   // Filters State
   const [selectedProjectId, setSelectedProjectId] = useState<string>(propProjectId || 'ALL');
   const [selectedActivityFilter, setSelectedActivityFilter] = useState<string>('ALL');
-  const [resourceTypeFilter, setResourceTypeFilter] = useState<'ALL' | 'Employee' | 'Equipment'>('ALL');
+  const [resourceTypeFilter, setResourceTypeFilter] = useState<'ALL' | 'Employee' | 'Equipment' | 'Material'>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showConflictsOnly, setShowConflictsOnly] = useState<boolean>(false);
@@ -78,11 +82,11 @@ export function ResourceAllocationModule({
   // Modal State
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [modalInitialType, setModalInitialType] = useState<'employee' | 'equipment'>('employee');
+  const [modalInitialType, setModalInitialType] = useState<'employee' | 'equipment' | 'material'>('employee');
   const [modalInitialProjectId, setModalInitialProjectId] = useState<string | undefined>(undefined);
   const [modalInitialActivityId, setModalInitialActivityId] = useState<string | undefined>(undefined);
   const [editingAllocation, setEditingAllocation] = useState<{
-    type: 'employee' | 'equipment';
+    type: 'employee' | 'equipment' | 'material';
     data: LabourAllocation | ResourceAllocation;
   } | null>(null);
 
@@ -182,7 +186,7 @@ export function ResourceAllocationModule({
     return labourAllocations.filter(alloc => {
       if (selectedProjectId !== 'ALL' && alloc?.projectId !== selectedProjectId) return false;
       if (selectedActivityFilter !== 'ALL' && alloc?.activityId !== selectedActivityFilter) return false;
-      if (resourceTypeFilter === 'Equipment') return false;
+      if (resourceTypeFilter === 'Equipment' || resourceTypeFilter === 'Material') return false;
       if (statusFilter !== 'ALL' && alloc.status !== statusFilter) return false;
 
       if (showConflictsOnly) {
@@ -210,7 +214,7 @@ export function ResourceAllocationModule({
       if (alloc.resourceType !== 'Equipment') return false;
       if (selectedProjectId !== 'ALL' && alloc?.projectId !== selectedProjectId) return false;
       if (selectedActivityFilter !== 'ALL' && alloc?.activityId !== selectedActivityFilter) return false;
-      if (resourceTypeFilter === 'Employee') return false;
+      if (resourceTypeFilter === 'Employee' || resourceTypeFilter === 'Material') return false;
       if (statusFilter !== 'ALL' && alloc.status !== statusFilter) return false;
 
       if (showConflictsOnly) {
@@ -232,6 +236,30 @@ export function ResourceAllocationModule({
     });
   }, [allocations, selectedProjectId, selectedActivityFilter, resourceTypeFilter, statusFilter, showConflictsOnly, searchQuery, activities, equipmentConflictsMap]);
 
+  // Filtered Material Allocations
+  const filteredMaterialAllocations = useMemo(() => {
+    return allocations.filter(alloc => {
+      if (alloc.resourceType !== 'Material') return false;
+      if (selectedProjectId !== 'ALL' && alloc?.projectId !== selectedProjectId) return false;
+      if (selectedActivityFilter !== 'ALL' && alloc?.activityId !== selectedActivityFilter) return false;
+      if (resourceTypeFilter === 'Employee' || resourceTypeFilter === 'Equipment') return false;
+      if (statusFilter !== 'ALL' && alloc.status !== statusFilter) return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const act = activities.find(a => a?.id === alloc?.activityId);
+        const mat = materials.find(m => m.id === alloc?.materialId || m.id === alloc?.resourceId);
+        const matchName = alloc.name?.toLowerCase()?.includes(q);
+        const matchCategory = mat?.category?.toLowerCase()?.includes(q);
+        const matchNotes = alloc.notes?.toLowerCase()?.includes(q);
+        const matchTask = act?.name?.toLowerCase()?.includes(q) || alloc?.activityId?.toLowerCase()?.includes(q);
+        if (!matchName && !matchCategory && !matchNotes && !matchTask) return false;
+      }
+
+      return true;
+    });
+  }, [allocations, selectedProjectId, selectedActivityFilter, resourceTypeFilter, statusFilter, searchQuery, activities, materials]);
+
   // KPIs Calculations
   const stats = useMemo(() => {
     const activeWorkers = new Set(
@@ -243,6 +271,11 @@ export function ResourceAllocationModule({
     const activeEquipmentCount = allocations.filter(a => 
       a?.resourceType === 'Equipment' && 
       (a.status === 'In Use' || a.status === 'Allocated')
+    ).length;
+
+    const activeMaterialsCount = allocations.filter(a => 
+      a?.resourceType === 'Material' && 
+      (a.status === 'Allocated' || a.status === 'In Use')
     ).length;
 
     const totalScheduledLabourHours = labourAllocations
@@ -264,6 +297,7 @@ export function ResourceAllocationModule({
     return {
       activeWorkers,
       activeEquipmentCount,
+      activeMaterialsCount,
       totalScheduledLabourHours,
       totalScheduledEqHours,
       conflictsCount: totalConflictsCount,
@@ -275,7 +309,7 @@ export function ResourceAllocationModule({
 
   // Handlers
   const handleOpenAssignModal = (
-    type: 'employee' | 'equipment', 
+    type: 'employee' | 'equipment' | 'material', 
     projectId?: string, 
     activityId?: string
   ) => {
@@ -297,6 +331,14 @@ export function ResourceAllocationModule({
   const handleEditEquipment = (alloc: ResourceAllocation) => {
     setEditingAllocation({
       type: 'equipment',
+      data: alloc
+    });
+    setIsAssignModalOpen(true);
+  };
+
+  const handleEditMaterial = (alloc: ResourceAllocation) => {
+    setEditingAllocation({
+      type: 'material',
       data: alloc
     });
     setIsAssignModalOpen(true);
@@ -337,7 +379,7 @@ export function ResourceAllocationModule({
       if (targetAct && targetAct.assignedEquipment) {
         updateActivity({
           ...targetAct,
-          assignedEquipment: targetAct.assignedEquipment.filter(e => e.name !== alloc.name && e.equipmentId !== alloc.equipmentId)
+          assignedEquipment: targetAct.assignedEquipment.filter(e => e.name !== alloc.name && e.equipmentId !== alloc.equipmentId && e.equipmentId !== alloc.resourceId)
         });
       }
 
@@ -349,6 +391,32 @@ export function ResourceAllocationModule({
         details: `Removed allocation for ${alloc.name} from task ${alloc?.activityId || 'Unspecified'}.`,
         timestamp: new Date().toISOString(),
         entityType: 'Equipment',
+        entityId: alloc.id,
+        actionType: 'delete'
+      });
+    }
+  };
+
+  const handleDeleteMaterial = (alloc: ResourceAllocation) => {
+    if (window.confirm(`Remove material ${alloc.name} from task assignment?`)) {
+      deleteAllocation(alloc.id);
+
+      const targetAct = activities.find(a => a?.id === alloc?.activityId);
+      if (targetAct && targetAct.assignedMaterials) {
+        updateActivity({
+          ...targetAct,
+          assignedMaterials: targetAct.assignedMaterials.filter(m => m.name !== alloc.name && m.materialId !== alloc.materialId && m.materialId !== alloc.resourceId)
+        });
+      }
+
+      addAuditLog({
+        id: `AL-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        projectId: alloc?.projectId,
+        userId: currentUserProfile?.name || 'Current User',
+        action: 'Removed Material Task Allocation',
+        details: `Removed allocation for ${alloc.quantity} ${alloc.unit || ''} of material ${alloc.name} from task ${alloc?.activityId || 'Unspecified'}.`,
+        timestamp: new Date().toISOString(),
+        entityType: 'Material',
         entityId: alloc.id,
         actionType: 'delete'
       });
@@ -376,11 +444,6 @@ export function ResourceAllocationModule({
     });
   };
 
-  const handleQuickStatusLabour = (alloc: LabourAllocation, newStatus: LabourAllocation['status']) => {
-    const updated: LabourAllocation = { ...alloc, status: newStatus };
-    updateLabourAllocation(updated);
-  };
-
   const toggleTaskExpansion = (taskId: string) => {
     setExpandedTasks(prev => ({
       ...prev,
@@ -393,14 +456,14 @@ export function ResourceAllocationModule({
     const headers = [
       'Type',
       'Resource Name',
-      'Role / Operator',
+      'Role / Operator / Qty',
       'Project Name',
       'Project ID',
       'Task Name',
       'Task ID',
-      'Start Date',
+      'Start / Dispatch Date',
       'End / Return Date',
-      'Planned Hours/Day',
+      'Planned Hours / Quantity',
       'Status',
       'Notes'
     ];
@@ -421,7 +484,7 @@ export function ResourceAllocationModule({
         l?.activityId,
         l.startDate,
         l.endDate,
-        `${l.hours || 8}`,
+        `${l.hours || 8} hrs/day`,
         l.status,
         `"${(l.notes || '').replace(/"/g, '""')}"`
       ]);
@@ -441,9 +504,29 @@ export function ResourceAllocationModule({
         e?.activityId || 'N/A',
         e.assignedDate,
         e.expectedReturnDate || 'Ongoing',
-        `${e.plannedHours || 8}`,
+        `${e.plannedHours || 8} hrs/day`,
         e.status,
         `"${(e.notes || '').replace(/"/g, '""')}"`
+      ]);
+    });
+
+    // Material Rows
+    filteredMaterialAllocations.forEach(m => {
+      const prj = projects.find(p => p?.id === m?.projectId);
+      const act = activities.find(a => a?.id === m?.activityId);
+      rows.push([
+        'Material / Inventory',
+        `"${m.name}"`,
+        `"${m.quantity} ${m.unit || 'units'}"`,
+        `"${prj?.name || m?.projectId}"`,
+        m?.projectId,
+        `"${act?.name || m?.activityId || 'Site Storage'}"`,
+        m?.activityId || 'N/A',
+        m.assignedDate,
+        m.expectedReturnDate || 'N/A',
+        `${m.quantity} ${m.unit || 'units'}`,
+        m.status,
+        `"${(m.notes || '').replace(/"/g, '""')}"`
       ]);
     });
 
@@ -453,7 +536,7 @@ export function ResourceAllocationModule({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `resource_allocations_dispatch_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `constructfield_resource_allocations_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -467,13 +550,13 @@ export function ResourceAllocationModule({
       // Header
       doc.setFontSize(18);
       doc.setTextColor(11, 95, 255); // #0B5FFF
-      doc.text('Resource Allocation Dispatch Manifest', 40, 40);
+      doc.text('Constructfield Resource Allocation Dispatch Manifest', 40, 40);
       
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
       doc.text(`Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 40, 55);
       
-      const headers = [['Type', 'Resource Name', 'Role/Operator', 'Project', 'Activity', 'Start', 'End', 'Hours']];
+      const headers = [['Type', 'Resource Name', 'Role / Operator / Qty', 'Project', 'Activity', 'Start / Dispatch', 'End / Return', 'Planned Metric']];
       const rows: string[][] = [];
       
       filteredLabourAllocations.forEach(l => {
@@ -487,7 +570,7 @@ export function ResourceAllocationModule({
           act?.name || l?.activityId || 'General',
           l.startDate,
           l.endDate,
-          `${l.hours || 8}h`
+          `${l.hours || 8}h/day`
         ]);
       });
 
@@ -502,7 +585,22 @@ export function ResourceAllocationModule({
           act?.name || e?.activityId || 'General',
           e.assignedDate,
           e.expectedReturnDate || 'Ongoing',
-          `${e.plannedHours || 8}h`
+          `${e.plannedHours || 8}h/day`
+        ]);
+      });
+
+      filteredMaterialAllocations.forEach(m => {
+        const prj = projects.find(p => p.id === m?.projectId);
+        const act = activities.find(a => a?.id === m?.activityId);
+        rows.push([
+          'Material',
+          m.name,
+          `${m.quantity} ${m.unit || 'units'}`,
+          prj?.name || m?.projectId || 'N/A',
+          act?.name || m?.activityId || 'General',
+          m.assignedDate,
+          m.expectedReturnDate || 'Ongoing',
+          `${m.quantity} ${m.unit || 'units'}`
         ]);
       });
 
@@ -515,14 +613,14 @@ export function ResourceAllocationModule({
         styles: { fontSize: 8, cellPadding: 4 },
       });
 
-      doc.save(`Dispatch_Manifest_${new Date().toISOString().split('T')[0]}.pdf`);
+      doc.save(`Constructfield_Dispatch_Manifest_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (err) {
       console.error('Failed to generate PDF manifest:', err);
     }
   };
 
   return (
-    <div className="flex flex-col gap-6 w-full max-w-7xl mx-auto pb-16 animate-in fade-in duration-150">
+    <div className="w-full space-y-6 pb-20 animate-in fade-in duration-150">
       
       {/* 1. TOP HEADER & HERO SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 md:p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
@@ -541,7 +639,7 @@ export function ResourceAllocationModule({
                 </Badge>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Assign workforce crews, certified operators, and heavy equipment to specific project tasks and work packages.
+                Assign workforce crews, heavy equipment, and material inventory directly to project work packages.
               </p>
             </div>
           </div>
@@ -563,6 +661,13 @@ export function ResourceAllocationModule({
               >
                 <Truck className="h-3.5 w-3.5" />
                 + Assign Equipment
+              </Button>
+              <Button
+                onClick={() => handleOpenAssignModal('material')}
+                className="h-9 text-xs font-bold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs"
+              >
+                <Package className="h-3.5 w-3.5" />
+                + Assign Material
               </Button>
             </>
           )}
@@ -590,7 +695,7 @@ export function ResourceAllocationModule({
       </div>
 
       {/* 2. SUMMARY KPI METRIC CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3.5">
         
         {/* Active Workforce */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
@@ -600,7 +705,7 @@ export function ResourceAllocationModule({
               {stats.activeWorkers}
             </h3>
             <p className="text-[10px] text-emerald-600 font-semibold mt-0.5 flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3 inline" /> {filteredLabourAllocations.length} total assignments
+              <CheckCircle2 className="h-3 w-3 inline" /> {filteredLabourAllocations.length} assignments
             </p>
           </div>
           <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-[#0B5FFF]">
@@ -616,11 +721,27 @@ export function ResourceAllocationModule({
               {stats.activeEquipmentCount}
             </h3>
             <p className="text-[10px] text-amber-600 font-semibold mt-0.5 flex items-center gap-1">
-              <Truck className="h-3 w-3 inline" /> {filteredEquipmentAllocations.length} fleet deployments
+              <Truck className="h-3 w-3 inline" /> {filteredEquipmentAllocations.length} deployments
             </p>
           </div>
           <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600">
             <Truck className="h-5 w-5" />
+          </div>
+        </div>
+
+        {/* Materials Allocated */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Materials Allocated</p>
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+              {stats.activeMaterialsCount}
+            </h3>
+            <p className="text-[10px] text-emerald-600 font-semibold mt-0.5 flex items-center gap-1">
+              <Package className="h-3 w-3 inline" /> {filteredMaterialAllocations.length} items linked
+            </p>
+          </div>
+          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
+            <Package className="h-5 w-5" />
           </div>
         </div>
 
@@ -632,7 +753,7 @@ export function ResourceAllocationModule({
               {stats.totalScheduledLabourHours} <span className="text-xs font-semibold text-slate-400">hrs</span>
             </h3>
             <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
-              + {stats.totalScheduledEqHours} hrs machine time
+              + {stats.totalScheduledEqHours} hrs fleet
             </p>
           </div>
           <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600">
@@ -648,79 +769,80 @@ export function ResourceAllocationModule({
               {stats.taskCoveragePct}%
             </h3>
             <p className="text-[10px] text-blue-600 font-semibold mt-0.5">
-              {stats.tasksWithAllocations} of {stats.totalTasks} tasks staffed
+              {stats.tasksWithAllocations} of {stats.totalTasks} tasks
             </p>
           </div>
-          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
-            <Layers className="h-5 w-5" />
+          <div className="p-3 rounded-2xl bg-sky-50 dark:bg-sky-950/50 text-sky-600">
+            <ShieldCheck className="h-5 w-5" />
           </div>
         </div>
 
-        {/* Schedule Conflicts Alert */}
-        <div className={`p-4 rounded-2xl border shadow-xs flex items-center justify-between col-span-2 lg:col-span-1 ${
+        {/* Double-Booking Conflicts */}
+        <div className={`p-4 rounded-2xl border shadow-xs flex items-center justify-between ${
           stats.conflictsCount > 0
-            ? 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-100'
+            ? 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/80 text-rose-900 dark:text-rose-100'
             : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
         }`}>
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider opacity-80">Allocation Conflicts</p>
-            <h3 className={`text-2xl font-black mt-1 ${stats.conflictsCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Conflicts</p>
+            <h3 className={`text-2xl font-black mt-1 ${stats.conflictsCount > 0 ? 'text-rose-600' : 'text-slate-900 dark:text-white'}`}>
               {stats.conflictsCount}
             </h3>
-            <p className="text-[10px] font-semibold mt-0.5">
-              {stats.conflictsCount > 0 ? 'Over-allocated resources' : 'No double-booking'}
+            <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+              {stats.conflictsCount > 0 ? 'Over-allocation alert' : 'Optimal schedule'}
             </p>
           </div>
-          <div className={`p-3 rounded-2xl ${stats.conflictsCount > 0 ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+          <div className={`p-3 rounded-2xl ${
+            stats.conflictsCount > 0 ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+          }`}>
             <AlertTriangle className="h-5 w-5" />
           </div>
         </div>
 
       </div>
 
-      {/* 3. CONFLICT ALERT BANNER (if any) */}
+      {/* 3. CONFLICT BANNER (if any exist) */}
       {stats.conflictsCount > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-4 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 animate-in fade-in duration-200">
+        <div className="p-4 rounded-3xl bg-rose-500/10 border border-rose-200 dark:border-rose-900/50 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 rounded-xl">
+            <div className="p-2 bg-rose-500 text-white rounded-xl">
               <AlertTriangle className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
-                {stats.conflictsCount} Resource Over-Allocation Conflict{stats.conflictsCount > 1 ? 's' : ''} Detected
-              </p>
-              <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
-                Personnel or machinery are scheduled on overlapping dates across multiple project tasks.
+              <h4 className="text-sm font-bold text-rose-900 dark:text-rose-200">
+                {stats.conflictsCount} Concurrent Over-Allocation{stats.conflictsCount > 1 ? 's' : ''} Detected
+              </h4>
+              <p className="text-xs text-rose-700 dark:text-rose-300">
+                One or more employees or equipment units are assigned to overlapping tasks on the same calendar dates.
               </p>
             </div>
           </div>
-          <Button
-            size="sm"
+          <button
             onClick={() => setShowConflictsOnly(!showConflictsOnly)}
-            className={`text-xs font-bold gap-1.5 rounded-xl ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors shrink-0 ${
               showConflictsOnly 
-                ? 'bg-amber-700 text-white' 
-                : 'bg-amber-100 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 hover:bg-amber-200'
+                ? 'bg-rose-600 text-white' 
+                : 'bg-white dark:bg-slate-900 text-rose-600 border border-rose-300 dark:border-rose-800'
             }`}
           >
-            {showConflictsOnly ? 'Show All Allocations' : 'Filter & Resolve Conflicts'}
-          </Button>
+            {showConflictsOnly ? 'Show All Allocations' : 'Filter Conflicts Only'}
+          </button>
         </div>
       )}
 
-      {/* 4. FILTER & SEARCH CONTROL BAR */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 text-xs">
+      {/* 4. SEARCH & FILTER TOOLBAR */}
+      <div className="bg-white dark:bg-slate-900 p-4 md:p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           
           {/* Search Box */}
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <div className="relative lg:col-span-2">
+            <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search worker, equipment, task..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 font-medium focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+              placeholder="Search by worker, equipment, material, role, or task..."
+              className="w-full h-9 pl-9 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 font-medium focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
             />
           </div>
 
@@ -741,20 +863,6 @@ export function ResourceAllocationModule({
             </select>
           </div>
 
-          {/* Task / Activity Filter */}
-          <div>
-            <select
-              value={selectedActivityFilter}
-              onChange={e => setSelectedActivityFilter(e.target.value)}
-              className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 font-semibold focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-            >
-              <option value="ALL">All Project Tasks ({filteredActivities.length})</option>
-              {filteredActivities.map(a => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
-          </div>
-
           {/* Resource Type Filter */}
           <div>
             <select
@@ -765,6 +873,7 @@ export function ResourceAllocationModule({
               <option value="ALL">All Resource Types</option>
               <option value="Employee">Employees & Crew Only</option>
               <option value="Equipment">Equipment & Machinery Only</option>
+              <option value="Material">Materials & Supplies Only</option>
             </select>
           </div>
 
@@ -777,7 +886,7 @@ export function ResourceAllocationModule({
             >
               <option value="ALL">All Statuses</option>
               <option value="Active">Active (On Duty / On Site)</option>
-              <option value="In Use">In Use (Equipment)</option>
+              <option value="In Use">In Use (Equipment / Material)</option>
               <option value="Scheduled">Scheduled (Upcoming)</option>
               <option value="Allocated">Allocated</option>
               <option value="Completed">Completed</option>
@@ -789,10 +898,10 @@ export function ResourceAllocationModule({
 
         {/* VIEW SELECTOR TABS */}
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
             <button
               onClick={() => setActiveTab('tasks')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === 'tasks'
                   ? 'bg-white dark:bg-slate-900 text-[#0B5FFF] shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -804,7 +913,7 @@ export function ResourceAllocationModule({
 
             <button
               onClick={() => setActiveTab('employees')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === 'employees'
                   ? 'bg-white dark:bg-slate-900 text-[#0B5FFF] shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -816,19 +925,31 @@ export function ResourceAllocationModule({
 
             <button
               onClick={() => setActiveTab('equipment')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === 'equipment'
                   ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
               }`}
             >
               <Truck className="h-3.5 w-3.5" />
-              Equipment Fleet Matrix ({filteredEquipmentAllocations.length})
+              Equipment Fleet ({filteredEquipmentAllocations.length})
+            </button>
+
+            <button
+              onClick={() => setActiveTab('materials')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'materials'
+                  ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              <Package className="h-3.5 w-3.5" />
+              Material Matrix ({filteredMaterialAllocations.length})
             </button>
 
             <button
               onClick={() => setActiveTab('timeline')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === 'timeline'
                   ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -840,7 +961,9 @@ export function ResourceAllocationModule({
           </div>
 
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span>Showing: <strong>{filteredLabourAllocations.length}</strong> personnel • <strong>{filteredEquipmentAllocations.length}</strong> machines</span>
+            <span>
+              <strong>{filteredLabourAllocations.length}</strong> personnel • <strong>{filteredEquipmentAllocations.length}</strong> machines • <strong>{filteredMaterialAllocations.length}</strong> materials
+            </span>
             {(searchQuery || selectedProjectId !== 'ALL' || selectedActivityFilter !== 'ALL' || resourceTypeFilter !== 'ALL' || statusFilter !== 'ALL' || showConflictsOnly) && (
               <button
                 onClick={() => {
@@ -875,6 +998,7 @@ export function ResourceAllocationModule({
             filteredActivities.map(activity => {
               const taskLabour = labourAllocations.filter(a => a?.activityId === activity.id);
               const taskEquipment = allocations.filter(a => a?.resourceType === 'Equipment' && a?.activityId === activity.id);
+              const taskMaterials = allocations.filter(a => a?.resourceType === 'Material' && a?.activityId === activity.id);
               const isExpanded = expandedTasks[activity.id] !== false; // default expanded
 
               const projectObj = projects.find(p => p?.id === activity?.projectId);
@@ -934,7 +1058,7 @@ export function ResourceAllocationModule({
 
                     {/* Quick Add Resource to this Task */}
                     {canManage(userRole) && (
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <Button
                           size="sm"
                           variant="outline"
@@ -951,15 +1075,23 @@ export function ResourceAllocationModule({
                         >
                           <Plus className="h-3 w-3" /> + Equipment
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenAssignModal('material', activity?.projectId, activity.id)}
+                          className="h-8 text-[11px] font-bold gap-1 rounded-xl bg-white dark:bg-slate-900 border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                        >
+                          <Plus className="h-3 w-3" /> + Material
+                        </Button>
                       </div>
                     )}
                   </div>
 
-                  {/* Task Allocations Grid */}
+                  {/* Task Allocations 3-Column Grid */}
                   {isExpanded && (
-                    <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                       
-                      {/* Left: Assigned Personnel & Crew */}
+                      {/* Column 1: Assigned Personnel & Crew */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-2">
@@ -986,7 +1118,6 @@ export function ResourceAllocationModule({
                         ) : (
                           <div className="space-y-2.5">
                             {taskLabour.map(labour => {
-                              const empObj = employees.find(e => e?.id === labour.employeeId || `${e.firstName} ${e.lastName}` === labour.workerName);
                               const key = labour.employeeId || labour.workerName?.toLowerCase();
                               const hasConflict = employeeConflictsMap[key];
 
@@ -1037,7 +1168,7 @@ export function ResourceAllocationModule({
 
                                   {/* Actions */}
                                   {canManage(userRole) && (
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-1 shrink-0">
                                       <Button
                                         size="sm"
                                         variant="ghost"
@@ -1065,7 +1196,7 @@ export function ResourceAllocationModule({
                         )}
                       </div>
 
-                      {/* Right: Allocated Equipment & Machines */}
+                      {/* Column 2: Allocated Equipment & Machines */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-2">
@@ -1079,7 +1210,7 @@ export function ResourceAllocationModule({
 
                         {taskEquipment.length === 0 ? (
                           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-700/60 text-center space-y-1">
-                            <p className="text-xs text-slate-400 italic">No equipment or machinery currently allocated to this task.</p>
+                            <p className="text-xs text-slate-400 italic">No equipment currently allocated to this task.</p>
                             {canManage(userRole) && (
                               <button
                                 onClick={() => handleOpenAssignModal('equipment', activity?.projectId, activity.id)}
@@ -1142,7 +1273,7 @@ export function ResourceAllocationModule({
 
                                   {/* Actions */}
                                   {canManage(userRole) && (
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-1 shrink-0">
                                       {eqAlloc.status !== 'Returned' && (
                                         <Button
                                           size="sm"
@@ -1167,6 +1298,104 @@ export function ResourceAllocationModule({
                                         size="sm"
                                         variant="ghost"
                                         onClick={() => handleDeleteEquipment(eqAlloc)}
+                                        className="h-7 w-7 p-0 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg"
+                                        title="Remove allocation"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Column 3: Allocated Materials & Supplies */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                            <Package className="h-4 w-4 text-emerald-500" />
+                            Allocated Materials ({taskMaterials.length})
+                          </h4>
+                          <span className="text-[11px] text-slate-400 font-semibold">
+                            Total {taskMaterials.reduce((s, m) => s + (m.quantity || 0), 0)} units/items
+                          </span>
+                        </div>
+
+                        {taskMaterials.length === 0 ? (
+                          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-700/60 text-center space-y-1">
+                            <p className="text-xs text-slate-400 italic">No materials or inventory items currently assigned to this task.</p>
+                            {canManage(userRole) && (
+                              <button
+                                onClick={() => handleOpenAssignModal('material', activity?.projectId, activity.id)}
+                                className="text-[11px] text-emerald-600 font-bold hover:underline"
+                              >
+                                + Allocate Material
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5">
+                            {taskMaterials.map(matAlloc => {
+                              const matObj = materials.find(m => m.id === matAlloc.materialId || m.id === matAlloc.resourceId || m.name.toLowerCase() === matAlloc.name.toLowerCase());
+                              const balance = matObj ? (matObj.receivedQuantity || 0) - (matObj.usedQuantity || 0) : null;
+
+                              return (
+                                <div 
+                                  key={matAlloc.id}
+                                  className="p-3 rounded-2xl border bg-white dark:bg-slate-950 border-slate-200/80 dark:border-slate-800 transition-all flex items-start justify-between gap-3"
+                                >
+                                  <div className="flex items-start gap-2.5">
+                                    <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+                                      <Package className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-xs font-black text-slate-900 dark:text-white">
+                                          {matAlloc.name}
+                                        </p>
+                                        <Badge 
+                                          variant={matAlloc.status === 'In Use' ? 'success' : matAlloc.status === 'Completed' ? 'default' : 'outline'}
+                                          className="text-[9px] py-0 px-1.5"
+                                        >
+                                          {matAlloc.status}
+                                        </Badge>
+                                      </div>
+                                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                        Allocated: <strong className="text-emerald-600 dark:text-emerald-400">{matAlloc.quantity} {matAlloc.unit || 'units'}</strong>
+                                        {balance !== null && (
+                                          <span className="text-slate-400 ml-1.5">• Stock: <strong>{balance} {matObj?.unit}</strong></span>
+                                        )}
+                                      </p>
+                                      <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                                        <Calendar className="h-3 w-3 inline" /> Dispatched: {matAlloc.assignedDate} {matAlloc.expectedReturnDate ? `→ Return: ${matAlloc.expectedReturnDate}` : ''}
+                                      </p>
+                                      {matAlloc.notes && (
+                                        <p className="text-[10px] text-slate-500 bg-slate-50 dark:bg-slate-900 p-1.5 rounded-lg border border-slate-100 dark:border-slate-800 mt-1 italic">
+                                          "{matAlloc.notes}"
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Actions */}
+                                  {canManage(userRole) && (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleEditMaterial(matAlloc)}
+                                        className="h-7 w-7 p-0 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg"
+                                        title="Edit allocation"
+                                      >
+                                        <Edit3 className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleDeleteMaterial(matAlloc)}
                                         className="h-7 w-7 p-0 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg"
                                         title="Remove allocation"
                                       >
@@ -1483,7 +1712,154 @@ export function ResourceAllocationModule({
         </div>
       )}
 
-      {/* TAB 4: TIMELINE & SCHEDULE CALENDAR VIEW */}
+      {/* TAB 4: MATERIAL ALLOCATION MATRIX */}
+      {activeTab === 'materials' && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+          <div className="p-4 md:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div>
+              <h3 className="font-black text-slate-900 dark:text-white text-base">
+                Material & Inventory Task Allocations
+              </h3>
+              <p className="text-xs text-slate-500">
+                Supplies and raw materials allocated to work packages, tracking dispatch batches and current warehouse stock balance.
+              </p>
+            </div>
+            {canManage(userRole) && (
+              <Button
+                size="sm"
+                onClick={() => handleOpenAssignModal('material')}
+                className="h-8 text-xs font-bold gap-1.5 bg-emerald-600 text-white rounded-xl"
+              >
+                <Plus className="h-3.5 w-3.5" /> Assign Material
+              </Button>
+            )}
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 border-b border-slate-200/80 dark:border-slate-800 font-bold uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Material Item</th>
+                  <th className="py-3 px-4">Allocated Quantity</th>
+                  <th className="py-3 px-4">Current Warehouse Stock</th>
+                  <th className="py-3 px-4">Assigned Task & Project</th>
+                  <th className="py-3 px-4">Dispatch Date</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                {filteredMaterialAllocations.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-400 italic">
+                      No material allocations found. Click "+ Assign Material" to assign stock supplies to project tasks.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredMaterialAllocations.map(alloc => {
+                    const prj = projects.find(p => p?.id === alloc?.projectId);
+                    const act = activities.find(a => a?.id === alloc?.activityId);
+                    const matObj = materials.find(m => m.id === alloc.materialId || m.id === alloc.resourceId || m.name.toLowerCase() === alloc.name.toLowerCase());
+                    const balance = matObj ? (matObj.receivedQuantity || 0) - (matObj.usedQuantity || 0) : null;
+
+                    return (
+                      <tr 
+                        key={alloc.id}
+                        className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                      >
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900 text-emerald-600 flex items-center justify-center shrink-0">
+                              <Package className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-900 dark:text-white">
+                                {alloc.name}
+                              </p>
+                              {matObj && (
+                                <p className="text-[10px] text-slate-400">
+                                  Category: {matObj.category} {matObj.sku ? `• SKU: ${matObj.sku}` : ''}
+                                </p>
+                              )}
+                              {alloc.notes && <p className="text-[10px] text-slate-500 italic truncate max-w-xs">{alloc.notes}</p>}
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 font-black text-emerald-600 dark:text-emerald-400">
+                          {alloc.quantity} {alloc.unit || 'units'}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300">
+                          {balance !== null ? (
+                            <span className={`font-bold ${balance <= 0 ? 'text-rose-500' : 'text-slate-800 dark:text-slate-200'}`}>
+                              {balance} {matObj?.unit}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">N/A</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <p className="font-bold text-slate-900 dark:text-white">
+                            {act?.name || alloc?.activityId || 'General Project Scope'}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            {prj?.name || alloc?.projectId}
+                          </p>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
+                          <span className="font-semibold">{alloc.assignedDate}</span>
+                          {alloc.expectedReturnDate && (
+                            <span className="text-slate-400"> → {alloc.expectedReturnDate}</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <Badge 
+                            variant={alloc.status === 'In Use' ? 'success' : alloc.status === 'Completed' ? 'default' : 'outline'}
+                            className="text-[10px]"
+                          >
+                            {alloc.status}
+                          </Badge>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          {canManage(userRole) && (
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEditMaterial(alloc)}
+                                className="h-7 w-7 p-0 text-slate-400 hover:text-emerald-600 rounded-lg"
+                                title="Edit allocation"
+                              >
+                                <Edit3 className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteMaterial(alloc)}
+                                className="h-7 w-7 p-0 text-slate-400 hover:text-rose-500 rounded-lg"
+                                title="Delete allocation"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: TIMELINE & SCHEDULE CALENDAR VIEW */}
       {activeTab === 'timeline' && (
         <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
           <div>
@@ -1492,16 +1868,17 @@ export function ResourceAllocationModule({
               Resource Allocation Timeline & Dispatch Schedule
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Visual roadmap of personnel and machinery assignments across operating dates.
+              Visual roadmap of personnel, machinery, and material deployments across project operating dates.
             </p>
           </div>
 
-          {/* Timeline items list grouped by Date Range */}
+          {/* Timeline items list grouped by Resource Pillars */}
           <div className="space-y-4">
-            {filteredLabourAllocations.length === 0 && filteredEquipmentAllocations.length === 0 ? (
+            {filteredLabourAllocations.length === 0 && filteredEquipmentAllocations.length === 0 && filteredMaterialAllocations.length === 0 ? (
               <p className="text-xs text-slate-400 italic text-center py-8">No scheduled allocations found for timeline display.</p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                
                 {/* Labour Schedule Column */}
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 space-y-3">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
@@ -1510,28 +1887,32 @@ export function ResourceAllocationModule({
                   </h4>
 
                   <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                    {filteredLabourAllocations.map(l => {
-                      const act = activities.find(a => a?.id === l?.activityId);
-                      return (
-                        <div key={l.id} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-2xs flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-xs text-slate-900 dark:text-white">{l.workerName}</span>
-                              <span className="text-[10px] text-slate-400">({l.workerRole})</span>
+                    {filteredLabourAllocations.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic py-3 text-center">No labour assignments.</p>
+                    ) : (
+                      filteredLabourAllocations.map(l => {
+                        const act = activities.find(a => a?.id === l?.activityId);
+                        return (
+                          <div key={l.id} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-2xs flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-xs text-slate-900 dark:text-white">{l.workerName}</span>
+                                <span className="text-[10px] text-slate-400">({l.workerRole})</span>
+                              </div>
+                              <p className="text-[11px] text-[#0B5FFF] font-semibold mt-0.5">
+                                Task: {act?.name || l?.activityId}
+                              </p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                📅 {l.startDate} → {l.endDate} ({l.hours || 8} hrs/day)
+                              </p>
                             </div>
-                            <p className="text-[11px] text-[#0B5FFF] font-semibold mt-0.5">
-                              Task: {act?.name || l?.activityId}
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              📅 {l.startDate} → {l.endDate} ({l.hours || 8} hrs/day)
-                            </p>
+                            <Badge variant={l.status === 'Active' ? 'success' : 'outline'} className="text-[9px]">
+                              {l.status}
+                            </Badge>
                           </div>
-                          <Badge variant={l.status === 'Active' ? 'success' : 'outline'} className="text-[9px]">
-                            {l.status}
-                          </Badge>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
@@ -1543,28 +1924,69 @@ export function ResourceAllocationModule({
                   </h4>
 
                   <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                    {filteredEquipmentAllocations.map(e => {
-                      const act = activities.find(a => a?.id === e?.activityId);
-                      return (
-                        <div key={e.id} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-2xs flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-xs text-slate-900 dark:text-white">{e.name}</span>
-                              <span className="text-[10px] text-amber-600 dark:text-amber-400">({e.assignedTo || 'No operator'})</span>
+                    {filteredEquipmentAllocations.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic py-3 text-center">No equipment deployments.</p>
+                    ) : (
+                      filteredEquipmentAllocations.map(e => {
+                        const act = activities.find(a => a?.id === e?.activityId);
+                        return (
+                          <div key={e.id} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-2xs flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-xs text-slate-900 dark:text-white">{e.name}</span>
+                                <span className="text-[10px] text-amber-600 dark:text-amber-400">({e.assignedTo || 'No operator'})</span>
+                              </div>
+                              <p className="text-[11px] text-[#0B5FFF] font-semibold mt-0.5">
+                                Task: {act?.name || e?.activityId || 'Site Fleet'}
+                              </p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                📅 {e.assignedDate} → {e.expectedReturnDate || 'Ongoing'} ({e.plannedHours || 8} hrs/day)
+                              </p>
                             </div>
-                            <p className="text-[11px] text-[#0B5FFF] font-semibold mt-0.5">
-                              Task: {act?.name || e?.activityId || 'Site Fleet'}
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              📅 {e.assignedDate} → {e.expectedReturnDate || 'Ongoing'} ({e.plannedHours || 8} hrs/day)
-                            </p>
+                            <Badge variant={e.status === 'In Use' ? 'success' : 'outline'} className="text-[9px]">
+                              {e.status}
+                            </Badge>
                           </div>
-                          <Badge variant={e.status === 'In Use' ? 'success' : 'outline'} className="text-[9px]">
-                            {e.status}
-                          </Badge>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Material Deployments Column */}
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                    <Package className="h-4 w-4 text-emerald-500" />
+                    Material Deployments ({filteredMaterialAllocations.length})
+                  </h4>
+
+                  <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+                    {filteredMaterialAllocations.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic py-3 text-center">No material allocations.</p>
+                    ) : (
+                      filteredMaterialAllocations.map(m => {
+                        const act = activities.find(a => a?.id === m?.activityId);
+                        return (
+                          <div key={m.id} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-2xs flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-xs text-slate-900 dark:text-white">{m.name}</span>
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">({m.quantity} {m.unit || 'units'})</span>
+                              </div>
+                              <p className="text-[11px] text-[#0B5FFF] font-semibold mt-0.5">
+                                Task: {act?.name || m?.activityId || 'Site Supply'}
+                              </p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                📅 Dispatched: {m.assignedDate}
+                              </p>
+                            </div>
+                            <Badge variant={m.status === 'In Use' ? 'success' : 'outline'} className="text-[9px]">
+                              {m.status}
+                            </Badge>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
@@ -1574,17 +1996,17 @@ export function ResourceAllocationModule({
         </div>
       )}
 
-      {/* ASSIGN RESOURCE MODAL */}
+      {/* PRINT DISPATCH MANIFEST MODAL */}
       <PrintPreview
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
-        title="Resource Allocation Dispatch Manifest"
+        title="Constructfield Resource Allocation Dispatch Manifest"
         onDownloadPdf={handleDownloadPDF}
       >
         <div className="p-8 font-sans">
           <div className="border-b-2 border-[#0B5FFF] pb-6 mb-8 flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-black text-slate-900 mb-2">Dispatch Manifest</h1>
+              <h1 className="text-3xl font-black text-slate-900 mb-2">Constructfield Dispatch Manifest</h1>
               <p className="text-sm text-slate-500 font-medium">Resource Allocations & Assignments</p>
             </div>
             <div className="text-right">
@@ -1645,9 +2067,36 @@ export function ResourceAllocationModule({
               </tbody>
             </table>
           </div>
+
+          <div className="mb-10">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-600 mb-4">Materials & Supplies</h3>
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b-2 border-slate-200">
+                  <th className="py-2 text-xs font-semibold text-slate-500">Material</th>
+                  <th className="py-2 text-xs font-semibold text-slate-500">Quantity</th>
+                  <th className="py-2 text-xs font-semibold text-slate-500">Project</th>
+                  <th className="py-2 text-xs font-semibold text-slate-500">Activity</th>
+                  <th className="py-2 text-xs font-semibold text-slate-500 text-right">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMaterialAllocations.map((m, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    <td className="py-2 text-sm font-medium text-slate-800">{m.name}</td>
+                    <td className="py-2 text-sm text-slate-600 font-semibold">{m.quantity} {m.unit || 'units'}</td>
+                    <td className="py-2 text-sm text-slate-600">{projects.find(p => p.id === m.projectId)?.name || m.projectId}</td>
+                    <td className="py-2 text-sm text-slate-600">{activities.find(a => a.id === m.activityId)?.name || "General"}</td>
+                    <td className="py-2 text-sm text-slate-600 text-right font-semibold">{m.assignedDate}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </PrintPreview>
 
+      {/* ASSIGN RESOURCE MODAL */}
       <AssignResourceModal
         isOpen={isAssignModalOpen}
         onClose={() => setIsAssignModalOpen(false)}

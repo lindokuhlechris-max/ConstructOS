@@ -11,7 +11,7 @@ export function ResourceAllocationPage() {
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
 
   return (
-    <div className="p-4 md:p-8">
+    <div className="p-4 md:p-6 w-full">
       {selectedActivity ? (
         <ErrorBoundary moduleName="Activity Detail">
           <ActivityDetail

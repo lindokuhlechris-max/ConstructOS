@@ -82,7 +82,7 @@ interface ActivityDetailProps {
 
 export function ActivityDetail({ activity: initialActivity, onSave, onClose, onDelete, onDuplicate, isEditable = true }: ActivityDetailProps) {
   const navigate = useNavigate();
-  const { projects, materials, employees, equipment, documents, updateActivity, addReport, addAuditLog, userRole, currentUserProfile, labourLogs } = useAppContext();
+  const { projects, materials, employees, equipment, documents, updateActivity, addReport, addAuditLog, addAllocation, userRole, currentUserProfile, labourLogs } = useAppContext();
   const canEditActivities = canUserEditSection(currentUserProfile, 'activities');
   const [activity, setActivity] = useState<Activity>(initialActivity);
   const [isEditing, setIsEditing] = useState(false);
@@ -406,6 +406,22 @@ ${subtaskSummaryLines}
     setActivity(updatedActivity);
     if (onSave) onSave(updatedActivity);
     else updateActivity(updatedActivity);
+
+    if (addAllocation) {
+      addAllocation({
+        id: `RES-${newAssignment.id}`,
+        projectId: activity.projectId,
+        activityId: activity.id,
+        materialId: newAssignment.materialId,
+        resourceType: 'Material',
+        name: matName,
+        quantity: newAssignment.quantity,
+        unit: matUnit,
+        status: 'Allocated',
+        assignedDate: newAssignment.assignedDate,
+        notes: assignMaterialNotes
+      });
+    }
 
     addAuditLog({
       id: `AL-${Math.random().toString(36).substr(2, 9)}`,

@@ -49,6 +49,7 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
     materialReceipts, 
     materialUsages, 
     activities, 
+    allocations,
     projects,
     updateMaterial, 
     deleteMaterial, 
@@ -193,7 +194,8 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
 
   // Filter linked construction tasks
   const linkedTasks = activities.filter(act => 
-    act.assignedMaterials?.some(m => m.materialId === material.id || m.name.toLowerCase() === material.name.toLowerCase())
+    act.assignedMaterials?.some(m => m.materialId === material.id || m.name.toLowerCase() === material.name.toLowerCase()) ||
+    allocations.some(a => a.resourceType === 'Material' && (a.materialId === material.id || a.name.toLowerCase() === material.name.toLowerCase()) && a.activityId === act.id)
   );
 
   const handlePersistMaterial = (updated: MaterialInventory) => {
