@@ -25,6 +25,8 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
   const [newOperator, setNewOperator] = useState('');
   const [newLocation, setNewLocation] = useState('Zone A');
   const [newStatus, setNewStatus] = useState<EquipmentStatus>('Operating');
+  const [newVinSerial, setNewVinSerial] = useState('');
+  const [newAccessories, setNewAccessories] = useState('');
 
   // Log states
   const [logHours, setLogHours] = useState(8);
@@ -72,12 +74,16 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       fuelLevel: 100,
       location: newLocation || 'Zone A',
       lastService: new Date().toISOString().split('T')[0],
+      vinSerial: newVinSerial,
+      accessories: newAccessories,
     };
 
     addEquipment(newItem);
     setIsAdding(false);
     setNewName('');
     setNewOperator('');
+    setNewVinSerial('');
+    setNewAccessories('');
   };
 
   const handleEditSave = (e: React.FormEvent) => {
@@ -92,6 +98,8 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       operator: newOperator || 'Unassigned',
       location: newLocation,
       status: newStatus,
+      vinSerial: newVinSerial,
+      accessories: newAccessories,
     });
 
     setEditingEq(null);
@@ -104,6 +112,8 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
     setNewOperator(item.operator);
     setNewLocation(item.location);
     setNewStatus(item.status);
+    setNewVinSerial(item.vinSerial || item.serialNumber || '');
+    setNewAccessories(item.accessories || '');
   };
 
   const openLog = (item: EquipmentType) => {
@@ -221,6 +231,20 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                 onChange={e => setNewLocation(e.target.value)}
                 className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
               />
+              <input
+                type="text"
+                placeholder="VIN / Serial Number"
+                value={newVinSerial}
+                onChange={e => setNewVinSerial(e.target.value)}
+                className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+              />
+              <input
+                type="text"
+                placeholder="Included Accessories (e.g. Buckets, Auger)"
+                value={newAccessories}
+                onChange={e => setNewAccessories(e.target.value)}
+                className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF] md:col-span-2"
+              />
             </div>
             <div className="flex justify-end gap-2 mt-2">
               <Button type="button" variant="outline" onClick={() => setIsAdding(false)} className="rounded-xl text-xs">
@@ -314,6 +338,12 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                   <Badge variant="outline" className="text-[10px]">{item.type || item.category}</Badge>
                 </div>
                 <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">{item.name}</h3>
+                {(item.vinSerial || item.serialNumber) && (
+                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">S/N: {item.vinSerial || item.serialNumber}</div>
+                )}
+                {item.accessories && (
+                  <div className="text-[10px] text-slate-500 mt-0.5 truncate max-w-[200px]" title={item.accessories}>Acc: {item.accessories}</div>
+                )}
               </div>
               {getStatusBadge(item.status)}
             </div>
@@ -409,6 +439,16 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                 <div>
                   <label className="text-xs text-slate-500">Location</label>
                   <input type="text" value={newLocation} onChange={e => setNewLocation(e.target.value)} className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-500">VIN / Serial</label>
+                  <input type="text" value={newVinSerial} onChange={e => setNewVinSerial(e.target.value)} className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500">Accessories</label>
+                  <input type="text" value={newAccessories} onChange={e => setNewAccessories(e.target.value)} className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">

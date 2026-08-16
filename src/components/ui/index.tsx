@@ -8,14 +8,14 @@ export function cn(...inputs: ClassValue[]) {
 
 export function Card({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("rounded-xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-[#1A1C1E] dark:text-slate-50 shadow-sm", className)} {...props}>
+    <div className={cn("rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-[#1A1C1E] dark:text-slate-50 shadow-sm", className)} {...props}>
       {children}
     </div>
   );
 }
 
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex flex-col space-y-1.5 p-3 md:p-4 border-b border-gray-100 dark:border-slate-800", className)} {...props} />;
+  return <div className={cn("flex flex-col space-y-1.5 p-3 md:p-4 border-b border-slate-200 dark:border-slate-800", className)} {...props} />;
 }
 
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
@@ -68,7 +68,7 @@ export const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttrib
     return (
       <button
         ref={ref}
-        className={cn("inline-flex items-center justify-center rounded-xl text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 disabled:pointer-events-none disabled:opacity-50", variants[variant], sizes[size], className)}
+        className={cn("inline-flex items-center justify-center rounded-xl text-sm font-medium transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 disabled:pointer-events-none disabled:opacity-50", variants[variant], sizes[size], className)}
         {...props}
       />
     );

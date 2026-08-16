@@ -20,6 +20,7 @@ import {
   X,
   CheckCircle2,
   ShieldCheck,
+  Lock,
   User,
   Crown,
   Eye,
@@ -30,30 +31,64 @@ import {
   Check,
   AlertCircle,
   TrendingUp,
-  FileText
+  FileText,
+  Home,
+  Bus,
+  Car,
+  Navigation,
+  MapPin,
+  Download
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { Employee, Team, EmployeeStatus, LeaveRecord, LeaveType, LeaveStatus } from '../../types';
+import { Employee, Team, EmployeeStatus, LeaveRecord, LeaveType, LeaveStatus, canUserEditSection, LabourLog } from '../../types';
 import { EmployeeDetail, getStatusBadgeStyle } from '../EmployeeDetail';
 import { RemindersWidget } from '../RemindersWidget';
+import { DailyLaborSummaryModal } from '../DailyLaborSummaryModal';
 
 interface EmployeesModuleProps {
   onBack?: () => void;
 }
 
 export function EmployeesModule({ onBack }: EmployeesModuleProps) {
-  const { employees, teams, projects, workerCheckIns, labourLogs, addEmployee, updateEmployee, deleteEmployee, addTeam, updateTeam, deleteTeam, addLabourLog, addWorkerCheckIn } = useAppContext();
+  const { employees, teams, projects, activities, workerCheckIns, labourLogs, addEmployee, updateEmployee, deleteEmployee, addTeam, updateTeam, deleteTeam, addLabourLog, updateLabourLog, deleteLabourLog, addWorkerCheckIn, currentUserProfile } = useAppContext();
   
+  const canEditLabour = canUserEditSection(currentUserProfile, 'labour');
+
   // Selected Employee for Detail View
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
-  // Tab view: 'employees' | 'teams' | 'tracker'
-  const [activeTab, setActiveTab] = useState<'employees' | 'teams' | 'tracker'>('employees');
+  // Editing Logged Hours State
+  const [editingLabourLog, setEditingLabourLog] = useState<LabourLog | null>(null);
+  const [editingHoursForm, setEditingHoursForm] = useState<{
+    date: string;
+    workerName: string;
+    trade: string;
+    projectId: string;
+    activityId: string;
+    startTime: string;
+    endTime: string;
+    hoursWorked: number;
+    notes: string;
+  }>({
+    date: '',
+    workerName: '',
+    trade: 'General Laborer',
+    projectId: '',
+    activityId: '',
+    startTime: '08:00',
+    endTime: '17:00',
+    hoursWorked: 8,
+    notes: ''
+  });
+
+  // Tab view: 'employees' | 'teams' | 'tracker' | 'logistics' | 'hours'
+  const [activeTab, setActiveTab] = useState<'employees' | 'teams' | 'tracker' | 'logistics' | 'hours'>('employees');
   const [trackerSubTab, setTrackerSubTab] = useState<'leave' | 'attendance' | 'balances'>('leave');
   
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortOption, setSortOption] = useState<'name' | 'department' | 'role' | 'status'>('name');
 
   // HR Leave Modal State
   const [isApplyingLeave, setIsApplyingLeave] = useState(false);
@@ -82,14 +117,35 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
 
   // HR Hours Log Modal State
   const [isLoggingHoursModal, setIsLoggingHoursModal] = useState(false);
+  const [isDailySummaryModalOpen, setIsDailySummaryModalOpen] = useState(false);
   const [hoursForm, setHoursForm] = useState({
     employeeId: '',
     projectId: projects[0]?.id || '',
+    activityId: activities[0]?.id || '',
     date: new Date().toISOString().split('T')[0],
+    startTime: '08:00',
+    endTime: '17:00',
+    lunchBreak: 1.0,
     hoursWorked: 8.0,
     shiftType: 'Normal Shift',
     notes: ''
   });
+
+  // Calculate hours whenever start or end time changes
+  React.useEffect(() => {
+    if (hoursForm.startTime && hoursForm.endTime) {
+      const [startH, startM] = hoursForm.startTime.split(':').map(Number);
+      const [endH, endM] = hoursForm.endTime.split(':').map(Number);
+      
+      let hours = (endH + endM / 60) - (startH + startM / 60);
+      if (hours < 0) hours += 24; // Handle cross-midnight shifts
+      
+      hours -= (hoursForm.lunchBreak || 0);
+      if (hours < 0) hours = 0; // Prevent negative hours
+      
+      setHoursForm(prev => ({ ...prev, hoursWorked: parseFloat(hours.toFixed(2)) }));
+    }
+  }, [hoursForm.startTime, hoursForm.endTime, hoursForm.lunchBreak]);
 
   // Employee Modals State
   const [isAddingEmployee, setIsAddingEmployee] = useState(false);
@@ -126,6 +182,17 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
     const matchesStatus = statusFilter === 'All' || e.status === statusFilter;
 
     return matchesSearch && matchesStatus;
+  }).sort((a, b) => {
+    if (sortOption === 'name') {
+      return a.firstName.localeCompare(b.firstName);
+    } else if (sortOption === 'department') {
+      return a.department.localeCompare(b.department);
+    } else if (sortOption === 'role') {
+      return a.position.localeCompare(b.position);
+    } else if (sortOption === 'status') {
+      return a.status.localeCompare(b.status);
+    }
+    return 0;
   });
 
   const filteredTeams = teams.filter(t => 
@@ -348,7 +415,14 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
     addLabourLog({
       id: `LAB-${Math.floor(1000 + Math.random() * 9000)}`,
       projectId: hoursForm.projectId,
+      activityId: hoursForm?.activityId,
       date: hoursForm.date,
+      startTime: hoursForm.startTime,
+      endTime: hoursForm.endTime,
+      lunchBreak: hoursForm.lunchBreak,
+      workerType: 'Employee',
+      workerName: `${targetEmp.firstName} ${targetEmp.lastName}`,
+      hours: Number(hoursForm.hoursWorked),
       workersCount: 1,
       trade: targetEmp.position,
       hoursWorked: Number(hoursForm.hoursWorked),
@@ -387,7 +461,7 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
   }
 
   return (
-    <div className="flex flex-col gap-6 w-full h-full">
+    <div className="flex flex-col gap-6 w-full">
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -482,6 +556,28 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
               </span>
             )}
           </button>
+
+          <button
+            onClick={() => setActiveTab('logistics')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+              activeTab === 'logistics'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Home className="h-4 w-4" /> Accommodation & Transport
+          </button>
+
+          <button
+            onClick={() => setActiveTab('hours')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+              activeTab === 'hours'
+                ? 'bg-amber-500 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Clock className="h-4 w-4" /> Log Hours
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -516,7 +612,43 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
           </div>
 
           {activeTab === 'employees' && (
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button
+                onClick={() => {
+                  const csvContent = ["Employee ID,Name,Position,Department,Status,Email,Phone,Accommodated,Camp Name,Room #,Transport,Route,Pickup Point"]
+                    .concat(filteredEmployees.map(e => `"${e.id}","${e.firstName} ${e.lastName}","${e.position}","${e.department}","${e.status}","${e.email}","${e.phone}","${e.hasAccommodation ? 'Yes' : 'No'}","${e.accommodationDetails?.campName || ''}","${e.accommodationDetails?.roomNumber || ''}","${e.hasTransport ? 'Yes' : 'No'}","${e.transportDetails?.route || ''}","${e.transportDetails?.pickupPoint || ''}"`))
+                    .join("\n");
+                  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  link.setAttribute("href", url);
+                  link.setAttribute("download", "Complete_Employee_Directory.csv");
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-sm transition-all"
+                title="Download Directory CSV"
+              >
+                <Download className="h-4 w-4 text-[#0B5FFF]" /> <span className="hidden sm:inline">Export</span>
+              </button>
+              <div className="w-px h-4 bg-slate-300 dark:bg-slate-600 mx-1"></div>
+              
+              <div className="flex items-center gap-1.5 px-2">
+                <select
+                  className="bg-transparent text-xs font-bold text-slate-600 dark:text-slate-300 focus:outline-none cursor-pointer"
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value as any)}
+                >
+                  <option value="name">Sort by Name</option>
+                  <option value="department">Sort by Dept</option>
+                  <option value="role">Sort by Role</option>
+                  <option value="status">Sort by Status</option>
+                </select>
+              </div>
+
+              <div className="w-px h-4 bg-slate-300 dark:bg-slate-600 mx-1"></div>
               <button
                 onClick={() => setViewMode('grid')}
                 className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 shadow-sm text-[#0B5FFF]' : 'text-slate-500'}`}
@@ -536,125 +668,73 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
         </div>
       </div>
 
-      {/* Add Employee Inline Card */}
+      {/* Add Employee Modal */}
       {isAddingEmployee && activeTab === 'employees' && (
-        <Card className="border-blue-100 dark:border-blue-900/30 overflow-hidden shadow-sm">
-          <div className="bg-blue-50/50 dark:bg-blue-900/10 px-6 py-4 border-b border-blue-100 dark:border-blue-900/30 flex items-center justify-between">
-            <h3 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
-              <UserPlus className="h-4 w-4" /> New Employee Profile
-            </h3>
-            <button onClick={() => setIsAddingEmployee(false)} className="text-slate-400 hover:text-slate-600">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <form onSubmit={handleAddEmployee} className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">First Name *</label>
-                    <input
-                      type="text"
-                      required
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                      value={newEmployee.firstName || ''}
-                      onChange={e => setNewEmployee({ ...newEmployee, firstName: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Last Name *</label>
-                    <input
-                      type="text"
-                      required
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                      value={newEmployee.lastName || ''}
-                      onChange={e => setNewEmployee({ ...newEmployee, lastName: e.target.value })}
-                    />
-                  </div>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <Card className="w-full max-w-2xl bg-white dark:bg-slate-900 shadow-2xl border-slate-200 dark:border-slate-800 rounded-2xl animate-in fade-in zoom-in-95 my-auto max-h-[92vh] flex flex-col">
+            <div className="bg-blue-50/70 dark:bg-blue-950/40 px-6 py-4 border-b border-blue-100 dark:border-blue-900/50 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#0B5FFF] text-white flex items-center justify-center shadow-sm">
+                  <UserPlus className="h-5 w-5" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Email Address</label>
-                  <input
-                    type="email"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                    value={newEmployee.email || ''}
-                    onChange={e => setNewEmployee({ ...newEmployee, email: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Phone Number</label>
-                  <input
-                    type="tel"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                    value={newEmployee.phone || ''}
-                    onChange={e => setNewEmployee({ ...newEmployee, phone: e.target.value })}
-                  />
-                </div>
-                {/* Emergency Contact */}
-                <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Emergency Contact (Optional)</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    <input
-                      type="text"
-                      placeholder="Name"
-                      className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                      value={newEmployee.emergencyContact?.name || ''}
-                      onChange={e => setNewEmployee({
-                        ...newEmployee,
-                        emergencyContact: {
-                          name: e.target.value,
-                          phone: newEmployee.emergencyContact?.phone || '',
-                          relationship: newEmployee.emergencyContact?.relationship || ''
-                        }
-                      })}
-                    />
-                    <input
-                      type="tel"
-                      placeholder="Phone"
-                      className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                      value={newEmployee.emergencyContact?.phone || ''}
-                      onChange={e => setNewEmployee({
-                        ...newEmployee,
-                        emergencyContact: {
-                          name: newEmployee.emergencyContact?.name || '',
-                          phone: e.target.value,
-                          relationship: newEmployee.emergencyContact?.relationship || ''
-                        }
-                      })}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Relationship"
-                      className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                      value={newEmployee.emergencyContact?.relationship || ''}
-                      onChange={e => setNewEmployee({
-                        ...newEmployee,
-                        emergencyContact: {
-                          name: newEmployee.emergencyContact?.name || '',
-                          phone: newEmployee.emergencyContact?.phone || '',
-                          relationship: e.target.value
-                        }
-                      })}
-                    />
-                  </div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">New Employee Profile</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Enter personal details, job title, and site assignment</p>
                 </div>
               </div>
-              <div className="space-y-4">
+              <button
+                onClick={() => setIsAddingEmployee(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddEmployee} className="p-6 space-y-5 overflow-y-auto flex-1">
+              {/* Row 1: First Name & Last Name */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Job Position *</label>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">First Name *</label>
                   <input
                     type="text"
                     required
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+                    placeholder="e.g. John"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                    value={newEmployee.firstName || ''}
+                    onChange={e => setNewEmployee({ ...newEmployee, firstName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">Last Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Smith"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                    value={newEmployee.lastName || ''}
+                    onChange={e => setNewEmployee({ ...newEmployee, lastName: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Job Position & Department */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">Job Position *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Site Engineer / Crane Operator"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
                     value={newEmployee.position || ''}
                     onChange={e => setNewEmployee({ ...newEmployee, position: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Department *</label>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">Department *</label>
                   <CustomSelect
                     required
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm"
                     value={newEmployee.department || ''}
                     onChange={val => setNewEmployee({ ...newEmployee, department: val })}
                     options={['Management', 'Engineering', 'Construction', 'Health & Safety', 'Quality Assurance', 'Administration']}
@@ -662,62 +742,280 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                     customPlaceholder="Enter custom department..."
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Employment Status</label>
-                    <select
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                      value={newEmployee.status || 'Active'}
-                      onChange={e => setNewEmployee({ ...newEmployee, status: e.target.value as EmployeeStatus })}
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Absent">Absent</option>
-                      <option value="On Leave">On Leave</option>
-                      <option value="Terminated">Terminated</option>
-                      <option value="Induction">Induction</option>
-                      <option value="Under Review">Under Review</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Hire Date</label>
-                    <input
-                      type="date"
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                      value={newEmployee.hireDate || ''}
-                      onChange={e => setNewEmployee({ ...newEmployee, hireDate: e.target.value })}
-                    />
-                  </div>
-                </div>
+              </div>
 
+              {/* Row 3: Email Address & Phone Number */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Site Notes / Bio (Optional)</label>
-                  <textarea
-                    rows={2}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
-                    placeholder="e.g. Trained site operator..."
-                    value={newEmployee.notes || ''}
-                    onChange={e => setNewEmployee({ ...newEmployee, notes: e.target.value })}
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="john.smith@company.com"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                    value={newEmployee.email || ''}
+                    onChange={e => setNewEmployee({ ...newEmployee, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">Phone Number</label>
+                  <input
+                    type="tel"
+                    placeholder="+27 82 123 4567"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                    value={newEmployee.phone || ''}
+                    onChange={e => setNewEmployee({ ...newEmployee, phone: e.target.value })}
                   />
                 </div>
               </div>
-            </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setIsAddingEmployee(false)}
-                className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#0B5FFF] text-white transition-colors"
-              >
-                Create Profile
-              </button>
-            </div>
-          </form>
-        </Card>
+
+              {/* Row 4: Employment Status & Hire Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">Employment Status</label>
+                  <select
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                    value={newEmployee.status || 'Active'}
+                    onChange={e => setNewEmployee({ ...newEmployee, status: e.target.value as EmployeeStatus })}
+                  >
+                    <option value="Active">🟢 Active</option>
+                    <option value="Absent">🔴 Absent</option>
+                    <option value="On Leave">🟡 On Leave</option>
+                    <option value="Terminated">⚫ Terminated</option>
+                    <option value="Induction">🔵 Induction</option>
+                    <option value="Under Review">🟣 Under Review</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">Hire Date</label>
+                  <input
+                    type="date"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                    value={newEmployee.hireDate || ''}
+                    onChange={e => setNewEmployee({ ...newEmployee, hireDate: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Emergency Contact */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-3">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block">Emergency Contact (Optional)</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <input
+                    type="text"
+                    placeholder="Contact Name"
+                    className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#0B5FFF]"
+                    value={newEmployee.emergencyContact?.name || ''}
+                    onChange={e => setNewEmployee({
+                      ...newEmployee,
+                      emergencyContact: {
+                        name: e.target.value,
+                        phone: newEmployee.emergencyContact?.phone || '',
+                        relationship: newEmployee.emergencyContact?.relationship || ''
+                      }
+                    })}
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Contact Phone"
+                    className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#0B5FFF]"
+                    value={newEmployee.emergencyContact?.phone || ''}
+                    onChange={e => setNewEmployee({
+                      ...newEmployee,
+                      emergencyContact: {
+                        name: newEmployee.emergencyContact?.name || '',
+                        phone: e.target.value,
+                        relationship: newEmployee.emergencyContact?.relationship || ''
+                      }
+                    })}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Relationship (e.g. Spouse)"
+                    className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#0B5FFF]"
+                    value={newEmployee.emergencyContact?.relationship || ''}
+                    onChange={e => setNewEmployee({
+                      ...newEmployee,
+                      emergencyContact: {
+                        name: newEmployee.emergencyContact?.name || '',
+                        phone: newEmployee.emergencyContact?.phone || '',
+                        relationship: e.target.value
+                      }
+                    })}
+                  />
+                </div>
+              </div>
+
+              {/* Site Notes / Bio */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">Site Notes / Bio (Optional)</label>
+                <textarea
+                  rows={2}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                  placeholder="e.g. Certified heavy machine operator, safety representative..."
+                  value={newEmployee.notes || ''}
+                  onChange={e => setNewEmployee({ ...newEmployee, notes: e.target.value })}
+                />
+              </div>
+
+              {/* Company Accommodation Logistics */}
+              <div className="p-4 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Home className="h-4 w-4 text-indigo-600" />
+                    <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 uppercase tracking-wider">Company Accommodation</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={newEmployee.hasAccommodation || false}
+                      onChange={e => setNewEmployee({ ...newEmployee, hasAccommodation: e.target.checked })}
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+                    <span className="ml-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                      {newEmployee.hasAccommodation ? 'Provided' : 'Not Provided'}
+                    </span>
+                  </label>
+                </div>
+
+                {newEmployee.hasAccommodation && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-indigo-100/80 dark:border-indigo-900/30 animate-in fade-in">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Camp / Residence Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Central Site Camp A"
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={newEmployee.accommodationDetails?.campName || ''}
+                        onChange={e => setNewEmployee({
+                          ...newEmployee,
+                          accommodationDetails: {
+                            campName: e.target.value,
+                            roomNumber: newEmployee.accommodationDetails?.roomNumber || '',
+                            subsidyAmount: newEmployee.accommodationDetails?.subsidyAmount || 0,
+                            notes: newEmployee.accommodationDetails?.notes || ''
+                          }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Room / Unit #</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Room 204"
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={newEmployee.accommodationDetails?.roomNumber || ''}
+                        onChange={e => setNewEmployee({
+                          ...newEmployee,
+                          accommodationDetails: {
+                            campName: newEmployee.accommodationDetails?.campName || '',
+                            roomNumber: e.target.value,
+                            subsidyAmount: newEmployee.accommodationDetails?.subsidyAmount || 0,
+                            notes: newEmployee.accommodationDetails?.notes || ''
+                          }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Monthly Subsidy (R)</label>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={newEmployee.accommodationDetails?.subsidyAmount || ''}
+                        onChange={e => setNewEmployee({
+                          ...newEmployee,
+                          accommodationDetails: {
+                            campName: newEmployee.accommodationDetails?.campName || '',
+                            roomNumber: newEmployee.accommodationDetails?.roomNumber || '',
+                            subsidyAmount: parseFloat(e.target.value) || 0,
+                            notes: newEmployee.accommodationDetails?.notes || ''
+                          }
+                        })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Company Transport Logistics */}
+              <div className="p-4 bg-teal-50/50 dark:bg-teal-950/20 rounded-xl border border-teal-100 dark:border-teal-900/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bus className="h-4 w-4 text-teal-600" />
+                    <span className="text-xs font-bold text-teal-950 dark:text-teal-200 uppercase tracking-wider">Company Transport</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={newEmployee.hasTransport || false}
+                      onChange={e => setNewEmployee({ ...newEmployee, hasTransport: e.target.checked })}
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-teal-600"></div>
+                    <span className="ml-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                      {newEmployee.hasTransport ? 'Provided' : 'Not Provided'}
+                    </span>
+                  </label>
+                </div>
+
+                {newEmployee.hasTransport && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-teal-100/80 dark:border-teal-900/30 animate-in fade-in">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Route / Bus Line</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Route 3 - East Shuttle"
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={newEmployee.transportDetails?.route || ''}
+                        onChange={e => setNewEmployee({
+                          ...newEmployee,
+                          transportDetails: {
+                            route: e.target.value,
+                            pickupPoint: newEmployee.transportDetails?.pickupPoint || ''
+                          }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Pickup Location / Stop</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. North Gate Bus Stop"
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={newEmployee.transportDetails?.pickupPoint || ''}
+                        onChange={e => setNewEmployee({
+                          ...newEmployee,
+                          transportDetails: {
+                            route: newEmployee.transportDetails?.route || '',
+                            pickupPoint: e.target.value
+                          }
+                        })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingEmployee(false)}
+                  className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#0B5FFF] hover:bg-blue-700 text-white shadow-sm transition-colors"
+                >
+                  Save Employee Profile
+                </button>
+              </div>
+            </form>
+          </Card>
+        </div>
       )}
 
       {/* TAB 1: EMPLOYEES DIRECTORY */}
@@ -1357,7 +1655,665 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
         </div>
       )}
 
-      {/* EDIT LEAVE ALLOCATIONS MODAL */}
+      {/* TAB 4: ACCOMMODATION & TRANSPORT LOGISTICS */}
+      {activeTab === 'logistics' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Summary KPIs Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/40 dark:to-blue-950/40 border-indigo-200 dark:border-indigo-900/50">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider block">Company Accommodated</span>
+                  <div className="text-2xl font-black text-indigo-950 dark:text-indigo-100 mt-1">
+                    {employees.filter(e => e.hasAccommodation).length}
+                    <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold ml-1.5">
+                      ({Math.round((employees.filter(e => e.hasAccommodation).length / Math.max(1, employees.length)) * 100)}%)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-indigo-600/80 dark:text-indigo-300/70 mt-0.5">Staff in company residence / camp</p>
+                </div>
+                <div className="p-3 bg-indigo-500 text-white rounded-2xl shadow-sm">
+                  <Home className="h-6 w-6" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/40 border-teal-200 dark:border-teal-900/50">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-teal-700 dark:text-teal-300 uppercase tracking-wider block">Provided Transport</span>
+                  <div className="text-2xl font-black text-teal-950 dark:text-teal-100 mt-1">
+                    {employees.filter(e => e.hasTransport).length}
+                    <span className="text-xs text-teal-600 dark:text-teal-400 font-semibold ml-1.5">
+                      ({Math.round((employees.filter(e => e.hasTransport).length / Math.max(1, employees.length)) * 100)}%)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-teal-600/80 dark:text-teal-300/70 mt-0.5">Using company shuttle / bus route</p>
+                </div>
+                <div className="p-3 bg-teal-500 text-white rounded-2xl shadow-sm">
+                  <Bus className="h-6 w-6" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-950/40 dark:to-indigo-950/40 border-purple-200 dark:border-purple-900/50">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wider block">Active Residence Camps</span>
+                  <div className="text-2xl font-black text-purple-950 dark:text-purple-100 mt-1">
+                    {new Set(employees.map(e => e.accommodationDetails?.campName).filter(Boolean)).size || 1}
+                  </div>
+                  <p className="text-[11px] text-purple-600/80 dark:text-purple-300/70 mt-0.5">Distinct camp facilities</p>
+                </div>
+                <div className="p-3 bg-purple-500 text-white rounded-2xl shadow-sm">
+                  <Building className="h-6 w-6" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 border-amber-200 dark:border-amber-900/50">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider block">Est. Housing Subsidies</span>
+                  <div className="text-2xl font-black text-amber-950 dark:text-amber-100 mt-1">
+                    R {employees.reduce((acc, e) => acc + (e.accommodationDetails?.subsidyAmount || 0), 0).toLocaleString()}
+                  </div>
+                  <p className="text-[11px] text-amber-600/80 dark:text-amber-300/70 mt-0.5">Total monthly housing allowance</p>
+                </div>
+                <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-sm">
+                  <HeartHandshake className="h-6 w-6" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Roster Table Card */}
+          <Card className="w-full">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-900/50">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
+                  <Home className="h-5 w-5 text-indigo-600" /> Employee Accommodation & Transport Roster
+                </h3>
+                <p className="text-xs text-slate-500">Overview of employees provided housing, camp units, and shuttle transport routes</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const accommodated = employees.filter(e => e.hasAccommodation || e.hasTransport);
+                    const csvContent = ["Employee ID,Name,Position,Department,Accommodated,Camp Name,Room #,Transport,Route,Pickup Point"]
+                      .concat(accommodated.map(e => `"${e.id}","${e.firstName} ${e.lastName}","${e.position}","${e.department}","${e.hasAccommodation ? 'Yes' : 'No'}","${e.accommodationDetails?.campName || ''}","${e.accommodationDetails?.roomNumber || ''}","${e.hasTransport ? 'Yes' : 'No'}","${e.transportDetails?.route || ''}","${e.transportDetails?.pickupPoint || ''}"`))
+                      .join("\n");
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", "Accommodation_Transport_Report.csv");
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5"
+                >
+                  <FileText className="h-4 w-4 text-indigo-500" /> Export CSV
+                </button>
+              </div>
+            </div>
+
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100/70 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800">
+                      <th className="px-6 py-3.5">Employee Name & Role</th>
+                      <th className="px-6 py-3.5">Company Housing</th>
+                      <th className="px-6 py-3.5">Camp Residence & Room</th>
+                      <th className="px-6 py-3.5">Company Transport</th>
+                      <th className="px-6 py-3.5">Route & Pickup Point</th>
+                      <th className="px-6 py-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {employees.map(emp => {
+                      return (
+                        <tr key={emp.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-extrabold flex items-center justify-center text-xs shrink-0">
+                                {emp.firstName[0]}{emp.lastName[0]}
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-900 dark:text-white text-sm">{emp.firstName} {emp.lastName}</p>
+                                <p className="text-slate-400 text-[11px]">{emp.position} • {emp.department}</p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-6 py-4">
+                            {emp.hasAccommodation ? (
+                              <Badge variant="default" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 gap-1">
+                                <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Provided
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400 text-xs italic">Self-Housing</span>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-4">
+                            {emp.hasAccommodation ? (
+                              <div>
+                                <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                                  <Home className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                                  {emp.accommodationDetails?.campName || 'Central Site Camp'}
+                                </p>
+                                <p className="text-slate-400 text-[11px]">
+                                  Room / Unit: <strong>{emp.accommodationDetails?.roomNumber || 'Room 12B'}</strong>
+                                  {emp.accommodationDetails?.subsidyAmount ? ` (R${emp.accommodationDetails.subsidyAmount}/mo)` : ''}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 text-xs">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-4">
+                            {emp.hasTransport ? (
+                              <Badge variant="default" className="bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300 gap-1">
+                                <Bus className="h-3 w-3 text-teal-600" /> Company Shuttle
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400 text-xs italic">Own Transport</span>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-4">
+                            {emp.hasTransport ? (
+                              <div>
+                                <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                                  <Navigation className="h-3.5 w-3.5 text-teal-500 shrink-0" />
+                                  {emp.transportDetails?.route || 'Route 3 - Main Site Express'}
+                                </p>
+                                <p className="text-slate-400 text-[11px] flex items-center gap-1">
+                                  <MapPin className="h-3 w-3 text-amber-500 shrink-0" />
+                                  Pickup: {emp.transportDetails?.pickupPoint || 'Central Gate 1'}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 text-xs">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => setEditingEmployee(emp)}
+                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" /> Edit Logistics
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* TAB 5: LOG HOURS */}
+      {activeTab === 'hours' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-slate-900 dark:text-white">Logged Labor Hours</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Manage and track logged hours for site personnel</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const csvContent = ["ID,Date,Employee Name,Project,Task,Start Time,End Time,Lunch Break (hrs),Hours Worked,Notes"]
+                    .concat(labourLogs.map(log => {
+                      const empName = log.workerName || (log.notes ? log.notes.split(':')[0] : log.trade) || '';
+                      const projName = projects.find(p => p.id === log.projectId)?.name || log.projectId;
+                      const taskName = activities.find(a => a.id === log?.activityId)?.name || log?.activityId || 'General Labor / Maintenance';
+                      const notes = (log.notes || '').replace(/"/g, '""');
+                      return `"${log.id}","${log.date}","${empName}","${projName}","${taskName}","${log.startTime || ''}","${log.endTime || ''}","${log.lunchBreak || 0}","${log.hoursWorked || log.hours}","${notes}"`;
+                    }))
+                    .join("\n");
+                  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  link.setAttribute("href", url);
+                  link.setAttribute("download", "Logged_Labor_Hours.csv");
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl transition-colors text-xs font-bold shadow-sm"
+              >
+                <Download className="h-4 w-4" /> Export CSV
+              </button>
+              <button
+                onClick={() => setIsDailySummaryModalOpen(true)}
+                className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 dark:text-indigo-300 px-4 py-2 rounded-xl transition-colors text-xs font-bold shadow-sm"
+              >
+                <FileText className="h-4 w-4" /> Daily Summary
+              </button>
+              <button
+                onClick={() => setIsLoggingHoursModal(true)}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl transition-colors text-xs font-bold shadow-sm"
+              >
+                <Clock className="h-4 w-4" /> Log New Hours
+              </button>
+            </div>
+          </div>
+
+          {/* Role Permission Status Banner */}
+          <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs font-medium shadow-sm ${
+            canEditLabour 
+              ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-800/60 dark:text-emerald-200' 
+              : 'bg-amber-50/80 border-amber-200/80 text-amber-900 dark:bg-amber-950/40 dark:border-amber-800/60 dark:text-amber-200'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              {canEditLabour ? (
+                <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                  <ShieldCheck className="h-4 w-4 shrink-0" />
+                </div>
+              ) : (
+                <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
+                  <Lock className="h-4 w-4 shrink-0" />
+                </div>
+              )}
+              <div>
+                <span className="font-bold text-slate-900 dark:text-white">Active Role Permission ({currentUserProfile?.role || 'Guest'}):</span>{' '}
+                {canEditLabour 
+                  ? 'Full permission granted. You can log, edit, and delete hours records.' 
+                  : 'Read-only access. Only Administrators and permitted roles can edit or delete entries.'}
+              </div>
+            </div>
+            <div className="shrink-0 flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold ${
+                canEditLabour
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-amber-500 text-white shadow-sm'
+              }`}>
+                {canEditLabour ? (
+                  <><CheckCircle2 className="h-3.5 w-3.5" /> Edit & Delete Enabled</>
+                ) : (
+                  <><Lock className="h-3.5 w-3.5" /> Read-Only Mode</>
+                )}
+              </span>
+            </div>
+          </div>
+
+          <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-slate-100/50 dark:bg-slate-800/50 text-slate-500 uppercase tracking-wider text-xs font-semibold border-b border-slate-200 dark:border-slate-700">
+                    <tr>
+                      <th className="px-6 py-4">Date</th>
+                      <th className="px-6 py-4">Employee</th>
+                      <th className="px-6 py-4">Task / Project</th>
+                      <th className="px-6 py-4">Time Logged</th>
+                      <th className="px-6 py-4">Notes</th>
+                      <th className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span>Actions</span>
+                          {canEditLabour ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                              <ShieldCheck className="h-3 w-3" /> Editable
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                              <Lock className="h-3 w-3" /> Locked
+                            </span>
+                          )}
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-900">
+                    {labourLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-slate-500 text-sm">
+                          No logged hours found. Click "Log New Hours" to add one.
+                        </td>
+                      </tr>
+                    ) : (
+                      labourLogs.map(log => {
+                        const employeeName = log.notes ? log.notes.split(':')[0] : log.trade;
+                        const project = projects.find(p => p.id === log.projectId);
+                        return (
+                          <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                            <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300">
+                              {log.date}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-bold text-slate-900 dark:text-white">
+                              {employeeName}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-400">
+                              {project ? project.name : log.projectId}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                              <div className="flex flex-col">
+                                <span>{log.hoursWorked || log.hours} hrs</span>
+                                {log.startTime && log.endTime && (
+                                  <span className="text-[10px] font-normal text-slate-500">
+                                    {log.startTime} - {log.endTime}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-500 max-w-[200px] truncate">
+                              {log.notes ? log.notes.split(':').slice(1).join(':') : ''}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {canEditLabour ? (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        const empName = log.workerName || (log.notes ? log.notes.split(':')[0] : log.trade) || '';
+                                        const noteText = log.notes ? log.notes.split(':').slice(1).join(':') : '';
+                                        setEditingLabourLog(log);
+                                        setEditingHoursForm({
+                                          date: log.date,
+                                          workerName: empName,
+                                          trade: log.trade || log.workerType || 'General Laborer',
+                                          projectId: log.projectId,
+                                          activityId: log?.activityId || '',
+                                          startTime: log.startTime || '08:00',
+                                          endTime: log.endTime || '17:00',
+                                          hoursWorked: Number(log.hoursWorked || log.hours || 8),
+                                          notes: noteText
+                                        });
+                                      }}
+                                      className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                                      title="Edit Logged Hours"
+                                    >
+                                      <Edit3 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Edit</span>
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        if (window.confirm(`Are you sure you want to delete this hours log for ${employeeName}?`)) {
+                                          deleteLabourLog(log.id);
+                                        }
+                                      }}
+                                      className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                                      title="Delete Hours Log"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Delete</span>
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2.5 py-1 rounded-lg" title={`Role '${currentUserProfile?.role || 'Worker'}' lacks edit/delete permissions for labour logs`}>
+                                    <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Restricted ({currentUserProfile?.role || 'Worker'})
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Daily Labor Summary Modal */}
+      <DailyLaborSummaryModal 
+        isOpen={isDailySummaryModalOpen}
+        onClose={() => setIsDailySummaryModalOpen(false)}
+      />
+
+      {/* Edit Logged Hours Modal */}
+      {editingLabourLog && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg shadow-2xl border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 overflow-hidden">
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-[#0B5FFF]" /> Edit Logged Hours
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Log ID: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{editingLabourLog.id}</span>
+                </p>
+              </div>
+              <button onClick={() => setEditingLabourLog(null)} className="text-slate-400 hover:text-slate-600 rounded-full p-1">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!canEditLabour) {
+                alert('Permission Denied: Only Administrators and permitted personnel can edit logged hours.');
+                return;
+              }
+
+              let calculatedHours = Number(editingHoursForm.hoursWorked);
+              if (editingHoursForm.startTime && editingHoursForm.endTime) {
+                const [sh, sm] = editingHoursForm.startTime.split(':').map(Number);
+                const [eh, em] = editingHoursForm.endTime.split(':').map(Number);
+                let diff = (eh + em / 60) - (sh + sm / 60);
+                if (diff < 0) diff += 24;
+                calculatedHours = Math.round(diff * 10) / 10;
+              }
+
+              const updated: LabourLog = {
+                ...editingLabourLog,
+                date: editingHoursForm.date,
+                workerName: editingHoursForm.workerName,
+                workerType: editingHoursForm.trade,
+                trade: editingHoursForm.trade,
+                projectId: editingHoursForm.projectId,
+                activityId: editingHoursForm?.activityId,
+                startTime: editingHoursForm.startTime,
+                endTime: editingHoursForm.endTime,
+                hoursWorked: calculatedHours,
+                hours: calculatedHours,
+                notes: editingHoursForm.workerName 
+                  ? `${editingHoursForm.workerName}:${editingHoursForm.notes}`
+                  : editingHoursForm.notes
+              };
+
+              updateLabourLog(updated);
+              setEditingLabourLog(null);
+            }} className="p-6 space-y-4">
+              
+              {!canEditLabour && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600" />
+                  <span>Notice: Only Admin or permitted users can submit edits to logged hours.</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={editingHoursForm.date}
+                    onChange={e => setEditingHoursForm({ ...editingHoursForm, date: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Employee / Worker Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Thobile Msibi"
+                    value={editingHoursForm.workerName}
+                    onChange={e => setEditingHoursForm({ ...editingHoursForm, workerName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Trade / Role *</label>
+                  <select
+                    required
+                    value={editingHoursForm.trade}
+                    onChange={e => setEditingHoursForm({ ...editingHoursForm, trade: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900 font-medium"
+                  >
+                    {['General Laborer', 'Carpenter', 'Electrician', 'Plumber', 'Mason', 'Foreman', 'Engineer', 'Site Supervisor', 'Operator'].map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Project *</label>
+                  <select
+                    required
+                    value={editingHoursForm.projectId}
+                    onChange={e => setEditingHoursForm({ ...editingHoursForm, projectId: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900 font-medium"
+                  >
+                    <option value="">Select Project</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.id})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Task / Activity</label>
+                  <select
+                    value={editingHoursForm?.activityId}
+                    onChange={e => setEditingHoursForm({ ...editingHoursForm, activityId: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900 font-medium"
+                  >
+                    <option value="">Select Task / Activity (Optional)</option>
+                    {activities
+                      .filter(a => !editingHoursForm.projectId || a.projectId === editingHoursForm.projectId)
+                      .map(a => (
+                        <option key={a.id} value={a.id}>{a.name} ({a.id})</option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Start Time</label>
+                  <input
+                    type="time"
+                    value={editingHoursForm.startTime}
+                    onChange={e => {
+                      const newStart = e.target.value;
+                      let hrs = editingHoursForm.hoursWorked;
+                      if (newStart && editingHoursForm.endTime) {
+                        const [sh, sm] = newStart.split(':').map(Number);
+                        const [eh, em] = editingHoursForm.endTime.split(':').map(Number);
+                        let diff = (eh + em / 60) - (sh + sm / 60);
+                        if (diff < 0) diff += 24;
+                        hrs = Math.round(diff * 10) / 10;
+                      }
+                      setEditingHoursForm({ ...editingHoursForm, startTime: newStart, hoursWorked: hrs });
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">End Time</label>
+                  <input
+                    type="time"
+                    value={editingHoursForm.endTime}
+                    onChange={e => {
+                      const newEnd = e.target.value;
+                      let hrs = editingHoursForm.hoursWorked;
+                      if (editingHoursForm.startTime && newEnd) {
+                        const [sh, sm] = editingHoursForm.startTime.split(':').map(Number);
+                        const [eh, em] = newEnd.split(':').map(Number);
+                        let diff = (eh + em / 60) - (sh + sm / 60);
+                        if (diff < 0) diff += 24;
+                        hrs = Math.round(diff * 10) / 10;
+                      }
+                      setEditingHoursForm({ ...editingHoursForm, endTime: newEnd, hoursWorked: hrs });
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900 font-medium"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Hours Logged *</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    max="24"
+                    required
+                    value={editingHoursForm.hoursWorked}
+                    onChange={e => setEditingHoursForm({ ...editingHoursForm, hoursWorked: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900 font-bold text-emerald-600 dark:text-emerald-400"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Shift Notes / Remarks</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Normal Shift, Overtime on rebar framing..."
+                    value={editingHoursForm.notes}
+                    onChange={e => setEditingHoursForm({ ...editingHoursForm, notes: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center pt-4 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete this hours log for ${editingHoursForm.workerName || 'this employee'}?`)) {
+                      deleteLabourLog(editingLabourLog.id);
+                      setEditingLabourLog(null);
+                    }
+                  }}
+                  disabled={!canEditLabour}
+                  className={`px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold transition-colors inline-flex items-center gap-1.5 ${
+                    !canEditLabour ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                  title="Delete Logged Hours"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete Log
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingLabourLog(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!canEditLabour}
+                    className={`px-4 py-2 rounded-xl text-white text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5 ${
+                      canEditLabour ? 'bg-[#0B5FFF] hover:bg-blue-700' : 'bg-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <CheckCircle2 className="h-4 w-4" /> Save Changes
+                  </button>
+                </div>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
       {editingLeaveAllowanceEmp && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md shadow-2xl border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
@@ -1613,6 +2569,25 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                   </select>
                 </div>
                 <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Task / Activity *</label>
+                  <select
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900"
+                    value={hoursForm?.activityId}
+                    onChange={e => setHoursForm({ ...hoursForm, activityId: e.target.value })}
+                  >
+                    {activities.filter(a => a.projectId === hoursForm.projectId).map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                    {activities.filter(a => a.projectId === hoursForm.projectId).length === 0 && (
+                      <option value="ACT-DEFAULT">General Labor / Maintenance</option>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Date *</label>
                   <input
                     type="date"
@@ -1622,18 +2597,52 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                     onChange={e => setHoursForm({ ...hoursForm, date: e.target.value })}
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Start Time *</label>
+                  <input
+                    type="time"
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900"
+                    value={hoursForm.startTime}
+                    onChange={e => setHoursForm({ ...hoursForm, startTime: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">End Time *</label>
+                  <input
+                    type="time"
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900"
+                    value={hoursForm.endTime}
+                    onChange={e => setHoursForm({ ...hoursForm, endTime: e.target.value })}
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Hours Worked *</label>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Lunch Break</label>
+                  <select
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900"
+                    value={hoursForm.lunchBreak}
+                    onChange={e => setHoursForm({ ...hoursForm, lunchBreak: parseFloat(e.target.value) })}
+                  >
+                    <option value="0">No Lunch</option>
+                    <option value="0.5">30 Minutes</option>
+                    <option value="1">1 Hour</option>
+                    <option value="1.5">1.5 Hours</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Hours Worked</label>
                   <input
                     type="number"
                     step="0.5"
                     min="0.5"
                     max="24"
                     required
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900 font-bold"
+                    readOnly
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-slate-50 dark:bg-slate-800 font-bold text-slate-500"
                     value={hoursForm.hoursWorked}
                     onChange={e => setHoursForm({ ...hoursForm, hoursWorked: parseFloat(e.target.value) || 0 })}
                   />
@@ -1923,17 +2932,17 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
 
       {/* EDIT EMPLOYEE MODAL */}
       {editingEmployee && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg shadow-2xl border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
-            <div className="bg-slate-50 dark:bg-slate-900/50 p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <Card className="w-full max-w-xl bg-white dark:bg-slate-900 shadow-2xl border-slate-200 dark:border-slate-800 rounded-2xl animate-in fade-in zoom-in-95 my-auto max-h-[92vh] flex flex-col">
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center shrink-0">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Edit3 className="h-5 w-5 text-[#0B5FFF]" /> Edit Employee Profile
               </h3>
-              <button onClick={() => setEditingEmployee(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setEditingEmployee(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleEditEmployeeSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleEditEmployeeSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">First Name *</label>
@@ -2071,6 +3080,146 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                   onChange={e => setEditingEmployee({ ...editingEmployee, notes: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
                 />
+              </div>
+
+              {/* Company Accommodation Logistics */}
+              <div className="p-4 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Home className="h-4 w-4 text-indigo-600" />
+                    <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 uppercase tracking-wider">Company Accommodation</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={editingEmployee.hasAccommodation || false}
+                      onChange={e => setEditingEmployee({ ...editingEmployee, hasAccommodation: e.target.checked })}
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+                    <span className="ml-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                      {editingEmployee.hasAccommodation ? 'Provided' : 'Not Provided'}
+                    </span>
+                  </label>
+                </div>
+
+                {editingEmployee.hasAccommodation && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-indigo-100/80 dark:border-indigo-900/30 animate-in fade-in">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Camp / Residence</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Central Camp A"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={editingEmployee.accommodationDetails?.campName || ''}
+                        onChange={e => setEditingEmployee({
+                          ...editingEmployee,
+                          accommodationDetails: {
+                            campName: e.target.value,
+                            roomNumber: editingEmployee.accommodationDetails?.roomNumber || '',
+                            subsidyAmount: editingEmployee.accommodationDetails?.subsidyAmount || 0,
+                            notes: editingEmployee.accommodationDetails?.notes || ''
+                          }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Room / Unit #</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Room 12B"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={editingEmployee.accommodationDetails?.roomNumber || ''}
+                        onChange={e => setEditingEmployee({
+                          ...editingEmployee,
+                          accommodationDetails: {
+                            campName: editingEmployee.accommodationDetails?.campName || '',
+                            roomNumber: e.target.value,
+                            subsidyAmount: editingEmployee.accommodationDetails?.subsidyAmount || 0,
+                            notes: editingEmployee.accommodationDetails?.notes || ''
+                          }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Subsidy (R)</label>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={editingEmployee.accommodationDetails?.subsidyAmount || ''}
+                        onChange={e => setEditingEmployee({
+                          ...editingEmployee,
+                          accommodationDetails: {
+                            campName: editingEmployee.accommodationDetails?.campName || '',
+                            roomNumber: editingEmployee.accommodationDetails?.roomNumber || '',
+                            subsidyAmount: parseFloat(e.target.value) || 0,
+                            notes: editingEmployee.accommodationDetails?.notes || ''
+                          }
+                        })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Company Transport Logistics */}
+              <div className="p-4 bg-teal-50/50 dark:bg-teal-950/20 rounded-xl border border-teal-100 dark:border-teal-900/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bus className="h-4 w-4 text-teal-600" />
+                    <span className="text-xs font-bold text-teal-950 dark:text-teal-200 uppercase tracking-wider">Company Transport</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={editingEmployee.hasTransport || false}
+                      onChange={e => setEditingEmployee({ ...editingEmployee, hasTransport: e.target.checked })}
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-teal-600"></div>
+                    <span className="ml-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                      {editingEmployee.hasTransport ? 'Provided' : 'Not Provided'}
+                    </span>
+                  </label>
+                </div>
+
+                {editingEmployee.hasTransport && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-teal-100/80 dark:border-teal-900/30 animate-in fade-in">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Route / Shuttle</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Route 3 Express"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={editingEmployee.transportDetails?.route || ''}
+                        onChange={e => setEditingEmployee({
+                          ...editingEmployee,
+                          transportDetails: {
+                            route: e.target.value,
+                            pickupPoint: editingEmployee.transportDetails?.pickupPoint || ''
+                          }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Pickup Point</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Main Gate 1"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={editingEmployee.transportDetails?.pickupPoint || ''}
+                        onChange={e => setEditingEmployee({
+                          ...editingEmployee,
+                          transportDetails: {
+                            route: editingEmployee.transportDetails?.route || '',
+                            pickupPoint: e.target.value
+                          }
+                        })}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
                 <button type="button" onClick={() => setEditingEmployee(null)} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>

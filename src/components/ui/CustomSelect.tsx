@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Plus, Check, X } from 'lucide-react';
 
+export type SelectOption = string | { value: string; label: string };
+
 interface CustomSelectProps {
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: SelectOption[];
   placeholder?: string;
   className?: string;
   required?: boolean;
@@ -26,12 +28,16 @@ export function CustomSelect({
   const [customValue, setCustomValue] = useState('');
   const [extraOptions, setExtraOptions] = useState<string[]>([]);
 
+  const normalizedOptions: { value: string; label: string }[] = options.map(opt =>
+    typeof opt === 'string' ? { value: opt, label: opt } : opt
+  );
+
   // Combine default options, extra custom options added by user, and current value if custom
-  const allOptions = Array.from(new Set([
-    ...options,
-    ...extraOptions,
-    ...(value && !options.includes(value) ? [value] : [])
-  ]));
+  const allOptions = [
+    ...normalizedOptions,
+    ...extraOptions.map(e => ({ value: e, label: e })),
+    ...(value && !normalizedOptions.some(o => o.value === value) && !extraOptions.includes(value) ? [{ value, label: value }] : [])
+  ];
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = e.target.value;
@@ -48,7 +54,7 @@ export function CustomSelect({
     if (e) e.preventDefault();
     const trimmed = customValue.trim();
     if (trimmed) {
-      if (!allOptions.includes(trimmed)) {
+      if (!allOptions.some(o => o.value === trimmed)) {
         setExtraOptions(prev => [...prev, trimmed]);
       }
       onChange(trimmed);
@@ -107,8 +113,8 @@ export function CustomSelect({
     >
       {placeholder && <option value="">{placeholder}</option>}
       {allOptions.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt}
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
         </option>
       ))}
       {allowCustom && (

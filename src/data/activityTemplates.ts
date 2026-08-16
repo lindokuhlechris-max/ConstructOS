@@ -17,7 +17,7 @@ export const WORKFLOW_TEMPLATES: ActivityTemplate[] = [
     category: 'Site Establishment',
     description: 'Complete setup of site perimeter, security, office trailers, and temporary utility connections.',
     subtasks: [
-      { title: 'Site Survey & Boundary Marking', category: 'Site Establishment', status: 'Not Started', notes: 'Verify boundary pegs and pegs alignment' },
+      { title: 'Site Survey & Boundary Marking', category: 'Site Establishment', status: 'Not Started', isMilestone: true, milestoneCriteria: 'Boundary pegs verified and signed off by land surveyor', notes: 'Verify boundary pegs and pegs alignment' },
       { title: 'Erect Security Fencing & Signage', category: 'Site Establishment', status: 'Not Started', targetQuantity: 150, unit: 'm' },
       { title: 'Position Site Office & Welfare Trailers', category: 'Site Establishment', status: 'Not Started' },
       { title: 'Connect Temporary Power & Water Supply', category: 'Site Establishment', status: 'Not Started' },
@@ -33,7 +33,7 @@ export const WORKFLOW_TEMPLATES: ActivityTemplate[] = [
     subtasks: [
       { title: 'Topsoil Stripping & Vegetation Clearing', category: 'Excavation & Earthworks', status: 'Not Started', targetQuantity: 500, unit: 'm²' },
       { title: 'Trench Excavation to Grade', category: 'Excavation & Earthworks', status: 'Not Started', targetQuantity: 120, unit: 'm³' },
-      { title: 'Trench Shoring & Safety Inspection', category: 'Excavation & Earthworks', status: 'Not Started' },
+      { title: 'Trench Shoring & Safety Inspection', category: 'Excavation & Earthworks', status: 'Not Started', isMilestone: true, milestoneCriteria: 'Geotechnical & safety engineer sign-off before trench entry' },
       { title: 'Sand Bedding & Base Preparation', category: 'Excavation & Earthworks', status: 'Not Started', targetQuantity: 50, unit: 'm³' },
       { title: 'Backfilling & Layer Compaction', category: 'Excavation & Earthworks', status: 'Not Started', targetQuantity: 120, unit: 'm³' }
     ]
@@ -49,7 +49,7 @@ export const WORKFLOW_TEMPLATES: ActivityTemplate[] = [
       { title: 'Mandrel & Duct Probing Inspection', category: 'Cable & Underground Installation', status: 'Not Started' },
       { title: 'Main MV/LV Cable Pulling', category: 'Cable & Underground Installation', status: 'Not Started', targetQuantity: 250, unit: 'm' },
       { title: 'Cable Splicing & Box Terminations', category: 'Cable & Underground Installation', status: 'Not Started', targetQuantity: 4, unit: 'units' },
-      { title: 'Insulation Resistance & Continuity Test', category: 'Quality & Inspection', status: 'Not Started' }
+      { title: 'Insulation Resistance & Continuity Test', category: 'Quality & Inspection', status: 'Not Started', isMilestone: true, milestoneCriteria: 'Insulation resistance test certificate and QA verification' }
     ]
   },
   {
@@ -62,7 +62,7 @@ export const WORKFLOW_TEMPLATES: ActivityTemplate[] = [
       { title: 'Blinding Concrete Pour (Mass Con)', category: 'Structure & Foundations', status: 'Not Started', targetQuantity: 25, unit: 'm³' },
       { title: 'Steel Reinforcement Rebar Cage Fixing', category: 'Structure & Foundations', status: 'Not Started', targetQuantity: 4.5, unit: 'Tons' },
       { title: 'Shuttering Formwork Assembly & Oiling', category: 'Structure & Foundations', status: 'Not Started', targetQuantity: 80, unit: 'm²' },
-      { title: 'Structural Concrete Pour & Vibration', category: 'Structure & Foundations', status: 'Not Started', targetQuantity: 65, unit: 'm³' },
+      { title: 'Structural Concrete Pour & Vibration', category: 'Structure & Foundations', status: 'Not Started', targetQuantity: 65, unit: 'm³', isMilestone: true, milestoneCriteria: 'Slump test recorded and 28-day cube samples taken' },
       { title: 'Formwork Stripping & Curing Blanket Setup', category: 'Structure & Foundations', status: 'Not Started' }
     ]
   },
@@ -76,7 +76,7 @@ export const WORKFLOW_TEMPLATES: ActivityTemplate[] = [
       { title: 'Sub-base Trimming & Moisture Compaction', category: 'Paving & Surfacing', status: 'Not Started', targetQuantity: 300, unit: 'm²' },
       { title: 'G1 Crushed Stone Base Layer Placement', category: 'Paving & Surfacing', status: 'Not Started', targetQuantity: 150, unit: 'm³' },
       { title: 'Bitumen Emulsion Prime Coat Spraying', category: 'Paving & Surfacing', status: 'Not Started', targetQuantity: 300, unit: 'm²' },
-      { title: 'Asphalt Hot Mix Laydown & Rolling', category: 'Paving & Surfacing', status: 'Not Started', targetQuantity: 40, unit: 'Tons' },
+      { title: 'Asphalt Hot Mix Laydown & Rolling', category: 'Paving & Surfacing', status: 'Not Started', targetQuantity: 40, unit: 'Tons', isMilestone: true, milestoneCriteria: 'Density and compaction test > 98% Mod AASHTO verified' },
       { title: 'Kerb Laying & Channel Drainage', category: 'Paving & Surfacing', status: 'Not Started', targetQuantity: 100, unit: 'm' }
     ]
   }

@@ -24,17 +24,20 @@ import {
   ShieldCheck,
   Building2,
   Trash2,
-  Edit3
+  Edit3,
+  Camera
 } from 'lucide-react';
 import { 
   SafetyIncident, 
   SafetyRequirement, 
   SafetyPolicy, 
   ActivitySafetyInspection, 
-  PPEMaterialItem 
+  PPEMaterialItem,
+  canManage 
 } from '../types';
 import { SafetyDetail } from '../components/SafetyDetail';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
+import { SafetyInspectionGallery } from '../components/SafetyInspectionGallery';
 
 export function Safety() {
   const { 
@@ -61,7 +64,7 @@ export function Safety() {
     userRole 
   } = useAppContext();
 
-  const [activeTab, setActiveTab] = useState<'incidents' | 'requirements' | 'policies' | 'inspections' | 'ppe'>('incidents');
+  const [activeTab, setActiveTab] = useState<'incidents' | 'gallery' | 'requirements' | 'policies' | 'inspections' | 'ppe'>('incidents');
   const [selectedIncident, setSelectedIncident] = useState<SafetyIncident | null>(null);
   const [isReportingIncident, setIsReportingIncident] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -209,11 +212,11 @@ export function Safety() {
 
   const handleCreateInspection = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inspectionForm.title || !inspectionForm.activityId) return;
+    if (!inspectionForm.title || !inspectionForm?.activityId) return;
     addActivityInspection({
       id: `INSP-${Math.floor(100 + Math.random() * 900)}`,
       projectId: inspectionForm.projectId || projects[0]?.id || '',
-      activityId: inspectionForm.activityId,
+      activityId: inspectionForm?.activityId,
       title: inspectionForm.title,
       inspectorName: inspectionForm.inspectorName || 'Current User',
       scheduledDate: inspectionForm.scheduledDate || new Date().toISOString().split('T')[0],
@@ -286,6 +289,17 @@ export function Safety() {
           >
             <AlertTriangle className="h-4 w-4" /> Incidents & Hazards
           </button>
+
+          <button
+            onClick={() => setActiveTab('gallery')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === 'gallery' 
+                ? 'bg-white dark:bg-slate-900 text-[#0B5FFF] shadow-sm' 
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <Camera className="h-4 w-4" /> Inspection Gallery
+          </button>
           
           <button
             onClick={() => setActiveTab('requirements')}
@@ -332,6 +346,11 @@ export function Safety() {
           </button>
         </div>
       </div>
+
+      {/* TAB 0: GALLERY VIEW */}
+      {activeTab === 'gallery' && (
+        <SafetyInspectionGallery />
+      )}
 
       {/* TAB 1: INCIDENTS & HAZARDS */}
       {activeTab === 'incidents' && (
@@ -487,7 +506,7 @@ export function Safety() {
                       <Eye className="h-3.5 w-3.5" /> View Incident Details
                     </span>
 
-                    {userRole === 'Manager' && incident.status !== 'Resolved' && (
+                    {canManage(userRole) && incident.status !== 'Resolved' && (
                       <Button 
                         size="sm" 
                         variant="outline"
@@ -515,7 +534,7 @@ export function Safety() {
               </h2>
               <p className="text-xs text-slate-500">Mandatory high-risk compliance certificates and environmental controls per project.</p>
             </div>
-            {userRole === 'Manager' && (
+            {canManage(userRole) && (
               <Button onClick={() => setIsAddingReq(true)} className="gap-2 bg-[#0B5FFF] text-white rounded-xl">
                 <Plus className="h-4 w-4" /> Add Safety Requirement
               </Button>
@@ -552,7 +571,7 @@ export function Safety() {
 
                     <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs text-slate-500">
                       <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5 text-slate-400" /> {project?.name || req.projectId}</span>
-                      {userRole === 'Manager' && (
+                      {canManage(userRole) && (
                         <button onClick={() => setDeletingItem({ type: 'requirement', id: req.id, name: req.title })} className="text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1">
                           <Trash2 className="h-3.5 w-3.5" /> Remove
                         </button>
@@ -663,7 +682,7 @@ export function Safety() {
               </h2>
               <p className="text-xs text-slate-500">Official workplace health, safety, zero harm, and emergency response directives.</p>
             </div>
-            {userRole === 'Manager' && (
+            {canManage(userRole) && (
               <Button onClick={() => setIsAddingPolicy(true)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl">
                 <Plus className="h-4 w-4" /> Add Safety Policy
               </Button>
@@ -688,7 +707,7 @@ export function Safety() {
 
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs text-slate-500 mt-auto">
                     <span>Effective: {policy.effectiveDate}</span>
-                    {userRole === 'Manager' && (
+                    {canManage(userRole) && (
                       <button onClick={() => setDeletingItem({ type: 'policy', id: policy.id, name: policy.title })} className="text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1">
                         <Trash2 className="h-3.5 w-3.5" /> Remove
                       </button>
@@ -794,7 +813,7 @@ export function Safety() {
               </h2>
               <p className="text-xs text-slate-500">Link safety pre-checks and compliance audits directly to construction activities.</p>
             </div>
-            {userRole === 'Manager' && (
+            {canManage(userRole) && (
               <Button onClick={() => setIsAssigningInspection(true)} className="gap-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl">
                 <Plus className="h-4 w-4" /> Assign Activity Inspection
               </Button>
@@ -803,7 +822,7 @@ export function Safety() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
             {activityInspections.map(insp => {
-              const activity = activities.find(a => a.id === insp.activityId);
+              const activity = activities.find(a => a.id === insp?.activityId);
 
               return (
                 <Card key={insp.id} className="border-slate-200 dark:border-slate-800 flex flex-col justify-between">
@@ -822,7 +841,7 @@ export function Safety() {
                   <CardContent className="p-5 flex flex-col gap-4 flex-1">
                     <div className="bg-purple-50/50 dark:bg-purple-950/20 p-3 rounded-xl border border-purple-100 dark:border-purple-900/30 text-xs">
                       <span className="font-bold text-purple-700 dark:text-purple-300 block mb-0.5">Linked Construction Activity:</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{activity?.name || insp.activityId}</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">{activity?.name || insp?.activityId}</span>
                     </div>
 
                     <div className="space-y-2">
@@ -845,8 +864,8 @@ export function Safety() {
 
                     <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs text-slate-500 mt-auto">
                       <span>Inspector: {insp.inspectorName} ({insp.scheduledDate})</span>
-                      {userRole === 'Manager' && (
-                        <button onClick={() => setDeletingItem({ type: 'inspection', id: insp.id, name: `${insp.activityName || insp.activityId} Inspection` })} className="text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1">
+                      {canManage(userRole) && (
+                        <button onClick={() => setDeletingItem({ type: 'inspection', id: insp.id, name: `${insp.id || insp?.activityId} Inspection` })} className="text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1">
                           <Trash2 className="h-3.5 w-3.5" /> Delete
                         </button>
                       )}
@@ -886,7 +905,7 @@ export function Safety() {
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Link to Construction Activity *</label>
                     <select
-                      value={inspectionForm.activityId}
+                      value={inspectionForm?.activityId}
                       onChange={e => setInspectionForm({ ...inspectionForm, activityId: e.target.value })}
                       className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                     >
@@ -938,7 +957,7 @@ export function Safety() {
               </h2>
               <p className="text-xs text-slate-500">Track Personal Protective Equipment stock and mandatory trade compliance matrix.</p>
             </div>
-            {userRole === 'Manager' && (
+            {canManage(userRole) && (
               <Button onClick={() => setIsAddingPPE(true)} className="gap-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl">
                 <Plus className="h-4 w-4" /> Add PPE Item
               </Button>
@@ -976,7 +995,7 @@ export function Safety() {
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 mt-4 flex justify-between items-center text-xs">
-                  {userRole === 'Manager' && (
+                  {canManage(userRole) && (
                     <button onClick={() => setDeletingItem({ type: 'ppe', id: item.id, name: item.name })} className="text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1">
                       <Trash2 className="h-3.5 w-3.5" /> Remove
                     </button>

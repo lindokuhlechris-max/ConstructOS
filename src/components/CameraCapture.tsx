@@ -5,9 +5,10 @@ import { Button } from './ui';
 interface CameraCaptureProps {
   onCapture: (dataUrl: string) => void;
   onCancel: () => void;
+  activityTag?: string;
 }
 
-export function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
+export function CameraCapture({ onCapture, onCancel, activityTag }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -15,9 +16,36 @@ export function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
   const [error, setError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
+  const addTimestampOverlay = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const timeStampLine = `SITE PHOTO • ${dateStr} ${timeStr}`;
+    const subLine = activityTag ? `ACTIVITY: ${activityTag}` : `CONSTRUCTOS FIELD REPORT`;
+
+    const bannerHeight = Math.max(38, Math.round(height * 0.085));
+
+    // Semi-transparent dark overlay at bottom
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+    ctx.fillRect(0, height - bannerHeight, width, bannerHeight);
+
+    // Accent strip
+    ctx.fillStyle = '#0B5FFF';
+    ctx.fillRect(0, height - bannerHeight, 8, bannerHeight);
+
+    // Timestamp text
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold ${Math.max(12, Math.floor(bannerHeight * 0.36))}px sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.fillText(timeStampLine, 18, height - bannerHeight + 6);
+
+    ctx.fillStyle = '#CBD5E1';
+    ctx.font = `500 ${Math.max(10, Math.floor(bannerHeight * 0.28))}px sans-serif`;
+    ctx.fillText(subLine, 18, height - bannerHeight + 22);
+  };
+
   const startCamera = useCallback(async () => {
     try {
-      // Stop existing stream if any
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -43,7 +71,6 @@ export function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
   useEffect(() => {
     startCamera();
     return () => {
-      // Cleanup on unmount
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -59,9 +86,9 @@ export function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        addTimestampOverlay(ctx, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
         
-        // Stop stream before calling onCapture
         if (stream) {
           stream.getTracks().forEach(track => track.stop());
         }
@@ -77,10 +104,23 @@ export function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
       const reader = new FileReader();
       reader.onload = (event) => {
         if (event.target?.result) {
-          if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-          }
-          onCapture(event.target.result as string);
+          const img = new Image();
+          img.onload = () => {
+            const canvas = canvasRef.current || document.createElement('canvas');
+            canvas.width = img.width || 1280;
+            canvas.height = img.height || 960;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              addTimestampOverlay(ctx, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+              if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+              }
+              onCapture(dataUrl);
+            }
+          };
+          img.src = event.target.result as string;
         }
       };
       reader.readAsDataURL(file);

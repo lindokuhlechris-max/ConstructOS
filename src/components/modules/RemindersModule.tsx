@@ -1,8 +1,13 @@
-import React, { useState, useRef } from 'react';
-import { Bell, Plus, Calendar, AlertCircle, CheckCircle2, Clock, Trash2, X, Tag, User, Truck, ClipboardList, Paperclip, FileText, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Bell, Plus, Calendar, AlertCircle, CheckCircle2, Clock, Trash2, X, Tag, User, Truck, ClipboardList, Paperclip, FileText, Image as ImageIcon, Volume2, ShieldCheck, Zap } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../ui';
 import { Reminder } from '../../types';
+import { 
+  getNotificationPermission, 
+  requestNotificationPermission, 
+  triggerTestNotification 
+} from '../../lib/reminderNotificationService';
 
 export default function RemindersModule() {
   const { 
@@ -19,6 +24,10 @@ export default function RemindersModule() {
   const [isCreating, setIsCreating] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Service Worker Notification State
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(getNotificationPermission());
+  const [testSent, setTestSent] = useState(false);
   
   const [newReminder, setNewReminder] = useState<Partial<Reminder>>({
     title: '',
@@ -87,7 +96,7 @@ export default function RemindersModule() {
       linkedEquipmentId: newReminder.linkedEquipmentId || undefined,
       linkedActivityId: newReminder.linkedActivityId || undefined,
       attachments: newReminder.attachments || [],
-      createdBy: currentUserProfile.name,
+      createdBy: currentUserProfile?.name || 'Administrator',
       createdAt: new Date().toISOString(),
     };
     
@@ -233,7 +242,7 @@ export default function RemindersModule() {
                         <div className="flex flex-wrap gap-2 mb-3">
                           {linkedEmployee && (
                             <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-lg border border-purple-200 dark:border-purple-800">
-                              <User className="h-3 w-3" /> Person: {linkedEmployee.name}
+                              <User className="h-3 w-3" /> Person: {linkedEmployee.firstName} {linkedEmployee.lastName}
                             </span>
                           )}
                           {linkedEquip && (
@@ -428,7 +437,7 @@ export default function RemindersModule() {
                     >
                       <option value="">-- Unassigned --</option>
                       {employees.map(emp => (
-                        <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                        <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} ({emp.position})</option>
                       ))}
                     </select>
                   </div>

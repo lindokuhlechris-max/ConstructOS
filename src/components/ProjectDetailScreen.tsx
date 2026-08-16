@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from './ui';
-import { X, Building2, MapPin, Calendar, Users, FileText, CheckCircle2, ShieldAlert, Edit3, Save, Plus, Trash2, Download, BookOpen, Search, Tag } from 'lucide-react';
+import { X, Building2, MapPin, Calendar, Users, FileText, CheckCircle2, ShieldAlert, Edit3, Save, Plus, Trash2, Download, BookOpen, Search, Tag, Printer, FileSpreadsheet } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAppContext } from '../context/AppContext';
 import { Project } from '../types';
+import { exportFullProjectCSV } from '../lib/csvExport';
 
 export function ProjectDetailScreen({ project: initialProject, onClose }: { project: Project; onClose: () => void }) {
+  const { activities, reports, projects } = useAppContext();
   const [activeTab, setActiveTab] = useState<'details' | 'scope' | 'rules' | 'terminologies'>('details');
   const [isEditing, setIsEditing] = useState(false);
   const [project, setProject] = useState(initialProject);
@@ -151,17 +153,28 @@ export function ProjectDetailScreen({ project: initialProject, onClose }: { proj
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {isEditing ? (
             <Button onClick={handleSave} className="bg-[#0B5FFF] hover:bg-blue-700 text-white gap-2 rounded-xl">
               <Save className="h-4 w-4" /> Save Changes
             </Button>
           ) : (
             <>
-              <Button variant="outline" onClick={handleExportPDF} className="gap-2 rounded-xl border-slate-200 dark:border-slate-700">
-                <Download className="h-4 w-4" /> Export PDF
+              <Button 
+                variant="outline" 
+                onClick={() => exportFullProjectCSV(activities, reports, projects, project.id)} 
+                className="gap-2 rounded-xl border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300 font-semibold"
+                title="Export project activities and reports to CSV"
+              >
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Export CSV
               </Button>
-              <Button variant="outline" onClick={() => setIsEditing(true)} className="gap-2 rounded-xl border-slate-200 dark:border-slate-700">
+              <Button variant="outline" onClick={handleExportPDF} className="gap-2 rounded-xl border-slate-200 dark:border-slate-700 font-semibold">
+                <Download className="h-4 w-4 text-[#0B5FFF]" /> Export PDF
+              </Button>
+              <Button variant="outline" onClick={() => window.print()} className="gap-2 rounded-xl border-slate-200 dark:border-slate-700 font-semibold">
+                <Printer className="h-4 w-4 text-slate-600 dark:text-slate-300" /> Print
+              </Button>
+              <Button variant="outline" onClick={() => setIsEditing(true)} className="gap-2 rounded-xl border-slate-200 dark:border-slate-700 font-semibold">
                 <Edit3 className="h-4 w-4" /> Edit Project
               </Button>
             </>

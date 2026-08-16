@@ -8,6 +8,7 @@ import {
   Building, 
   Calendar, 
   ShieldCheck, 
+  Lock,
   Award, 
   Upload, 
   FileText, 
@@ -33,10 +34,13 @@ import {
   CheckSquare,
   CalendarDays,
   Check,
-  X as XIcon
+  X as XIcon,
+  Home,
+  Bus,
+  Navigation
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { Employee, EmployeeCertificate, Activity, EmployeeStatus, LeaveRecord, LeaveType, LeaveStatus } from '../types';
+import { Employee, EmployeeCertificate, Activity, EmployeeStatus, LeaveRecord, LeaveType, LeaveStatus, LabourLog, WorkerCheckIn, canUserEditSection } from '../types';
 
 export const getStatusBadgeStyle = (status: string) => {
   switch (status) {
@@ -65,7 +69,8 @@ interface EmployeeDetailProps {
 }
 
 export function EmployeeDetail({ employee, onSave, onClose, onDelete }: EmployeeDetailProps) {
-  const { activities, teams, workerCheckIns, labourLogs, projects, addLabourLog, addWorkerCheckIn, updateActivity } = useAppContext();
+  const { activities, teams, workerCheckIns, labourLogs, projects, addLabourLog, deleteLabourLog, addWorkerCheckIn, deleteWorkerCheckIn, updateActivity, currentUserProfile } = useAppContext();
+  const canEditLabour = canUserEditSection(currentUserProfile, 'labour');
 
   // Active Tab: 'overview' | 'certificates' | 'tasks' | 'attendance' | 'leave'
   const [activeTab, setActiveTab] = useState<'overview' | 'certificates' | 'tasks' | 'attendance' | 'leave'>('overview');
@@ -84,6 +89,15 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
     endDate: new Date().toISOString().split('T')[0],
     reason: '',
     status: 'Approved'
+  });
+
+  // Logistics Modal State
+  const [isEditingLogistics, setIsEditingLogistics] = useState(false);
+  const [logisticsData, setLogisticsData] = useState({
+    hasAccommodation: false,
+    accommodationDetails: { campName: '', roomNumber: '', subsidyAmount: 0, notes: '' },
+    hasTransport: false,
+    transportDetails: { route: '', pickupPoint: '' }
   });
 
   // Leave Allowance Edit Modal State
@@ -133,7 +147,7 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
   // Activities assigned to this employee or their teams
   const employeeActivities = activities.filter(a => 
     employee.assignedActivities?.includes(a.id) || 
-    employeeTeams.some(t => t.name.toLowerCase() === a.assignedTeam?.toLowerCase())
+    employeeTeams.some(t => t.name.toLowerCase() === (a.assignedTo || '').toLowerCase())
   );
 
   // Attendance & Check-in history
@@ -189,7 +203,7 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
         expiryDate: certForm.expiryDate,
         status: certForm.status as any || 'Valid',
         uploadDate: new Date().toISOString().split('T')[0],
-        fileUrl: certForm.fileUrl || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&auto=format&fit=crop&q=60'
+        fileUrl: certForm.fileUrl || ''
       };
       updatedCerts = [...(employee.certificates || []), newCert];
     }
@@ -224,27 +238,29 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
     if (!hoursForm.hoursWorked || hoursForm.hoursWorked <= 0) return;
 
     // Add Labour Log
-    const newLabourLog = {
+    const newLabourLog: LabourLog = {
       id: `LL-${Math.floor(1000 + Math.random() * 9000)}`,
-      projectId: hoursForm.projectId,
+      projectId: hoursForm.projectId || projects[0]?.id || 'PRJ-001',
+      activityId: selectedActivityId || '',
+      workerType: 'Employee',
+      workerName: `${employee.firstName} ${employee.lastName}`,
       date: hoursForm.date,
       trade: hoursForm.trade,
-      headcount: 1,
+      hours: Number(hoursForm.hoursWorked),
       hoursWorked: Number(hoursForm.hoursWorked),
-      totalHours: Number(hoursForm.hoursWorked),
       notes: `${employee.firstName} ${employee.lastName} - ${hoursForm.shiftType}: ${hoursForm.notes}`,
     };
     addLabourLog(newLabourLog);
 
     // Add Check-In Record
-    const newCheckIn = {
+    const newCheckIn: WorkerCheckIn = {
       id: `CHK-${Math.floor(1000 + Math.random() * 9000)}`,
-      projectId: hoursForm.projectId,
+      projectId: hoursForm.projectId || projects[0]?.id || 'PRJ-001',
       workerName: `${employee.firstName} ${employee.lastName}`,
-      trade: hoursForm.trade,
-      checkInTime: `${hoursForm.date} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-      status: 'Checked-in' as const,
-      siteLocation: hoursForm.location,
+      workerId: employee.id,
+      timestamp: new Date().toISOString(),
+      action: 'Check-In',
+      location: { lat: -26.2041, lng: 28.0473 }
     };
     addWorkerCheckIn(newCheckIn);
 
@@ -640,6 +656,83 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
                 </div>
               </CardContent>
             </Card>
+
+            {/* Accommodation & Transport Card */}
+            <Card className="w-full">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <Home className="h-5 w-5 text-indigo-600" /> Company Accommodation & Transport Logistics
+                </CardTitle>
+                <button
+                  onClick={() => {
+                    setLogisticsData({
+                      hasAccommodation: employee.hasAccommodation || false,
+                      accommodationDetails: {
+                        campName: employee.accommodationDetails?.campName || '',
+                        roomNumber: employee.accommodationDetails?.roomNumber || '',
+                        subsidyAmount: employee.accommodationDetails?.subsidyAmount || 0,
+                        notes: employee.accommodationDetails?.notes || ''
+                      },
+                      hasTransport: employee.hasTransport || false,
+                      transportDetails: {
+                        route: employee.transportDetails?.route || '',
+                        pickupPoint: employee.transportDetails?.pickupPoint || ''
+                      }
+                    });
+                    setIsEditingLogistics(true);
+                  }}
+                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                >
+                  <Edit3 className="h-3.5 w-3.5" /> Edit Logistics
+                </button>
+              </CardHeader>
+              <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Accommodation Box */}
+                <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                      <Home className="h-4 w-4 text-indigo-600" /> Accommodation
+                    </span>
+                    <Badge variant="default" className={employee.hasAccommodation ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}>
+                      {employee.hasAccommodation ? 'Provided' : 'Self Housing'}
+                    </Badge>
+                  </div>
+                  {employee.hasAccommodation ? (
+                    <div className="space-y-1 text-xs text-slate-700 dark:text-slate-300 pt-1">
+                      <p className="font-bold">{employee.accommodationDetails?.campName || 'Central Site Camp'}</p>
+                      <p className="text-slate-500">Room / Unit: {employee.accommodationDetails?.roomNumber || 'N/A'}</p>
+                      {employee.accommodationDetails?.subsidyAmount ? (
+                        <p className="text-slate-500">Monthly Subsidy: R{employee.accommodationDetails.subsidyAmount}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic pt-1">No company accommodation assigned.</p>
+                  )}
+                </div>
+
+                {/* Transport Box */}
+                <div className="p-4 rounded-xl bg-teal-50/50 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-teal-700 dark:text-teal-300 flex items-center gap-1.5">
+                      <Bus className="h-4 w-4 text-teal-600" /> Transport
+                    </span>
+                    <Badge variant="default" className={employee.hasTransport ? "bg-teal-100 text-teal-800" : "bg-slate-100 text-slate-600"}>
+                      {employee.hasTransport ? 'Shuttle Bus' : 'Own Transport'}
+                    </Badge>
+                  </div>
+                  {employee.hasTransport ? (
+                    <div className="space-y-1 text-xs text-slate-700 dark:text-slate-300 pt-1">
+                      <p className="font-bold">{employee.transportDetails?.route || 'Route 1 - Site Express'}</p>
+                      <p className="text-slate-500 flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-amber-500" /> Pickup: {employee.transportDetails?.pickupPoint || 'Central Stop'}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic pt-1">No company transport assigned.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Sidebar Column */}
@@ -860,7 +953,7 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="text-[10px]">{act.discipline}</Badge>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{act.assignedTeam || 'Direct Assignment'}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{act.assignedTo || 'Direct Assignment'}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
                           act.status === 'Completed' ? 'bg-green-50 text-green-700' :
@@ -896,7 +989,7 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
               <CardTitle className="text-base font-bold flex items-center gap-2">
                 <Clock className="h-5 w-5 text-[#0B5FFF]" /> Site Attendance & Logged Hours History
               </CardTitle>
-              <p className="text-xs text-slate-500 mt-0.5">Chronological record of daily site check-ins and logged labor hours.</p>
+              <p className="text-xs text-slate-500 mt-0.5">Chronological record of daily site check-ins and logged labor hours for {employee.firstName} {employee.lastName}.</p>
             </div>
             <button
               onClick={() => setShowLogHoursModal(true)}
@@ -905,40 +998,180 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
               <Clock className="h-4 w-4" /> Log Hours
             </button>
           </CardHeader>
-          <CardContent className="p-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase tracking-wider text-xs font-semibold border-b border-slate-200 dark:border-slate-700">
-                  <tr>
-                    <th className="px-4 py-3">Record ID</th>
-                    <th className="px-4 py-3">Date & Time</th>
-                    <th className="px-4 py-3">Project / Site</th>
-                    <th className="px-4 py-3">Trade / Role</th>
-                    <th className="px-4 py-3 text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                  {attendanceHistory.map(chk => (
-                    <tr key={chk.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="px-4 py-3 font-mono text-xs font-bold text-slate-500">{chk.id}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{chk.checkInTime}</td>
-                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{chk.projectId}</td>
-                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{chk.trade}</td>
-                      <td className="px-4 py-3 text-right">
-                        <Badge variant="success" className="text-[10px]">Checked In</Badge>
-                      </td>
-                    </tr>
-                  ))}
+          <CardContent className="p-6 space-y-6">
+            {/* Role Permission Status Badge */}
+            <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs font-medium ${
+              canEditLabour 
+                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900 dark:bg-emerald-950/30 dark:border-emerald-800/60 dark:text-emerald-300' 
+                : 'bg-amber-50/70 border-amber-200 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/60 dark:text-amber-300'
+            }`}>
+              <div className="flex items-center gap-2">
+                {canEditLabour ? (
+                  <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                ) : (
+                  <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                )}
+                <span>
+                  <strong>Role Access Level ({currentUserProfile?.role || 'Guest'}):</strong>{' '}
+                  {canEditLabour 
+                    ? 'Full permission granted to log, edit, or delete records.' 
+                    : 'Read-only mode. Editing or deleting logged hours requires Administrator or permitted role.'}
+                </span>
+              </div>
+              <Badge variant={canEditLabour ? 'success' : 'warning'} className="shrink-0 text-[10px] font-bold">
+                {canEditLabour ? 'Editable & Removable' : 'Read-Only Mode'}
+              </Badge>
+            </div>
 
-                  {attendanceHistory.length === 0 && (
+            {/* Logged Labor Hours Table */}
+            <div>
+              <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-emerald-600" /> Logged Labor Hours
+                </span>
+                {canEditLabour ? (
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> Edit/Delete Allowed
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+                    <Lock className="h-3 w-3" /> Restricted
+                  </span>
+                )}
+              </h4>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase tracking-wider text-xs font-semibold border-b border-slate-200 dark:border-slate-700">
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-slate-500 text-xs">
-                        No recent site check-in logs recorded for this personnel. Click "Log Hours" above to record hours.
-                      </td>
+                      <th className="px-4 py-3">Log ID</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Project / Activity</th>
+                      <th className="px-4 py-3">Hours Worked</th>
+                      <th className="px-4 py-3">Notes</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {labourLogs
+                      .filter(log => 
+                        (log.workerName && log.workerName.toLowerCase().includes(employee.firstName.toLowerCase())) ||
+                        (log.notes && log.notes.toLowerCase().includes(employee.firstName.toLowerCase()))
+                      )
+                      .map(log => {
+                        const projName = projects.find(p => p.id === log.projectId)?.name || log.projectId;
+                        const actName = activities.find(a => a.id === log?.activityId)?.name || log?.activityId || 'General Labor';
+                        return (
+                          <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                            <td className="px-4 py-3 font-mono text-xs font-bold text-slate-500">{log.id}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{log.date}</td>
+                            <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">
+                              <div className="font-medium text-slate-900 dark:text-white">{projName}</div>
+                              <div className="text-[10px] text-slate-500">{actName}</div>
+                            </td>
+                            <td className="px-4 py-3 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                              {log.hoursWorked || log.hours || 0} hrs
+                              {log.startTime && log.endTime && (
+                                <span className="block text-[10px] font-normal text-slate-500">{log.startTime} - {log.endTime}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px] truncate">
+                              {log.notes || 'N/A'}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {canEditLabour ? (
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm('Are you sure you want to delete this logged hours record?')) {
+                                      deleteLabourLog(log.id);
+                                    }
+                                  }}
+                                  className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                                  title="Delete Hours Record"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                                </button>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-md" title="Role restricted">
+                                  <Lock className="h-3 w-3 text-amber-600" /> Restricted
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                    {labourLogs.filter(log => 
+                      (log.workerName && log.workerName.toLowerCase().includes(employee.firstName.toLowerCase())) ||
+                      (log.notes && log.notes.toLowerCase().includes(employee.firstName.toLowerCase()))
+                    ).length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-slate-500 text-xs">
+                          No logged labor hours recorded for {employee.firstName}. Click "Log Hours" above to add one.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Check-ins Table */}
+            <div>
+              <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-blue-600" /> Site Check-In Logs
+              </h4>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase tracking-wider text-xs font-semibold border-b border-slate-200 dark:border-slate-700">
+                    <tr>
+                      <th className="px-4 py-3">Record ID</th>
+                      <th className="px-4 py-3">Date & Time</th>
+                      <th className="px-4 py-3">Project / Site</th>
+                      <th className="px-4 py-3">Trade / Role</th>
+                      <th className="px-4 py-3 text-right">Status</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {attendanceHistory.map(chk => (
+                      <tr key={chk.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="px-4 py-3 font-mono text-xs font-bold text-slate-500">{chk.id}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{chk.timestamp ? new Date(chk.timestamp).toLocaleString() : 'N/A'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{chk.projectId}</td>
+                        <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{chk.action || 'Check-In'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <Badge variant="success" className="text-[10px]">{chk.action || 'Checked In'}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {canEditLabour ? (
+                            <button
+                              onClick={() => {
+                                if (window.confirm('Are you sure you want to delete this check-in record?')) {
+                                  deleteWorkerCheckIn(chk.id);
+                                }
+                              }}
+                              className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                              title="Delete Check-In Record"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Delete
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Restricted</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+
+                    {attendanceHistory.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-slate-500 text-xs">
+                          No recent site check-in logs recorded for this personnel.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1640,6 +1873,162 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
               <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
                 <button type="button" onClick={() => setShowProfileModal(false)} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
                 <button type="submit" className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#0B5FFF] text-white">Save Profile</button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* LOGISTICS EDIT MODAL */}
+      {isEditingLogistics && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg shadow-2xl border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
+                <Home className="h-5 w-5 text-indigo-600" /> Manage Accommodation & Transport
+              </h3>
+              <button onClick={() => setIsEditingLogistics(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const updated: Employee = {
+                  ...employee,
+                  hasAccommodation: logisticsData.hasAccommodation,
+                  accommodationDetails: logisticsData.accommodationDetails,
+                  hasTransport: logisticsData.hasTransport,
+                  transportDetails: logisticsData.transportDetails
+                };
+                onSave(updated);
+                setIsEditingLogistics(false);
+              }}
+              className="p-6 space-y-5"
+            >
+              {/* Accommodation Section */}
+              <div className="p-4 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Home className="h-4 w-4 text-indigo-600" />
+                    <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 uppercase tracking-wider">Company Accommodation</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={logisticsData.hasAccommodation}
+                      onChange={e => setLogisticsData({ ...logisticsData, hasAccommodation: e.target.checked })}
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+                    <span className="ml-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {logisticsData.hasAccommodation ? 'Provided' : 'Not Provided'}
+                    </span>
+                  </label>
+                </div>
+
+                {logisticsData.hasAccommodation && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-indigo-100/80 dark:border-indigo-900/30">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Camp / Residence</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Central Site Camp A"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={logisticsData.accommodationDetails.campName}
+                        onChange={e => setLogisticsData({
+                          ...logisticsData,
+                          accommodationDetails: { ...logisticsData.accommodationDetails, campName: e.target.value }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Room / Unit #</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Room 12B"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={logisticsData.accommodationDetails.roomNumber}
+                        onChange={e => setLogisticsData({
+                          ...logisticsData,
+                          accommodationDetails: { ...logisticsData.accommodationDetails, roomNumber: e.target.value }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Monthly Subsidy (R)</label>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={logisticsData.accommodationDetails.subsidyAmount || ''}
+                        onChange={e => setLogisticsData({
+                          ...logisticsData,
+                          accommodationDetails: { ...logisticsData.accommodationDetails, subsidyAmount: parseFloat(e.target.value) || 0 }
+                        })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Transport Section */}
+              <div className="p-4 bg-teal-50/50 dark:bg-teal-950/20 rounded-2xl border border-teal-100 dark:border-teal-900/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bus className="h-4 w-4 text-teal-600" />
+                    <span className="text-xs font-bold text-teal-950 dark:text-teal-200 uppercase tracking-wider">Company Transport</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={logisticsData.hasTransport}
+                      onChange={e => setLogisticsData({ ...logisticsData, hasTransport: e.target.checked })}
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-teal-600"></div>
+                    <span className="ml-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {logisticsData.hasTransport ? 'Provided' : 'Not Provided'}
+                    </span>
+                  </label>
+                </div>
+
+                {logisticsData.hasTransport && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-teal-100/80 dark:border-teal-900/30">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Shuttle Route / Bus Line</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Route 3 Express"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={logisticsData.transportDetails.route}
+                        onChange={e => setLogisticsData({
+                          ...logisticsData,
+                          transportDetails: { ...logisticsData.transportDetails, route: e.target.value }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Pickup Stop / Location</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Main Gate 1"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        value={logisticsData.transportDetails.pickupPoint}
+                        onChange={e => setLogisticsData({
+                          ...logisticsData,
+                          transportDetails: { ...logisticsData.transportDetails, pickupPoint: e.target.value }
+                        })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsEditingLogistics(false)} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#0B5FFF] text-white">Save Logistics</button>
               </div>
             </form>
           </Card>

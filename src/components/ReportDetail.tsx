@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button, CustomSelect } from './ui';
+import React, { useState, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, Badge, Button, CustomSelect, ProgressBar } from './ui';
 import { 
   ArrowLeft, 
   FileText, 
@@ -27,10 +27,13 @@ import {
   Thermometer, 
   CheckSquare, 
   FileCheck,
-  Package
+  Package,
+  TrendingUp,
+  Target
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { DailyReport, Activity, LabourLog, SafetyIncident, Equipment, MaterialReceipt } from '../types';
+import { exportSingleReportPDF, parseSupervisorNotes } from '../lib/pdfReportExport';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -54,6 +57,9 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
   // Supervisor Notes State
   const [supervisorNotes, setSupervisorNotes] = useState(report.supervisorNotes || '');
 
+  // Parse Structured Notes (e.g. from Log Progress)
+  const parsedNotes = useMemo(() => parseSupervisorNotes(report.supervisorNotes || ''), [report.supervisorNotes]);
+
   // Weather Icon Helper
   const getWeatherIcon = (weather: string) => {
     if (weather.toLowerCase().includes('rain')) return <CloudRain className="h-6 w-6 text-blue-500" />;
@@ -62,11 +68,11 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
   };
 
   // Filter activities, labour, safety, equipment, materials relevant to this report date / project
-  const dayActivities = activities.filter(a => a.status === 'In Progress' || a.status === 'Completed');
-  const dayLabourLogs = labourLogs.filter(l => l.date === report.date || l.projectId === report.projectId);
-  const daySafetyIncidents = safetyIncidents.filter(s => s.dateReported === report.date || s.projectId === report.projectId);
+  const dayActivities = activities.filter(a => (a.projectId === report.projectId) && (a.status === 'In Progress' || a.status === 'Completed'));
+  const dayLabourLogs = labourLogs.filter(l => l.projectId === report.projectId && l.date === report.date);
+  const daySafetyIncidents = safetyIncidents.filter(s => s.projectId === report.projectId && s.dateReported === report.date);
   const dayEquipment = equipment.filter(e => e.status === 'Operating');
-  const dayMaterialDeliveries = (materialReceipts || []).filter(m => m.receivedDate === report.date);
+  const dayMaterialDeliveries = (materialReceipts || []).filter(m => m.date === report.date);
 
   // Submit Edit Report Modal
   const handleEditReportSubmit = (e: React.FormEvent) => {
@@ -83,70 +89,13 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
 
   // Export PDF
   const handleExportPDF = () => {
-    const doc = new jsPDF();
-    const dateStr = report.date;
-    
-    // Title & Header
-    doc.setFontSize(22);
-    doc.setTextColor(11, 95, 255);
-    doc.text(`Daily Site Report - ${report.id}`, 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Date: ${dateStr} | Project: ${report.projectId} | Weather: ${report.weather}, ${report.temperature}`, 14, 28);
-    
-    // Overview Metrics
-    doc.setFontSize(13);
-    doc.setTextColor(0);
-    doc.text('Key Site Metrics', 14, 40);
-
-    autoTable(doc, {
-      startY: 45,
-      head: [['Workers on Site', 'Equipment Running', 'Safety Incidents', 'NCRs', 'Site Conditions']],
-      body: [[
-        `${report.workersOnSite} Personnel`,
-        `${report.equipmentRunning} Units`,
-        `${report.incidents} Incidents`,
-        `${report.ncr} NCRs`,
-        report.siteConditions || 'Dry / Clear'
-      ]],
-      theme: 'grid',
-      headStyles: { fillColor: [11, 95, 255] }
-    });
-
-    // Activities Table
-    let currentY = (doc as any).lastAutoTable.finalY || 45;
-    doc.setFontSize(13);
-    doc.text('Daily Construction Progress', 14, currentY + 15);
-
-    const actData = dayActivities.map(a => [a.id, a.name, a.discipline, a.status, a.progress + '%']);
-    autoTable(doc, {
-      startY: currentY + 20,
-      head: [['ID', 'Activity', 'Discipline', 'Status', 'Progress']],
-      body: actData,
-      theme: 'grid',
-      headStyles: { fillColor: [79, 70, 229] }
-    });
-
-    // Safety Table
-    currentY = (doc as any).lastAutoTable.finalY || currentY + 20;
-    doc.setFontSize(13);
-    doc.text('Safety & Compliance Summary', 14, currentY + 15);
-
-    const safetyData = daySafetyIncidents.map(s => [s.id, s.title, s.type, s.priority, s.status]);
-    autoTable(doc, {
-      startY: currentY + 20,
-      head: [['Incident ID', 'Title', 'Type', 'Priority', 'Status']],
-      body: safetyData.length > 0 ? safetyData : [['N/A', 'Zero active safety incidents reported today', 'N/A', 'N/A', 'Clear']],
-      theme: 'grid',
-      headStyles: { fillColor: [220, 38, 38] }
-    });
-
-    doc.save(`Daily-Site-Report-${report.id}-${dateStr}.pdf`);
+    const proj = projects.find(p => p.id === report.projectId);
+    const projectName = proj?.name || report.projectId;
+    exportSingleReportPDF(report, projectName);
   };
 
   const handlePrint = () => {
-    window.print();
+    handleExportPDF();
   };
 
   return (
@@ -279,6 +228,123 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
           {/* Main Info */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Active Activity & Scope Header Card (if available from notes) */}
+            {parsedNotes.activityTitle && (
+              <Card className="w-full border-blue-200 dark:border-blue-900 bg-gradient-to-br from-blue-50/40 to-slate-50 dark:from-blue-950/20 dark:to-slate-900">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#0B5FFF] dark:text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Target className="h-4 w-4" /> Logged Construction Activity
+                    </span>
+                    {parsedNotes.priorityLevel && (
+                      <Badge variant="outline" className="text-[10px] uppercase font-bold">
+                        {parsedNotes.priorityLevel} Priority
+                      </Badge>
+                    )}
+                  </div>
+                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mt-1">
+                    {parsedNotes.activityTitle}
+                  </CardTitle>
+                  {parsedNotes.disciplinePackage && (
+                    <p className="text-xs text-slate-500 mt-0.5">{parsedNotes.disciplinePackage}</p>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-0 pb-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/80">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Progress Status</span>
+                    <p className="text-sm font-bold text-[#0B5FFF] mt-0.5">{parsedNotes.overallProgress || 'In Progress'}</p>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/80">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Output Achieved</span>
+                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{parsedNotes.outputMeasured || 'Logged'}</p>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/80">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Hours Logged</span>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 mt-0.5">{parsedNotes.hoursLogged || 'Shift Hours'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Subtask & Method Execution Breakdown Card (if subtasks parsed) */}
+            {parsedNotes.subtasks && parsedNotes.subtasks.length > 0 && (
+              <Card className="w-full">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <CardTitle className="text-base font-bold flex items-center gap-2">
+                      <CheckSquare className="h-5 w-5 text-emerald-600" />
+                      Subtask & Execution Breakdown
+                    </CardTitle>
+                    <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700">
+                      {parsedNotes.subtasks.filter(s => s.status.toLowerCase().includes('completed')).length} of {parsedNotes.subtasks.length} Completed ({Math.round((parsedNotes.subtasks.filter(s => s.status.toLowerCase().includes('completed')).length / parsedNotes.subtasks.length) * 100)}%)
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-6 pt-0">
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                    <table className="w-full text-left text-xs whitespace-nowrap">
+                      <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider">
+                        <tr>
+                          <th className="px-3 py-2.5 w-10 text-center">#</th>
+                          <th className="px-3 py-2.5">Subtask / Deliverable</th>
+                          <th className="px-3 py-2.5">Category / WBS</th>
+                          <th className="px-3 py-2.5 text-center">Output / Qty</th>
+                          <th className="px-3 py-2.5 text-center">Type</th>
+                          <th className="px-3 py-2.5 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {parsedNotes.subtasks.map((s, idx) => {
+                          const isDone = s.status.toLowerCase().includes('completed');
+                          const isProg = s.status.toLowerCase().includes('progress');
+                          return (
+                            <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                              <td className="px-3 py-2.5 font-mono text-center text-slate-400 font-bold">{s.no}</td>
+                              <td className="px-3 py-2.5 font-semibold text-slate-900 dark:text-white">
+                                {s.title}
+                              </td>
+                              <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{s.category}</td>
+                              <td className="px-3 py-2.5 text-center font-mono font-medium text-slate-700 dark:text-slate-300">{s.quantity}</td>
+                              <td className="px-3 py-2.5 text-center">
+                                <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                  {s.isMilestone && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900">
+                                      🎯 Milestone
+                                    </span>
+                                  )}
+                                  {s.isHoldPoint && (
+                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                      s.holdPointApproved
+                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                        : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                                    }`} title={s.holdPointSigner ? `Signed off by ${s.holdPointSigner}` : 'QA Hold Point'}>
+                                      🔒 {s.holdPointApproved ? `QA Signed: ${s.holdPointSigner || 'Passed'}` : 'QA Hold Point'}
+                                    </span>
+                                  )}
+                                  {!s.isMilestone && !s.isHoldPoint && (
+                                    <span className="text-[11px] text-slate-400">Standard</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-center">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                  isDone ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800' :
+                                  isProg ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800' :
+                                  'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                                }`}>
+                                  {isDone ? 'Completed ✓' : isProg ? 'In Progress ►' : 'Not Started'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Weather & Site Conditions Card */}
             <Card className="w-full">
               <CardHeader>
@@ -418,7 +484,7 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="text-[10px]">{act.discipline}</Badge>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{act.assignedTeam || 'Unassigned'}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{act.assignedTo || 'Unassigned'}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
                           act.status === 'Completed' ? 'bg-green-50 text-green-700' :
@@ -519,7 +585,7 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {dayEquipment.map(eq => (
                       <tr key={eq.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">{eq.name} ({eq.code})</td>
+                        <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">{eq.name} ({eq.licensePlate || eq.id})</td>
                         <td className="px-4 py-3 text-xs text-slate-500">{eq.type}</td>
                         <td className="px-4 py-3 text-right">
                           <Badge variant="success" className="text-[10px]">Operating</Badge>

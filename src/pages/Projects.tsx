@@ -18,7 +18,9 @@ import {
   CheckCircle2, 
   X, 
   Save, 
-  FileCheck
+  FileCheck,
+  FileText,
+  Printer
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { useAppContext } from '../context/AppContext';
@@ -29,7 +31,8 @@ import { ProjectForm } from '../components/ProjectForm';
 import { LabourAllocationView } from '../components/LabourAllocationView';
 import { ResourceAllocationView } from '../components/ResourceAllocation';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
-import { Project } from '../types';
+import { ProjectSummaryPdfModal } from '../components/ProjectSummaryPdfModal';
+import { Project, canManage } from '../types';
 
 const COLORS = ['#0B5FFF', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#FF3366', '#33CC99'];
 
@@ -41,6 +44,7 @@ export function Projects() {
     workerCheckIns, 
     safetyIncidents, 
     equipment, 
+    allocations,
     userRole, 
     addProject, 
     updateProject, 
@@ -51,6 +55,7 @@ export function Projects() {
   const [isAddingProject, setIsAddingProject] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [isSummaryPdfModalOpen, setIsSummaryPdfModalOpen] = useState(false);
 
   const handleAddProject = (project: Project) => {
     addProject(project);
@@ -139,7 +144,7 @@ export function Projects() {
     const projSafetyIncidents = safetyIncidents.filter(s => s.projectId === project.id);
     const activeIncidents = projSafetyIncidents.filter(s => s.status !== 'Resolved' && s.status !== 'Closed').length;
 
-    const activeEquipmentCount = equipment.filter(e => e.status === 'Operating').length;
+    const activeEquipmentCount = allocations.filter(a => a.projectId === project.id && a.resourceType === 'Equipment' && a.status !== 'Returned' && a.status !== 'Depleted').length;
     const completedActivitiesCount = projActivities.filter(a => a.status === 'Completed').length;
 
     return (
@@ -155,12 +160,19 @@ export function Projects() {
                 <span className="text-xs font-mono font-bold tracking-wider text-[#0B5FFF]">{project.id}</span>
                 <Badge variant={project.status === 'Completed' ? 'success' : 'default'}>{project.status}</Badge>
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{project.name}</h1>
+              <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">{project.name}</h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            {userRole === 'Manager' && (
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
+            >
+              <Printer className="h-4 w-4" /> Print
+            </button>
+
+            {canManage(userRole) && (
               <button
                 onClick={() => setEditingProject({ ...project })}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
@@ -169,7 +181,7 @@ export function Projects() {
               </button>
             )}
 
-            {userRole === 'Manager' && (
+            {canManage(userRole) && (
               <button
                 onClick={() => setDeletingProjectId(project.id)}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 text-rose-600 text-xs font-semibold transition-colors"
@@ -185,7 +197,7 @@ export function Projects() {
           <Card className="p-4 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 dark:from-slate-900 dark:to-slate-800/80 border-blue-100 dark:border-slate-800">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Live Calculated Progress</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-[#0B5FFF]">{calculatedProgress}%</span>
+              <span className="text-xl font-bold text-[#0B5FFF]">{calculatedProgress}%</span>
               <span className="text-xs text-slate-500">({completedActivitiesCount}/{projActivities.length} Tasks Done)</span>
             </div>
             <ProgressBar value={calculatedProgress} className="h-2 mt-2" />
@@ -194,7 +206,7 @@ export function Projects() {
           <Card className="p-4 bg-gradient-to-br from-purple-50/50 to-indigo-50/30 dark:from-slate-900 dark:to-slate-800/80 border-purple-100 dark:border-slate-800">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Total Labour Hours</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-purple-600">{totalLabourHours} hrs</span>
+              <span className="text-xl font-bold text-purple-600">{totalLabourHours} hrs</span>
               <span className="text-xs text-slate-500">({projLabourLogs.length} Entries)</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-2 flex items-center gap-1">
@@ -205,7 +217,7 @@ export function Projects() {
           <Card className="p-4 bg-gradient-to-br from-emerald-50/50 to-teal-50/30 dark:from-slate-900 dark:to-slate-800/80 border-emerald-100 dark:border-slate-800">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Active Machinery</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-emerald-600">{activeEquipmentCount} Units</span>
+              <span className="text-xl font-bold text-emerald-600">{activeEquipmentCount} Units</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-2 flex items-center gap-1">
               <Truck className="h-3 w-3 text-emerald-500" /> Operational site fleet
@@ -215,7 +227,7 @@ export function Projects() {
           <Card className="p-4 bg-gradient-to-br from-red-50/50 to-orange-50/30 dark:from-slate-900 dark:to-slate-800/80 border-red-100 dark:border-slate-800">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Active HSE Incidents</span>
             <div className="flex items-baseline gap-2">
-              <span className={`text-2xl font-bold ${activeIncidents > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+              <span className={`text-xl font-bold ${activeIncidents > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                 {activeIncidents} Open
               </span>
               <span className="text-xs text-slate-500">({projSafetyIncidents.length} Total)</span>
@@ -254,21 +266,14 @@ export function Projects() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 mt-auto pt-4 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-bold text-slate-700 dark:text-slate-300">Live Calculated Completion Rate</span>
-                  <span className="font-bold text-[#0B5FFF]">{calculatedProgress}%</span>
-                </div>
-                <ProgressBar value={calculatedProgress} className="h-3" />
-              </div>
             </CardContent>
           </Card>
 
-          {userRole === 'Manager' && <LabourTracking projectId={project.id} />}
+          {canManage(userRole) && <LabourTracking projectId={project.id} />}
         </div>
 
         {/* Resource and Labour Allocation Views */}
-        {userRole === 'Manager' && (
+        {canManage(userRole) && (
           <div className="grid gap-6 lg:grid-cols-2 w-full">
             <LabourAllocationView projectId={project.id} />
             <ResourceAllocationView projectId={project.id} />
@@ -387,14 +392,23 @@ export function Projects() {
     <div className="flex flex-col gap-6 p-4 md:p-6 w-full h-full overflow-y-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Active Projects Directory</h1>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Active Projects Directory</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">Manage construction sites, progress schedules, and resource allocations.</p>
         </div>
-        {userRole === 'Manager' && (
-          <Button onClick={() => setIsAddingProject(true)} className="gap-2 rounded-xl bg-[#0B5FFF] hover:bg-blue-700 text-white">
-            <Plus className="h-4 w-4" /> Add Project
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setIsSummaryPdfModalOpen(true)}
+            variant="outline"
+            className="gap-2 rounded-xl border-slate-200 dark:border-slate-800 font-semibold text-slate-700 dark:text-slate-200"
+          >
+            <FileText className="h-4 w-4 text-[#0B5FFF]" /> Export Project Summary PDF
           </Button>
-        )}
+          {canManage(userRole) && (
+            <Button onClick={() => setIsAddingProject(true)} className="gap-2 rounded-xl bg-[#0B5FFF] hover:bg-blue-700 text-white font-semibold">
+              <Plus className="h-4 w-4" /> Add Project
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Overview Analytics */}
@@ -500,13 +514,6 @@ export function Projects() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2 mt-auto pt-4 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-bold text-slate-700 dark:text-slate-300">Live Calculated Completion</span>
-                    <span className="font-bold text-[#0B5FFF]">{liveProgress}%</span>
-                  </div>
-                  <ProgressBar value={liveProgress} className="h-3" />
-                </div>
               </CardContent>
             </Card>
           );
@@ -528,6 +535,12 @@ export function Projects() {
         }}
         onCancel={() => setDeletingProjectId(null)}
         confirmLabel="Delete Project"
+      />
+
+      <ProjectSummaryPdfModal
+        isOpen={isSummaryPdfModalOpen}
+        onClose={() => setIsSummaryPdfModalOpen(false)}
+        defaultProjectId={selectedProjectId || undefined}
       />
     </div>
   );

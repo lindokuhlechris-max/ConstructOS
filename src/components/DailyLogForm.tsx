@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, CustomSelect } from './ui';
 import { DailyReport } from '../types';
-import { CloudRain, Cloud, Sun, Wind, CloudLightning, Save, X, HardHat, Truck, ShieldAlert, AlertTriangle, FileText, ClipboardList } from 'lucide-react';
+import { CloudRain, Cloud, Sun, Wind, CloudLightning, Save, X, HardHat, Truck, ShieldAlert, AlertTriangle, FileText, ClipboardList, RotateCcw, Check } from 'lucide-react';
 
 interface DailyLogFormProps {
   onSubmit: (report: Partial<DailyReport>) => void;
@@ -46,17 +46,54 @@ const REPORT_TEMPLATES = {
 };
 
 export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormProps) {
-  const [formData, setFormData] = useState<Partial<DailyReport>>(initialData || {
-    date: new Date().toISOString().split('T')[0],
-    weather: 'Sunny',
-    temperature: '',
-    siteConditions: '',
-    significantEvents: '',
-    workersOnSite: 0,
-    equipmentRunning: 0,
-    incidents: 0,
-    ncr: 0,
+  const [formData, setFormData] = useState<Partial<DailyReport>>(() => {
+    if (initialData) return initialData;
+    const savedDraft = localStorage.getItem('dailyReportDraft');
+    if (savedDraft) {
+      try {
+        return JSON.parse(savedDraft);
+      } catch (e) {
+        console.error('Failed to parse daily report draft', e);
+      }
+    }
+    return {
+      date: new Date().toISOString().split('T')[0],
+      weather: 'Sunny',
+      temperature: '',
+      siteConditions: '',
+      significantEvents: '',
+      workersOnSite: 0,
+      equipmentRunning: 0,
+      incidents: 0,
+      ncr: 0,
+    };
   });
+
+  const [hasRestoredDraft, setHasRestoredDraft] = useState<boolean>(() => {
+    return !initialData && !!localStorage.getItem('dailyReportDraft');
+  });
+
+  useEffect(() => {
+    if (!initialData) {
+      localStorage.setItem('dailyReportDraft', JSON.stringify(formData));
+    }
+  }, [formData, initialData]);
+
+  const clearDraft = () => {
+    localStorage.removeItem('dailyReportDraft');
+    setHasRestoredDraft(false);
+    setFormData({
+      date: new Date().toISOString().split('T')[0],
+      weather: 'Sunny',
+      temperature: '',
+      siteConditions: '',
+      significantEvents: '',
+      workersOnSite: 0,
+      equipmentRunning: 0,
+      incidents: 0,
+      ncr: 0,
+    });
+  };
 
   const [errors, setErrors] = useState<Partial<Record<keyof DailyReport, string>>>({});
 
@@ -105,6 +142,7 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validate()) {
+      localStorage.removeItem('dailyReportDraft');
       onSubmit(formData);
     }
   };
@@ -135,6 +173,29 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
       </CardHeader>
       
       <CardContent className="p-6">
+        {/* Auto-Save Draft Banner */}
+        <div className="mb-6 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 flex items-center justify-between text-xs text-amber-800 dark:text-amber-300">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+            <span>
+              <strong>Auto-save active:</strong> Your form entries are continuously saved to local storage so no data is lost.
+            </span>
+          </div>
+          {hasRestoredDraft && (
+            <button
+              type="button"
+              onClick={clearDraft}
+              className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-800 text-amber-900 dark:text-amber-200 font-semibold flex items-center gap-1 transition-colors"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Reset Draft
+            </button>
+          )}
+        </div>
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-8">
           
           {/* Template Selector */}

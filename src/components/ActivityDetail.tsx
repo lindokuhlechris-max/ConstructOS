@@ -1,12 +1,19 @@
 import React, { useState, useRef } from 'react';
-import { Activity, ActivityStatus, Priority, TaskMaterialAssignment, TaskLabourAssignment, TaskEquipmentAssignment, SubTask } from '../types';
+import { useNavigate } from 'react-router-dom';
+import { Activity, ActivityStatus, Priority, TaskMaterialAssignment, TaskLabourAssignment, TaskEquipmentAssignment, SubTask, DailyReport, canUserEditSection } from '../types';
 import { Card, CardHeader, CardTitle, CardContent, Badge, ProgressBar, Button } from './ui';
 import { InteractiveProgress } from './InteractiveProgress';
 import { CameraCapture } from './CameraCapture';
 import { ActivityLabourTracking } from './ActivityLabourTracking';
 import { SubTaskManager } from './SubTaskManager';
 import { ActivityExplainerBreakdown } from './ActivityExplainerBreakdown';
+import { RecordActivityForTaskModal } from './RecordActivityForTaskModal';
+import { PlanningCalendar } from './PlanningCalendar';
+import { PrintPreview } from './PrintPreview';
+import { ActivityAuditScreen } from './ActivityAuditScreen';
 import { useAppContext } from '../context/AppContext';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   MapPin,
   QrCode,
@@ -15,6 +22,7 @@ import {
   Calendar,
   Clock,
   User,
+  History,
   ShieldAlert,
   Paperclip,
   Image as ImageIcon,
@@ -46,7 +54,21 @@ import {
   Truck,
   Users,
   Plus,
-  TrendingUp
+  TrendingUp,
+  Tag,
+  FileBarChart,
+  FolderOpen,
+  FileSpreadsheet,
+  Link as LinkIcon,
+  Sun,
+  Cloud,
+  CloudRain,
+  Wind,
+  Thermometer,
+  CheckSquare,
+  Layers,
+  Sparkles,
+  CheckCircle
 } from 'lucide-react';
 
 interface ActivityDetailProps {
@@ -54,16 +76,28 @@ interface ActivityDetailProps {
   onSave?: (updatedActivity: Activity) => void;
   onClose?: () => void;
   onDelete?: (id: string) => void;
+  onDuplicate?: (activity: Activity) => void;
   isEditable?: boolean;
 }
 
-export function ActivityDetail({ activity: initialActivity, onSave, onClose, onDelete, isEditable = true }: ActivityDetailProps) {
-  const { materials, employees, equipment, updateActivity, addAuditLog, userRole } = useAppContext();
+export function ActivityDetail({ activity: initialActivity, onSave, onClose, onDelete, onDuplicate, isEditable = true }: ActivityDetailProps) {
+  const navigate = useNavigate();
+  const { projects, materials, employees, equipment, documents, updateActivity, addReport, addAuditLog, userRole, currentUserProfile, labourLogs } = useAppContext();
+  const canEditActivities = canUserEditSection(currentUserProfile, 'activities');
   const [activity, setActivity] = useState<Activity>(initialActivity);
   const [isEditing, setIsEditing] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [copiedGps, setCopiedGps] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+
+  const calculatedActualHours = React.useMemo(() => {
+    if (!labourLogs) return activity.actualHours || 0;
+    return labourLogs
+      .filter(log => log?.activityId === activity.id)
+      .reduce((sum, log) => sum + (log.hours || 0), 0);
+  }, [labourLogs, activity.id, activity.actualHours]);
   const [newComment, setNewComment] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -90,11 +124,19 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
 
   // Log Progress Modal State
   const [isLogProgressModalOpen, setIsLogProgressModalOpen] = useState(false);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [isRecordActivityModalOpen, setIsRecordActivityModalOpen] = useState(false);
   const [logProgressActualQty, setLogProgressActualQty] = useState<number>(initialActivity.actualQuantity || 0);
   const [logProgressActualHours, setLogProgressActualHours] = useState<number>(initialActivity.actualHours || 0);
   const [logProgressPercent, setLogProgressPercent] = useState<number>(initialActivity.progress || 0);
   const [logProgressStatus, setLogProgressStatus] = useState<ActivityStatus>(initialActivity.status || 'Not Started');
   const [logProgressNotes, setLogProgressNotes] = useState('');
+  const [logProgressDate, setLogProgressDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [logProgressWeather, setLogProgressWeather] = useState<string>('Sunny');
+  const [logProgressTemp, setLogProgressTemp] = useState<string>('24°C');
+  const [logProgressSiteConditions, setLogProgressSiteConditions] = useState<string>('Site dry and fully accessible');
+  const [logProgressSubtasks, setLogProgressSubtasks] = useState<SubTask[]>([]);
+  const [logProgressPostReport, setLogProgressPostReport] = useState<boolean>(true);
 
   // Voice Notes, Sign-Off, and Field Remarks State
   const [isAddVoiceNoteOpen, setIsAddVoiceNoteOpen] = useState(false);
@@ -206,29 +248,136 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
 
   const handleLogProgressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const todayStr = logProgressDate || new Date().toISOString().split('T')[0];
     const updatedRemarks = logProgressNotes.trim() 
-      ? `${activity.remarks ? activity.remarks + '\n' : ''}[Progress Log ${new Date().toISOString().split('T')[0]}]: ${logProgressNotes.trim()}`
+      ? `${activity.remarks ? activity.remarks + '\n' : ''}[Progress Log ${todayStr}]: ${logProgressNotes.trim()}`
       : activity.remarks;
 
-    const updatedActivity = {
+    let finalStatus = logProgressStatus;
+    let finalProgress = Number(logProgressPercent) || 0;
+    const finalActualQty = Number(logProgressActualQty) || 0;
+
+    const subtasksToSave = logProgressSubtasks && logProgressSubtasks.length > 0
+      ? logProgressSubtasks
+      : (activity.subtasks || []);
+
+    // Strict validation: Parent activity cannot be Completed if any subtask or milestone is incomplete
+    if (subtasksToSave.length > 0) {
+      const incomplete = subtasksToSave.filter(s => s.status !== 'Completed');
+      if (incomplete.length > 0 && (finalStatus === 'Completed' || finalProgress >= 100)) {
+        finalStatus = 'In Progress';
+        finalProgress = Math.min(99, finalProgress);
+        alert(`Note: Activity status is set to "In Progress" (${finalProgress}%) because ${incomplete.length} subtask(s) (${incomplete.map(i => `"${i.title}"`).join(', ')}) are still incomplete.`);
+      }
+    }
+
+    const updatedActivity: Activity = {
       ...activity,
-      actualQuantity: Number(logProgressActualQty) || 0,
-      actualHours: Number(logProgressActualHours) || 0,
-      progress: Number(logProgressPercent) || 0,
-      status: logProgressStatus,
-      remarks: updatedRemarks
+      actualQuantity: finalActualQty,
+      actualHours: calculatedActualHours,
+      progress: finalProgress,
+      status: finalStatus,
+      remarks: updatedRemarks,
+      subtasks: subtasksToSave
     };
 
     setActivity(updatedActivity);
     if (onSave) onSave(updatedActivity);
     else updateActivity(updatedActivity);
 
+    // Smart & Detailed Daily Report Generation
+    if (logProgressPostReport) {
+      const projectName = projects.find(p => p.id === updatedActivity.projectId)?.name || updatedActivity.projectId;
+      const assignedLabour = updatedActivity.assignedLabour || [];
+      const assignedEquipment = updatedActivity.assignedEquipment || [];
+      const assignedMaterials = updatedActivity.assignedMaterials || [];
+
+      const labourSummary = assignedLabour.length > 0
+        ? assignedLabour.map(l => `${l.name} (${l.role || 'Worker'}, ${l.hours || 8}h)`).join(', ')
+        : 'General site personnel deployed.';
+
+      const equipmentSummary = assignedEquipment.length > 0
+        ? assignedEquipment.map(eq => `${eq.name}${eq.operator ? ` [Operator: ${eq.operator}]` : ''}`).join(', ')
+        : 'Standard tools & equipment utilized.';
+
+      const materialsSummary = assignedMaterials.length > 0
+        ? assignedMaterials.map(m => `${m.name}: ${m.quantity} ${m.unit}`).join(', ')
+        : 'Standard site consumables.';
+
+      const subtasksCompletedCount = subtasksToSave.filter(s => s.status === 'Completed').length;
+      const subtaskSummaryLines = subtasksToSave.length > 0
+        ? subtasksToSave.map((s, idx) => `  ${s.status === 'Completed' ? '[✓]' : s.status === 'In Progress' ? '[►]' : '[ ]'} #${idx + 1} ${s.title} (${s.category || 'General'}) - ${s.status}${s.completedQuantity !== undefined ? ` [Qty: ${s.completedQuantity}/${s.targetQuantity || 0} ${s.unit || ''}]` : ''}${s.isMilestone ? ' 🎯 Milestone' : ''}${s.isHoldPoint ? (s.holdPointSignOff?.approved ? ` [🔒 QA Approved: ${s.holdPointSignOff.signedBy}]` : ' [🔒 QA Hold Point Pending]') : ''}`).join('\n')
+        : '  No WBS subtasks listed for this activity.';
+
+      const detailedSupervisorNotes = `DAILY ACTIVITY PROGRESS SNAPSHOT: ${updatedActivity.name} (${updatedActivity.id})
+================================================================================
+Project: ${projectName}
+Discipline / Package: ${updatedActivity.discipline || 'General'} • ${updatedActivity.workPackage || 'N/A'}
+Date Logged: ${todayStr}
+
+1. OVERALL PROGRESS & QUANTITIES:
+• Current Status: ${finalStatus} (${finalProgress}% Complete)
+• Output Measured: ${finalActualQty} / ${updatedActivity.targetQuantity || 0} ${updatedActivity.unit || 'units'}
+• Actual Hours Logged: ${calculatedActualHours} hrs
+• Priority Level: ${updatedActivity.priority || 'Medium'}
+
+2. FIELD REMARKS & OBSERVATIONS:
+${logProgressNotes.trim() || 'Daily site progress logged and verified on site.'}
+
+3. SUBTASK & EXECUTION BREAKDOWN (${subtasksCompletedCount}/${subtasksToSave.length} Completed):
+${subtaskSummaryLines}
+
+4. CREW & MACHINERY ALLOCATED ON TASK:
+• Assigned Personnel (${assignedLabour.length || 1}): ${labourSummary}
+• Assigned Machinery (${assignedEquipment.length}): ${equipmentSummary}
+• Allocated Materials: ${materialsSummary}
+
+5. ENVIRONMENTAL & SITE CONDITIONS:
+• Weather: ${logProgressWeather} (${logProgressTemp})
+• Site Condition: ${logProgressSiteConditions}`;
+
+      const manpowerBreakdown = assignedLabour.length > 0
+        ? assignedLabour.map(l => ({ trade: l.role || 'Labour', count: 1, hours: l.hours || 8 }))
+        : [{ trade: updatedActivity.discipline || 'General Labour', count: 1, hours: calculatedActualHours || 8 }];
+
+      const equipmentLogged = assignedEquipment.map(eq => ({
+        equipmentId: eq.equipmentId || eq.id || 'EQ-01',
+        hours: 8,
+        status: 'Operating'
+      }));
+
+      const newDailyReport: DailyReport = {
+        id: `RPT-${Date.now()}`,
+        date: todayStr,
+        projectId: updatedActivity.projectId,
+        weather: logProgressWeather,
+        temperature: logProgressTemp,
+        siteConditions: logProgressSiteConditions,
+        significantEvents: logProgressNotes.trim() 
+          ? `Progress logged on ${updatedActivity.name}: ${finalProgress}% (${finalStatus})`
+          : `Daily progress record for ${updatedActivity.name}`,
+        workersOnSite: assignedLabour.length || 1,
+        equipmentRunning: assignedEquipment.length || (assignedEquipment.length === 0 ? 0 : 1),
+        incidents: 0,
+        ncr: 0,
+        activitiesLogged: [
+          `${updatedActivity.name} (${updatedActivity.id}) - ${finalProgress}% - ${finalActualQty} ${updatedActivity.unit || 'units'}`
+        ],
+        manpowerBreakdown,
+        equipmentLogged,
+        photos: updatedActivity.photos || [],
+        supervisorNotes: detailedSupervisorNotes,
+      };
+
+      addReport(newDailyReport);
+    }
+
     addAuditLog({
       id: `AL-${Math.random().toString(36).substr(2, 9)}`,
       projectId: activity.projectId,
       userId: userRole === 'Manager' ? 'Current User' : 'Current User',
-      action: 'Progress Logged',
-      details: `Logged progress for Activity "${activity.name}" (${activity.id}): ${logProgressPercent}%, ${logProgressActualQty} ${activity.unit || 'units'} completed, ${logProgressActualHours} hrs logged.`,
+      action: 'Progress & Daily Report Logged',
+      details: `Logged progress for Activity "${activity.name}" (${activity.id}): ${finalProgress}%, ${finalActualQty} ${activity.unit || 'units'} completed, ${calculatedActualHours} hrs logged. Daily report posted to Reports.`,
       timestamp: new Date().toISOString()
     });
 
@@ -385,10 +534,38 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
     });
   };
 
+  const handleTagPhoto = (photoIndex: number, subtaskId: string) => {
+    const updatedTags = { ...(activity.photoTags || {}) };
+    if (subtaskId) {
+      updatedTags[photoIndex] = subtaskId;
+    } else {
+      delete updatedTags[photoIndex];
+    }
+    const updatedActivity = { ...activity, photoTags: updatedTags };
+    setActivity(updatedActivity);
+    if (onSave) {
+      onSave(updatedActivity);
+    }
+  };
+
   const handleDeletePhoto = (photoIndex: number) => {
     const updatedPhotos = [...(activity.photos || [])];
     updatedPhotos.splice(photoIndex, 1);
-    const updatedActivity = { ...activity, photos: updatedPhotos };
+    
+    // Shift photo tags
+    const updatedPhotoTags: Record<number, string> = {};
+    if (activity.photoTags) {
+      Object.entries(activity.photoTags).forEach(([idxStr, taskId]) => {
+        const idx = parseInt(idxStr, 10);
+        if (idx < photoIndex) {
+          updatedPhotoTags[idx] = taskId as string;
+        } else if (idx > photoIndex) {
+          updatedPhotoTags[idx - 1] = taskId as string;
+        }
+      });
+    }
+
+    const updatedActivity = { ...activity, photos: updatedPhotos, photoTags: updatedPhotoTags };
     setActivity(updatedActivity);
     if (previewPhoto === activity.photos?.[photoIndex]) {
       setPreviewPhoto(null);
@@ -445,9 +622,30 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
     let newStatus = activity.status;
 
     if (updatedSubtasks.length > 0) {
-      const done = updatedSubtasks.filter(s => s.status === 'Completed').length;
-      calculatedProgress = Math.round((done / updatedSubtasks.length) * 100);
-      newStatus = calculatedProgress === 100 ? 'Completed' : calculatedProgress > 0 ? 'In Progress' : activity.status;
+      let totalPercent = 0;
+      updatedSubtasks.forEach(s => {
+        const children = updatedSubtasks.filter(c => c.parentId === s.id);
+        if (children.length > 0) {
+          const childDone = children.filter(c => c.status === 'Completed').length;
+          totalPercent += Math.round((childDone / children.length) * 100);
+        } else if (s.targetQuantity && s.targetQuantity > 0) {
+          totalPercent += Math.min(100, Math.round(((s.completedQuantity || 0) / s.targetQuantity) * 100));
+        } else {
+          totalPercent += s.status === 'Completed' ? 100 : s.status === 'In Progress' ? 50 : 0;
+        }
+      });
+      calculatedProgress = Math.round(totalPercent / updatedSubtasks.length);
+      
+      const allSubtasksDone = updatedSubtasks.every(s => s.status === 'Completed');
+      const allMilestonesDone = updatedSubtasks.filter(s => s.isMilestone).every(s => s.status === 'Completed');
+
+      if (allSubtasksDone && allMilestonesDone && calculatedProgress === 100) {
+        newStatus = 'Completed';
+      } else if (calculatedProgress > 0) {
+        newStatus = 'In Progress';
+      } else {
+        newStatus = 'Not Started';
+      }
     }
 
     const updated = { 
@@ -464,8 +662,15 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
   };
 
   const handleSave = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const updated = {
+      ...activity,
+      updatedAt: today,
+      createdAt: activity.createdAt || activity.startDate || today
+    };
+    setActivity(updated);
     if (onSave) {
-      onSave(activity);
+      onSave(updated);
     }
     setIsEditing(false);
   };
@@ -502,6 +707,37 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
     setTimeout(() => setCopiedGps(false), 2000);
   };
 
+  const handleDownloadPDF = () => {
+    try {
+      const project = projects.find(p => p.id === activity.projectId);
+      const doc = new jsPDF("p", "pt", "a4");
+      doc.setFontSize(20);
+      doc.setTextColor(11, 95, 255);
+      doc.text(activity.name || "Activity Detail", 40, 40);
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 40, 60);
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`Project: ${projects.find(p => p.id === activity.projectId)?.name || activity.projectId}`, 40, 90);
+      doc.text(`Status: ${activity.status || "Not Started"}`, 40, 110);
+      doc.text(`Priority: ${activity.priority || "Medium"}`, 40, 130);
+      doc.text(`Assigned To: ${activity.assignedTo || "Unassigned"}`, 40, 150);
+      doc.text(`Location: ${activity.location || "N/A"}`, 40, 170);
+      doc.text(`Start Date: ${activity.startDate || "N/A"}`, 300, 90);
+      doc.text(`End Date: ${activity.finishDate || "N/A"}`, 300, 110);
+      doc.text(`Progress: ${activity.progress || 0}%`, 300, 130);
+      doc.text("Description:", 40, 200);
+      doc.setFontSize(10);
+      doc.setTextColor(50, 50, 50);
+      const splitDesc = doc.splitTextToSize(activity.description || "No description provided.", 500);
+      doc.text(splitDesc, 40, 220);
+      doc.save(`Activity_${activity.name?.replace(/\s+/g, "_")}_Detail.pdf`);
+    } catch (error) {
+      console.error("Failed to generate PDF:", error);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 w-full h-full p-4 sm:p-6 md:p-8">
       {/* Top Header Bar (MD3 Top App Bar style) */}
@@ -525,7 +761,7 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
         </div>
 
         <div className="flex items-center gap-2">
-          {!isEditing && (
+          {!isEditing && canEditActivities && (
             <Button 
               onClick={() => {
                 setLogProgressActualQty(activity.actualQuantity || 0);
@@ -533,6 +769,12 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
                 setLogProgressPercent(activity.progress || 0);
                 setLogProgressStatus(activity.status || 'Not Started');
                 setLogProgressNotes('');
+                setLogProgressDate(new Date().toISOString().split('T')[0]);
+                setLogProgressWeather('Sunny');
+                setLogProgressTemp('24°C');
+                setLogProgressSiteConditions('Site dry and fully accessible');
+                setLogProgressSubtasks(activity.subtasks ? JSON.parse(JSON.stringify(activity.subtasks)) : []);
+                setLogProgressPostReport(true);
                 setIsLogProgressModalOpen(true);
               }} 
               className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2 rounded-xl shadow-sm font-medium px-4"
@@ -541,25 +783,47 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
               <span>Log Progress</span>
             </Button>
           )}
-          {!isEditing && (
+          {!isEditing && canEditActivities && (
             <Button onClick={() => setIsAssignModalOpen(true)} className="bg-[#0B5FFF] hover:bg-blue-600 text-white gap-2 rounded-xl shadow-sm font-medium px-4">
               <UserCheck className="h-4 w-4" />
               <span>Assign</span>
             </Button>
           )}
-          {!isEditing && onDelete && (
+          {!isEditing && canEditActivities && onDuplicate && (
+            <Button 
+              variant="outline" 
+              onClick={() => onDuplicate(activity)} 
+              className="gap-2 rounded-xl text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+              title="Duplicate activity with resources and edit minor differences"
+            >
+              <Copy className="h-4 w-4" />
+              <span>Duplicate</span>
+            </Button>
+          )}
+          {!isEditing && canEditActivities && onDelete && (
             <Button variant="outline" onClick={() => onDelete(activity.id)} className="gap-2 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/50">
               <Trash2 className="h-4 w-4" />
               <span className="hidden sm:inline">Delete</span>
             </Button>
           )}
           {!isEditing && (
-            <Button variant="outline" onClick={() => window.print()} className="gap-2 rounded-xl">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsAuditModalOpen(true)} 
+              className="gap-2 rounded-xl text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              title="View full audit trail & changelog for this activity and its subtasks"
+            >
+              <History className="h-4 w-4 text-[#0B5FFF]" />
+              <span>Audit Trail</span>
+            </Button>
+          )}
+          {!isEditing && (
+            <Button variant="outline" onClick={() => setIsPrintModalOpen(true)} className="gap-2 rounded-xl">
               <FileText className="h-4 w-4" />
               <span>Print</span>
             </Button>
           )}
-          {isEditable && (
+          {isEditable && canEditActivities && (
             isEditing ? (
               <Button onClick={handleSave} className="bg-[#0B5FFF] hover:bg-blue-700 text-white gap-2 rounded-xl">
                 <Save className="h-4 w-4" />
@@ -696,6 +960,9 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
             subtasks={activity.subtasks || []} 
             onChange={handleSubtasksChange}
             readOnly={!isEditable}
+            activityId={activity.id}
+            activityName={activity.name}
+            projectId={activity.projectId}
           />
 
           {/* Location & Spatial Data Card */}
@@ -832,25 +1099,173 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
                 )}
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-500 block mb-1">Planned Start / Finish</label>
-                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
-                  <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{activity.startDate}</span>
-                  <span>→</span>
-                  <span>{activity.finishDate}</span>
+              <div className="sm:col-span-2 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Activity Dates & Timeline</label>
+                  {!isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCalendarModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-[#0B5FFF] dark:text-blue-400 text-xs font-semibold transition-colors border border-blue-200 dark:border-blue-800/50 shadow-sm"
+                    >
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span>View Planning Calendar</span>
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Date Created</span>
+                    {isEditing ? (
+                      <input
+                        type="date"
+                        value={activity.createdAt || activity.startDate || new Date().toISOString().split('T')[0]}
+                        onChange={(e) => handleInputChange('createdAt', e.target.value)}
+                        className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:outline-none focus:border-[#0B5FFF]"
+                      />
+                    ) : (
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                        <span>{activity.createdAt || activity.startDate || 'N/A'}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Date Started / To Start</span>
+                    {isEditing ? (
+                      <input
+                        type="date"
+                        value={activity.startDate}
+                        onChange={(e) => handleInputChange('startDate', e.target.value)}
+                        className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:outline-none focus:border-[#0B5FFF]"
+                      />
+                    ) : (
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        <span>{activity.startDate || 'N/A'}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Target Finish Date</span>
+                    {isEditing ? (
+                      <input
+                        type="date"
+                        value={activity.finishDate}
+                        onChange={(e) => handleInputChange('finishDate', e.target.value)}
+                        className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:outline-none focus:border-[#0B5FFF]"
+                      />
+                    ) : (
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                        <span>{activity.finishDate || 'N/A'}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Date Edited</span>
+                    {isEditing ? (
+                      <input
+                        type="date"
+                        value={activity.updatedAt || new Date().toISOString().split('T')[0]}
+                        onChange={(e) => handleInputChange('updatedAt', e.target.value)}
+                        className="w-full h-9 px-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:outline-none focus:border-[#0B5FFF]"
+                      />
+                    ) : (
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+                        <span>{activity.updatedAt || 'Not edited yet'}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">Planning Cycle</label>
+                  {isEditing ? (
+                    <select
+                      value={activity.planningType || 'Project Duration'}
+                      onChange={(e) => handleInputChange('planningType', e.target.value)}
+                      className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent text-sm appearance-none"
+                    >
+                      <option value="Daily">Daily Target</option>
+                      <option value="Weekly">Weekly Target</option>
+                      <option value="Monthly">Monthly Target</option>
+                      <option value="Project Duration">Overall Project Duration</option>
+                    </select>
+                  ) : (
+                    <p className="text-sm font-semibold">{activity.planningType || 'Project Duration'}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">Daily Target %</label>
+                  {isEditing ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={activity.dailyTargetPercentage || 0}
+                        onChange={(e) => handleInputChange('dailyTargetPercentage', Number(e.target.value))}
+                        className="w-24 h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent text-sm"
+                      />
+                      <span className="text-xs text-slate-500">% per day</span>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-semibold">{activity.dailyTargetPercentage || 0}% <span className="text-xs text-slate-400 font-normal">per day</span></p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">Daily Target Qty</label>
+                  {isEditing ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={activity.dailyTargetQuantity || 0}
+                        onChange={(e) => handleInputChange('dailyTargetQuantity', Number(e.target.value))}
+                        className="w-24 h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent text-sm"
+                      />
+                      <span className="text-xs text-slate-500">{activity.unit || 'units'}/day</span>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-semibold">{activity.dailyTargetQuantity || 0} {activity.unit || 'units'} <span className="text-xs text-slate-400 font-normal">per day</span></p>
+                  )}
                 </div>
               </div>
 
               <div>
                 <label className="text-xs font-semibold text-slate-500 block mb-1">Planned vs Actual Hours</label>
-                <div className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
-                  <Clock className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{activity.plannedHours} hrs planned</span>
-                  <span>/</span>
-                  <span className="font-bold text-[#0B5FFF]">{activity.actualHours} hrs actual</span>
-                </div>
+                {isEditing ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={activity.plannedHours || 0}
+                      onChange={(e) => handleInputChange('plannedHours', Number(e.target.value))}
+                      className="w-24 h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent text-sm"
+                    />
+                    <span className="text-xs text-slate-500">hrs planned</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <Clock className="h-3.5 w-3.5 text-slate-400" />
+                    <span>{activity.plannedHours || 0} hrs planned</span>
+                    <span>/</span>
+                    <span className="font-bold text-[#0B5FFF]">{calculatedActualHours} hrs actual</span>
+                  </div>
+                )}
               </div>
+
+              {/* Planning Schedule Calendar Modal */}
+              <PlanningCalendar
+                isOpen={isCalendarModalOpen}
+                onClose={() => setIsCalendarModalOpen(false)}
+                activity={activity}
+              />
 
             </CardContent>
           </Card>
@@ -1217,29 +1632,61 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
                           className="h-28 w-full object-cover group-hover:scale-105 transition-transform cursor-pointer" 
                           onClick={() => setPreviewPhoto(photo)}
                         />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none group-hover:pointer-events-auto">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPreviewPhoto(photo);
-                            }} 
-                            className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-lg backdrop-blur-sm transition-colors"
-                            title="View Photo"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeletePhoto(idx);
-                            }} 
-                            className="p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-lg backdrop-blur-sm transition-colors"
-                            title="Delete Photo"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                        
+                        {/* Tagged Task Badge (Visible when not hovering) */}
+                        {activity.photoTags?.[idx] && (
+                          <div className="absolute top-1.5 left-1.5 right-1.5 pointer-events-none group-hover:opacity-0 transition-opacity">
+                            <span className="inline-block bg-blue-600/90 backdrop-blur-sm shadow-sm text-[9px] text-white px-2 py-0.5 rounded-full font-medium truncate max-w-full border border-blue-500/30">
+                              <Tag className="h-2.5 w-2.5 inline-block mr-1 -mt-0.5 opacity-80"/>
+                              {activity.subtasks?.find(t => t.id === activity.photoTags![idx])?.title || 'Tagged Task'}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Hover Overlay */}
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1.5 pointer-events-none group-hover:pointer-events-auto">
+                          
+                          {/* Top: Tag Dropdown */}
+                          <div className="w-full">
+                            <select
+                              className="w-full text-[10px] py-1 px-1.5 rounded bg-white/20 hover:bg-white/30 text-white border-0 outline-none focus:ring-1 focus:ring-white/50 backdrop-blur-sm cursor-pointer appearance-none"
+                              value={activity.photoTags?.[idx] || ''}
+                              onChange={(e) => handleTagPhoto(idx, e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <option value="" className="text-slate-800">Assign to Task...</option>
+                              {activity.subtasks?.map(t => (
+                                <option key={t.id} value={t.id} className="text-slate-800">{t.title}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Bottom: Action Buttons */}
+                          <div className="flex justify-center gap-2 mb-2">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewPhoto(photo);
+                              }} 
+                              className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-lg backdrop-blur-sm transition-colors"
+                              title="View Photo"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletePhoto(idx);
+                              }} 
+                              className="p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-lg backdrop-blur-sm transition-colors"
+                              title="Delete Photo"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
-                        <span className="absolute bottom-1 right-1 bg-black/60 text-[9px] text-white px-1.5 py-0.5 rounded font-mono">
+
+                        <span className="absolute bottom-1 right-1 bg-black/60 text-[9px] text-white px-1.5 py-0.5 rounded font-mono pointer-events-none group-hover:opacity-0 transition-opacity">
                           #{idx + 1}
                         </span>
                       </div>
@@ -1390,6 +1837,69 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
                   )}
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Linked Documents Hub Card */}
+          <Card className="rounded-2xl border-slate-200 dark:border-slate-800">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-sm font-bold uppercase text-slate-500 tracking-wider flex items-center gap-2">
+                <FolderOpen className="h-4 w-4 text-[#0B5FFF]" />
+                Attached Documents ({((documents || []).filter(d => d.linkedActivityId === activity.id)).length})
+              </CardTitle>
+              <button
+                onClick={() => navigate('/documents')}
+                className="flex items-center gap-1 text-xs font-bold text-[#0B5FFF] hover:underline"
+              >
+                <Plus className="h-3.5 w-3.5" /> Hub Register
+              </button>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const linked = (documents || []).filter(d => d.linkedActivityId === activity.id);
+                if (linked.length === 0) {
+                  return (
+                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                      <p className="text-xs text-slate-400 italic mb-2">No technical documents or drawings attached to this activity.</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate('/documents')}
+                        className="text-xs h-7 rounded-lg gap-1.5 text-[#0B5FFF] border-[#0B5FFF]/30"
+                      >
+                        <LinkIcon className="h-3 w-3" /> Link from Documents Hub
+                      </Button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="space-y-2">
+                    {linked.map(doc => (
+                      <div
+                        key={doc.id}
+                        onClick={() => navigate('/documents')}
+                        className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 hover:border-[#0B5FFF] cursor-pointer transition-all flex items-center justify-between gap-2 group"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#0B5FFF] transition-colors">
+                            {doc.title}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+                            <span>{doc.fileName}</span>
+                            <span>•</span>
+                            <span className="font-bold text-slate-600 dark:text-slate-300">{doc.category}</span>
+                            <span>•</span>
+                            <span className="text-emerald-600 font-semibold">{doc.status}</span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/40 text-[#0B5FFF] shrink-0">
+                          {doc.version}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
 
@@ -2052,26 +2562,34 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
       {/* Log Progress Modal */}
       {isLogProgressModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700/50">
+          <div className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex justify-between items-center p-5 sm:p-6 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30">
               <div>
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  Log Activity Progress & Output
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                    Log Progress & Daily Report
+                  </span>
+                  <span className="text-xs text-slate-400">•</span>
+                  <span className="text-xs font-mono font-bold text-slate-500">{activity.id}</span>
+                </div>
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mt-1">
+                  {activity.name}
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">{activity.id} • {activity.name}</p>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsLogProgressModalOpen(false)} className="rounded-full">
+              <Button variant="ghost" size="icon" onClick={() => setIsLogProgressModalOpen(false)} className="rounded-full h-8 w-8 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                 <X className="h-5 w-5" />
               </Button>
             </div>
 
-            <form onSubmit={handleLogProgressSubmit} className="p-6 overflow-y-auto space-y-5">
-              {/* Progress Slider & Status */}
-              <div className="p-4 bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl space-y-3">
+            <form onSubmit={handleLogProgressSubmit} className="p-5 sm:p-6 overflow-y-auto space-y-6">
+              {/* Section 1: Progress & Status */}
+              <div className="p-4 bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/60 rounded-xl space-y-3.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-xs font-bold uppercase text-slate-700 dark:text-slate-200">Overall Activity Completion</label>
-                  <span className="text-lg font-black text-[#0B5FFF]">{logProgressPercent}%</span>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <TrendingUp className="h-4 w-4 text-[#0B5FFF]" /> Overall Activity Completion
+                  </label>
+                  <span className="text-xl font-black text-[#0B5FFF]">{logProgressPercent}%</span>
                 </div>
                 <input
                   type="range"
@@ -2087,12 +2605,12 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
                   }}
                   className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#0B5FFF]"
                 />
-                <div className="flex justify-between items-center pt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-blue-200/50 dark:border-blue-900/40">
                   <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Activity Status</label>
                   <select
                     value={logProgressStatus}
                     onChange={(e) => setLogProgressStatus(e.target.value as ActivityStatus)}
-                    className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-slate-100"
+                    className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-slate-100 shadow-sm"
                   >
                     <option value="Not Started">Not Started</option>
                     <option value="In Progress">In Progress</option>
@@ -2102,12 +2620,15 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
                 </div>
               </div>
 
-              {/* Quantities & Hours Logged */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Actual Quantity ({activity.unit || 'units'})
-                  </label>
+              {/* Section 2: Quantities & Cumulative Hours */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Actual Quantity Achieved
+                    </label>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">{activity.unit || 'units'}</span>
+                  </div>
                   <input
                     type="number"
                     min="0"
@@ -2122,44 +2643,326 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
                         else if (calcP > 0) setLogProgressStatus('In Progress');
                       }
                     }}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold text-[#0B5FFF]"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-[#0B5FFF]"
                   />
-                  <span className="text-[10px] text-slate-400 block">Target: {activity.targetQuantity} {activity.unit}</span>
+                  <div className="flex justify-between text-[11px] text-slate-400">
+                    <span>Target: {activity.targetQuantity || 0} {activity.unit || 'units'}</span>
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">
+                      {activity.targetQuantity ? `${Math.round((logProgressActualQty / activity.targetQuantity) * 100)}% of Target` : ''}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Actual Hours Logged</label>
+                <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Actual Hours Logged</label>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">Auto Tracked</span>
+                  </div>
                   <input
                     type="number"
-                    min="0"
-                    step="0.5"
-                    value={logProgressActualHours}
-                    onChange={(e) => setLogProgressActualHours(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white"
+                    readOnly
+                    value={calculatedActualHours}
+                    className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300 cursor-not-allowed"
                   />
-                  <span className="text-[10px] text-slate-400 block">Planned: {activity.plannedHours} hrs</span>
+                  <span className="text-[10px] text-slate-400 block">Accumulated from Labour site hours</span>
                 </div>
               </div>
 
-              {/* Progress Notes */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Daily Progress Notes / Remarks</label>
+              {/* Section 3: Environmental & Site Conditions */}
+              <div className="p-4 bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 rounded-xl space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                  <Sun className="h-4 w-4 text-amber-500" /> Site & Environmental Snapshot
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300 block mb-1">Report Date</label>
+                    <input
+                      type="date"
+                      value={logProgressDate}
+                      onChange={(e) => setLogProgressDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300 block mb-1">Weather</label>
+                    <select
+                      value={logProgressWeather}
+                      onChange={(e) => setLogProgressWeather(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-200"
+                    >
+                      <option value="Sunny">☀️ Sunny</option>
+                      <option value="Overcast">☁️ Overcast</option>
+                      <option value="Light Rain">🌧️ Light Rain</option>
+                      <option value="Heavy Rain">⛈️ Heavy Rain</option>
+                      <option value="Windy">💨 Windy</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300 block mb-1">Temperature</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 24°C"
+                      value={logProgressTemp}
+                      onChange={(e) => setLogProgressTemp(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300 block mb-1">Site / Ground Conditions</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Dry, clear access, working areas active"
+                    value={logProgressSiteConditions}
+                    onChange={(e) => setLogProgressSiteConditions(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-200"
+                  />
+                </div>
+              </div>
+
+              {/* Section 4: Subtasks Snapshot (Interactive Check-off) */}
+              {logProgressSubtasks && logProgressSubtasks.length > 0 && (
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <CheckSquare className="h-4 w-4 text-emerald-600" /> Subtask Checklist ({logProgressSubtasks.filter(s => s.status === 'Completed').length}/{logProgressSubtasks.length} Completed)
+                    </label>
+                    <span className="text-[10px] text-slate-400">Click to update status</span>
+                  </div>
+
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {logProgressSubtasks.map((subtask, idx) => (
+                      <div
+                        key={subtask.id || idx}
+                        className="flex items-center justify-between p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0 pr-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...logProgressSubtasks];
+                              const nextStatus = subtask.status === 'Completed' ? 'Not Started' : subtask.status === 'Not Started' ? 'In Progress' : 'Completed';
+                              updated[idx] = { ...subtask, status: nextStatus };
+                              setLogProgressSubtasks(updated);
+                            }}
+                            className={`h-5 w-5 rounded flex items-center justify-center transition-colors ${
+                              subtask.status === 'Completed'
+                                ? 'bg-emerald-600 text-white'
+                                : subtask.status === 'In Progress'
+                                ? 'bg-blue-600 text-white'
+                                : 'border border-slate-300 dark:border-slate-600 text-transparent'
+                            }`}
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </button>
+                          <div className="truncate">
+                            <span className={`font-semibold ${subtask.status === 'Completed' ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                              #{idx + 1} {subtask.title}
+                            </span>
+                            {subtask.isMilestone && (
+                              <span className="ml-1.5 text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 px-1.5 py-0.2 rounded font-bold">
+                                Milestone
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <select
+                          value={subtask.status}
+                          onChange={(e) => {
+                            const updated = [...logProgressSubtasks];
+                            updated[idx] = { ...subtask, status: e.target.value as any };
+                            setLogProgressSubtasks(updated);
+                          }}
+                          className="px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[11px] font-medium text-slate-700 dark:text-slate-300"
+                        >
+                          <option value="Not Started">Not Started</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Completed">Completed</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Section 5: Allocated Resources Summary */}
+              <div className="p-3 bg-slate-50/80 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-700/80 rounded-xl">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Allocated Task Resources</p>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 rounded-lg border border-blue-200 dark:border-blue-900/50 font-medium">
+                    <Users className="h-3.5 w-3.5" /> {(activity.assignedLabour || []).length} Workers Assigned
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 rounded-lg border border-amber-200 dark:border-amber-900/50 font-medium">
+                    <Truck className="h-3.5 w-3.5" /> {(activity.assignedEquipment || []).length} Machinery Assigned
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 rounded-lg border border-purple-200 dark:border-purple-900/50 font-medium">
+                    <Package className="h-3.5 w-3.5" /> {(activity.assignedMaterials || []).length} Materials Assigned
+                  </span>
+                </div>
+              </div>
+
+              {/* Section 6: Daily Field Remarks */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Supervisor Field Remarks & Accomplishments
+                </label>
                 <textarea
                   rows={3}
-                  placeholder="Describe work completed today, obstacles encountered, or site conditions..."
+                  placeholder="Describe work completed today, milestones reached, obstacles encountered, site observations..."
                   value={logProgressNotes}
                   onChange={(e) => setLogProgressNotes(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-[#0B5FFF]"
                 />
               </div>
 
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-700/60 flex justify-end gap-3">
-                <Button type="button" variant="ghost" onClick={() => setIsLogProgressModalOpen(false)}>Cancel</Button>
-                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium gap-1.5 rounded-xl">
-                  <Save className="h-4 w-4" /> Save Progress Log
+              {/* Report Auto-Post Notice */}
+              <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-xl flex items-start gap-2.5">
+                <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                <div className="text-xs text-emerald-900 dark:text-emerald-200">
+                  <span className="font-bold block">Automatic Daily Report Generation:</span>
+                  Saving this progress log will instantly capture the activity state, subtask completion, resources, and site conditions, posting a comprehensive Daily Report into the <strong>Reports & PDF</strong> module.
+                </div>
+              </div>
+
+              {/* Form Action Buttons */}
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-700/60 flex flex-col sm:flex-row justify-end gap-3">
+                <Button type="button" variant="ghost" onClick={() => setIsLogProgressModalOpen(false)} className="rounded-xl">
+                  Cancel
+                </Button>
+                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium gap-2 rounded-xl shadow-md px-5">
+                  <Save className="h-4 w-4" /> Save Progress & Post Daily Report
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Record Activity Modal */}
+      <PrintPreview
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        title={activity.name || "Activity Detail"}
+        onDownloadPdf={handleDownloadPDF}
+      >
+        <div className="p-8 font-sans">
+          <div className="border-b-2 border-[#0B5FFF] pb-6 mb-8 flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-black text-slate-900 mb-2">{activity.name}</h1>
+              <p className="text-sm text-slate-500 font-medium">Activity Report / Task Allocation Summary</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">Generated</p>
+              <p className="text-sm font-bold text-slate-800">{new Date().toLocaleDateString()}</p>
+              <p className="text-sm text-slate-500">{new Date().toLocaleTimeString()}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-8 mb-10">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Project & Status</h3>
+              <div className="space-y-2">
+                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">Project:</span> <span className="font-semibold text-slate-900">{projects.find(p => p.id === activity.projectId)?.name || activity.projectId}</span></p>
+                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">Status:</span> <span className="font-semibold text-slate-900">{activity.status || "Not Started"}</span></p>
+                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">Priority:</span> <span className="font-semibold text-slate-900">{activity.priority || "Medium"}</span></p>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Schedule & Location</h3>
+              <div className="space-y-2">
+                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">Start Date:</span> <span className="font-semibold text-slate-900">{activity.startDate || "N/A"}</span></p>
+                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">End Date:</span> <span className="font-semibold text-slate-900">{activity.finishDate || "N/A"}</span></p>
+                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">Location:</span> <span className="font-semibold text-slate-900">{activity.location || "N/A"}</span></p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-10">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 border-b border-slate-100 pb-2">Description / Scope of Work</h3>
+            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+              {activity.description || "No description provided."}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-8">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 border-b border-slate-100 pb-2">Assigned Personnel</h3>
+              {activity.assignedLabour && activity.assignedLabour.length > 0 ? (
+                <ul className="space-y-2">
+                  {activity.assignedLabour.map((l, i) => (
+                    <li key={i} className="text-sm flex justify-between items-center py-1 border-b border-slate-50 border-dashed">
+                      <span className="font-medium text-slate-800">{l.name}</span>
+                      <span className="text-xs text-slate-500">{l.role}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-400 italic">No personnel assigned.</p>
+              )}
+            </div>
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 border-b border-slate-100 pb-2">Assigned Equipment</h3>
+              {activity.assignedEquipment && activity.assignedEquipment.length > 0 ? (
+                <ul className="space-y-2">
+                  {activity.assignedEquipment.map((e, i) => (
+                    <li key={i} className="text-sm flex justify-between items-center py-1 border-b border-slate-50 border-dashed">
+                      <span className="font-medium text-slate-800">{e.name}</span>
+                      <span className="text-xs text-slate-500">{e.operator || "Unassigned"}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-400 italic">No equipment assigned.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-12 bg-slate-50 rounded-xl p-6 border border-slate-100">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Task Completion</h3>
+              <span className="text-lg font-black text-[#0B5FFF]">{activity.progress || 0}%</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-2">
+              <div className="bg-[#0B5FFF] h-2 rounded-full" style={{ width: `${activity.progress || 0}%` }}></div>
+            </div>
+          </div>
+        </div>
+      </PrintPreview>
+
+      {isRecordActivityModalOpen && (
+        <RecordActivityForTaskModal
+          activity={activity}
+          onClose={() => setIsRecordActivityModalOpen(false)}
+          onActivityUpdated={(updated) => {
+            setActivity(updated);
+            if (onSave) {
+              onSave(updated);
+            } else {
+              updateActivity(updated);
+            }
+          }}
+        />
+      )}
+
+      {/* Activity Specific Audit Trail Modal */}
+      {isAuditModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+          onClick={() => setIsAuditModalOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-900 rounded-3xl max-w-5xl w-full max-h-[92vh] overflow-y-auto p-4 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <ActivityAuditScreen
+              activityId={activity.id}
+              projectId={activity.projectId}
+              onBack={() => setIsAuditModalOpen(false)}
+            />
           </div>
         </div>
       )}

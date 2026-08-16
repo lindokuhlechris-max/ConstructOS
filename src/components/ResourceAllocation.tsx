@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from './ui';
-import { ResourceAllocation } from '../types';
+import { ResourceAllocation, canManage } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { Package, Truck, Plus, CheckCircle, Trash2 } from 'lucide-react';
 
@@ -9,16 +9,21 @@ interface ResourceAllocationViewProps {
 }
 
 export function ResourceAllocationView({ projectId }: ResourceAllocationViewProps) {
-  const { allocations, addAllocation, updateAllocation, deleteAllocation, userRole } = useAppContext();
+  const { allocations, addAllocation, updateAllocation, deleteAllocation, userRole, equipment, materials, activities, updateActivity } = useAppContext();
   
   const projectAllocations = useMemo(() => 
-    allocations.filter(a => a.projectId === projectId),
+    allocations.filter(a => a?.projectId === projectId),
   [allocations, projectId]);
+
+  const projectActivities = useMemo(() => 
+    activities.filter(a => a?.projectId === projectId),
+  [activities, projectId]);
 
   const [isAdding, setIsAdding] = useState(false);
   const [formData, setFormData] = useState<Partial<ResourceAllocation>>({
     resourceType: 'Equipment',
     name: '',
+    activityId: '',
     quantity: 1,
     unit: '',
     status: 'Allocated',
@@ -32,9 +37,16 @@ export function ResourceAllocationView({ projectId }: ResourceAllocationViewProp
     e.preventDefault();
     if (!formData.name || !formData.quantity || !formData.status || !formData.assignedDate) return;
 
-    addAllocation({
+    const matchedEq = equipment.find(eq => eq.name === formData.name);
+    const matchedMat = materials.find(m => m.name === formData.name);
+    const resourceId = matchedEq?.id || matchedMat?.id;
+
+    const newAlloc: ResourceAllocation = {
       id: `RES-${Date.now()}`,
       projectId,
+      activityId: formData?.activityId || undefined,
+      resourceId,
+      equipmentId: formData.resourceType === 'Equipment' ? resourceId : undefined,
       resourceType: formData.resourceType as 'Material' | 'Equipment',
       name: formData.name,
       quantity: Number(formData.quantity),
@@ -44,12 +56,37 @@ export function ResourceAllocationView({ projectId }: ResourceAllocationViewProp
       expectedReturnDate: formData.expectedReturnDate,
       assignedTo: formData.assignedTo,
       notes: formData.notes
-    });
+    };
+
+    addAllocation(newAlloc);
+
+    // Sync to target activity if selected
+    if (formData?.activityId) {
+      const targetAct = activities.find(a => a?.id === formData?.activityId);
+      if (targetAct) {
+        if (formData.resourceType === 'Equipment') {
+          const updatedEq = [
+            {
+              id: `TEA-${newAlloc.id}`,
+              equipmentId: resourceId || `EQ-${Date.now()}`,
+              name: formData.name,
+              operator: formData.assignedTo || 'Assigned Operator',
+              startDate: formData.assignedDate,
+              endDate: formData.expectedReturnDate || undefined,
+              notes: formData.notes
+            },
+            ...(targetAct.assignedEquipment || [])
+          ];
+          updateActivity({ ...targetAct, assignedEquipment: updatedEq });
+        }
+      }
+    }
 
     setIsAdding(false);
     setFormData({
       resourceType: 'Equipment',
       name: '',
+      activityId: '',
       quantity: 1,
       unit: '',
       status: 'Allocated',
@@ -77,7 +114,7 @@ export function ResourceAllocationView({ projectId }: ResourceAllocationViewProp
           <Package className="h-5 w-5 text-[#0B5FFF]" />
           Resource Allocation
         </CardTitle>
-        {userRole === 'Manager' && !isAdding && (
+        {canManage(userRole) && !isAdding && (
           <Button onClick={() => setIsAdding(true)} size="sm" className="h-8 text-xs gap-1.5 bg-[#0B5FFF]">
             <Plus className="h-3.5 w-3.5" /> Assign Resource
           </Button>
@@ -103,14 +140,38 @@ export function ResourceAllocationView({ projectId }: ResourceAllocationViewProp
               
               <div>
                 <label className="text-xs font-semibold text-slate-500 block mb-1">Name / Description</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Excavator, Cement"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B5FFF]"
-                />
+                {formData.resourceType === 'Equipment' ? (
+                  <select
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B5FFF]"
+                  >
+                    <option value="">Select Equipment...</option>
+                    {equipment.map(eq => (
+                      <option key={eq.id} value={eq.name}>{eq.name} - {eq.type}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <select
+                    required
+                    value={formData.name}
+                    onChange={(e) => {
+                      const selectedMat = materials.find(m => m.name === e.target.value);
+                      setFormData({ 
+                        ...formData, 
+                        name: e.target.value,
+                        unit: selectedMat?.unit || formData.unit 
+                      });
+                    }}
+                    className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B5FFF]"
+                  >
+                    <option value="">Select Material...</option>
+                    {materials.map(mat => (
+                      <option key={mat.id} value={mat.name}>{mat.name} ({mat.category})</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="flex gap-2">
@@ -140,10 +201,32 @@ export function ResourceAllocationView({ projectId }: ResourceAllocationViewProp
               </div>
               
               <div>
-                <label className="text-xs font-semibold text-slate-500 block mb-1">Assigned To (Task/Team)</label>
+                <label className="text-xs font-semibold text-slate-500 block mb-1">Assign to Project Task</label>
+                <select
+                  value={formData?.activityId}
+                  onChange={(e) => {
+                    const selectedActId = e.target.value;
+                    const actObj = projectActivities.find(a => a?.id === selectedActId);
+                    setFormData({ 
+                      ...formData, 
+                      activityId: selectedActId,
+                      assignedTo: actObj ? actObj.name : formData.assignedTo
+                    });
+                  }}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B5FFF]"
+                >
+                  <option value="">General Project Allocation (Site Pool)</option>
+                  {projectActivities.map(act => (
+                    <option key={act.id} value={act.id}>{act.name} ({act.workPackage || 'Task'})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-1">Designated Operator / Crew Lead</label>
                 <input
                   type="text"
-                  placeholder="e.g. Earthworks"
+                  placeholder="e.g. John Doe, Civil Team A"
                   value={formData.assignedTo}
                   onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
                   className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B5FFF]"
@@ -220,7 +303,7 @@ export function ResourceAllocationView({ projectId }: ResourceAllocationViewProp
                 </div>
               </div>
               
-              {userRole === 'Manager' && (
+              {canManage(userRole) && (
                 <div className="flex items-center gap-2 sm:self-center self-end border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100 dark:border-slate-800 w-full sm:w-auto justify-end">
                   {allocation.status !== 'Returned' && allocation.status !== 'Depleted' && (
                      <Button 

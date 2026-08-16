@@ -8,3 +8,7 @@ coverage/
 !.env.example
 *.exe
 *.zip
+fix_*.js
+patch_*.js
+selector_test.js
+test-pdf.ts

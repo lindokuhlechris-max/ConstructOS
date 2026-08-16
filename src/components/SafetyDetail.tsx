@@ -24,7 +24,7 @@ import {
   Building
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { SafetyIncident, CorrectiveAction } from '../types';
+import { SafetyIncident, CorrectiveAction, canUserEditSection } from '../types';
 
 interface SafetyDetailProps {
   incident: SafetyIncident;
@@ -34,7 +34,8 @@ interface SafetyDetailProps {
 }
 
 export function SafetyDetail({ incident, onSave, onClose, onDelete }: SafetyDetailProps) {
-  const { userRole, employees } = useAppContext();
+  const { userRole, employees, currentUserProfile } = useAppContext();
+  const canEditSafety = canUserEditSection(currentUserProfile, 'safety');
 
   // Active Tab: 'overview' | 'actions' | 'evidence' | 'investigation'
   const [activeTab, setActiveTab] = useState<'overview' | 'actions' | 'evidence' | 'investigation'>('overview');
@@ -202,7 +203,7 @@ export function SafetyDetail({ incident, onSave, onClose, onDelete }: SafetyDeta
 
         {/* Top Header Actions */}
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-          {incident.status !== 'Resolved' && (
+          {canEditSafety && incident.status !== 'Resolved' && (
             <button
               onClick={() => onSave({ ...incident, status: 'Resolved' })}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors shadow-sm"
@@ -211,19 +212,23 @@ export function SafetyDetail({ incident, onSave, onClose, onDelete }: SafetyDeta
             </button>
           )}
 
-          <button
-            onClick={() => { setCapaForm({ action: '', assignedTo: employees[0] ? `${employees[0].firstName} ${employees[0].lastName}` : 'Site Supervisor', dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], status: 'Pending' }); setEditingAction(null); setShowCAPAModal(true); }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition-colors shadow-sm"
-          >
-            <Plus className="h-4 w-4" /> Log CAPA Action
-          </button>
+          {canEditSafety && (
+            <button
+              onClick={() => { setCapaForm({ action: '', assignedTo: employees[0] ? `${employees[0].firstName} ${employees[0].lastName}` : 'Site Supervisor', dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], status: 'Pending' }); setEditingAction(null); setShowCAPAModal(true); }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition-colors shadow-sm"
+            >
+              <Plus className="h-4 w-4" /> Log CAPA Action
+            </button>
+          )}
 
-          <button
-            onClick={() => { setEditForm({ ...incident }); setShowEditModal(true); }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
-          >
-            <Edit3 className="h-4 w-4 text-[#0B5FFF]" /> Edit Incident
-          </button>
+          {canEditSafety && (
+            <button
+              onClick={() => { setEditForm({ ...incident }); setShowEditModal(true); }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
+            >
+              <Edit3 className="h-4 w-4 text-[#0B5FFF]" /> Edit Incident
+            </button>
+          )}
 
           <button
             onClick={handlePrint}
@@ -232,7 +237,7 @@ export function SafetyDetail({ incident, onSave, onClose, onDelete }: SafetyDeta
             <Printer className="h-4 w-4 text-slate-500" /> Print Report
           </button>
 
-          {onDelete && (
+          {canEditSafety && onDelete && (
             <button
               onClick={() => onDelete(incident.id)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 text-xs font-semibold transition-colors"
@@ -425,15 +430,7 @@ export function SafetyDetail({ incident, onSave, onClose, onDelete }: SafetyDeta
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                  {(incident.correctiveActions || [
-                    {
-                      id: 'CAPA-101',
-                      action: 'Clear cables and install warning barriers near trench 4 edge',
-                      assignedTo: 'Current User',
-                      dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                      status: 'Pending'
-                    }
-                  ]).map(act => (
+                  {(incident.correctiveActions || []).map(act => (
                     <tr key={act.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="px-4 py-3 font-mono text-xs font-bold text-purple-600">{act.id}</td>
                       <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">{act.action}</td>
@@ -491,21 +488,26 @@ export function SafetyDetail({ incident, onSave, onClose, onDelete }: SafetyDeta
           </CardHeader>
           <CardContent className="p-6">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {(incident.photos || [
-                'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b2?w=600&auto=format&fit=crop&q=60',
-                'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&auto=format&fit=crop&q=60'
-              ]).map((url, idx) => (
-                <div 
-                  key={idx}
-                  onClick={() => setSelectedPhoto(url)}
-                  className="group relative h-40 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 cursor-pointer bg-slate-100 dark:bg-slate-800 shadow-sm"
-                >
-                  <img src={url} alt={`Incident Evidence ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                  <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white gap-2 font-bold text-xs">
-                    <Eye className="h-5 w-5" /> View Photo
-                  </div>
+              {(incident.photos || []).length === 0 ? (
+                <div className="col-span-full p-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/40">
+                  <Camera className="h-8 w-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">No incident evidence photos attached yet.</p>
+                  <p className="text-[11px] text-slate-400 mt-1">Upload site photos or inspection snapshots using the upload button above.</p>
                 </div>
-              ))}
+              ) : (
+                (incident.photos || []).map((url, idx) => (
+                  <div 
+                    key={idx}
+                    onClick={() => setSelectedPhoto(url)}
+                    className="group relative h-40 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 cursor-pointer bg-slate-100 dark:bg-slate-800 shadow-sm"
+                  >
+                    <img src={url} alt={`Incident Evidence ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white gap-2 font-bold text-xs">
+                      <Eye className="h-5 w-5" /> View Photo
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>

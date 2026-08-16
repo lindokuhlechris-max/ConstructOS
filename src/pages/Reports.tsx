@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '../components/ui';
 import { DailyReport } from '../types';
 import { ReportDetail } from '../components/ReportDetail';
 import { DailyLogForm } from '../components/DailyLogForm';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
+import { DailyPdfSummaryModal } from '../components/DailyPdfSummaryModal';
+import { ProjectSummaryPdfModal } from '../components/ProjectSummaryPdfModal';
 import {
   FileBarChart,
   Plus,
@@ -30,14 +32,34 @@ import {
   Users,
   Wrench,
   TriangleAlert,
+  Clock,
+  MapPin,
+  Thermometer,
+  Droplets,
+  Sunrise,
+  Sunset,
+  Download,
+  Printer,
+  FileSpreadsheet,
+  Mic
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { exportReportsToCSV, exportFullProjectCSV } from '../lib/csvExport';
+import { exportSingleReportPDF, exportMultipleReportsPDF } from '../lib/pdfReportExport';
+import { RecordActivityModal } from '../components/RecordActivityModal';
+import { WeatherWidget } from '../components/WeatherWidget';
 
 export function Reports() {
-  const { reports, projects, addReport, updateReport, deleteReport, addAuditLog, userRole } = useAppContext();
+  const { reports, projects, activities, addReport, updateReport, deleteReport, addAuditLog, userRole } = useAppContext();
+
+
+  
 
   const [selectedReport, setSelectedReport] = useState<DailyReport | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [isProjectSummaryPdfModalOpen, setIsProjectSummaryPdfModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'workers' | 'incidents'>('date-desc');
@@ -154,17 +176,80 @@ export function Reports() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
             <FileBarChart className="h-6 w-6 text-blue-500" /> Daily Site Reports
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">
             Create, review, and manage daily construction site reports.
           </p>
         </div>
-        <Button onClick={() => setIsCreating(true)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
-          <Plus className="h-4 w-4" /> New Report
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button 
+            variant="outline"
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 border-slate-300 dark:border-slate-700 hover:bg-slate-100 text-slate-700 dark:text-slate-300 font-semibold"
+            title="Print current report view using browser print"
+          >
+            <Printer className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+            Print Reports
+          </Button>
+
+          <Button 
+            variant="outline"
+            onClick={() => exportMultipleReportsPDF(filteredAndSorted, projects, filterProject === 'all' ? undefined : getProjectName(filterProject))}
+            className="flex items-center gap-1.5 border-purple-200 bg-purple-50/60 hover:bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:border-purple-800 dark:text-purple-300 font-semibold"
+            title="Export filtered daily reports as a PDF document"
+          >
+            <Download className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+            Export Reports PDF
+          </Button>
+
+          <Button 
+            variant="outline"
+            onClick={() => exportReportsToCSV(filteredAndSorted, projects)}
+            className="flex items-center gap-1.5 border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300 font-semibold"
+            title="Export daily site reports to offline CSV file"
+          >
+            <FileSpreadsheet
+className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            Export Reports CSV
+          </Button>
+
+          <Button 
+            variant="outline"
+            onClick={() => exportFullProjectCSV(activities, reports, projects, filterProject === 'all' ? undefined : filterProject)}
+            className="flex items-center gap-1.5 border-slate-200 hover:bg-slate-100 text-slate-700 dark:border-slate-800 dark:text-slate-300 font-semibold"
+            title="Export combined activities and reports dataset to CSV"
+          >
+            <FileSpreadsheet
+className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            Export Full Dataset CSV
+          </Button>
+
+          <Button 
+            variant="outline"
+            onClick={() => setIsProjectSummaryPdfModalOpen(true)}
+            className="flex items-center gap-1.5 border-blue-200 bg-blue-50/60 hover:bg-blue-100 text-[#0B5FFF] dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300 font-semibold"
+          >
+            <FileText className="h-4 w-4" />
+            Project Summary PDF
+          </Button>
+
+          <Button onClick={() => setIsPdfModalOpen(true)} className="flex items-center gap-1.5 border-slate-200 hover:bg-slate-100 text-slate-700 dark:border-slate-800 dark:text-slate-300 font-semibold" variant="outline">
+            <Download className="h-4 w-4" />
+            Daily Weather PDF
+          </Button>
+
+          <Button onClick={() => setIsCreating(true)} className="flex items-center gap-1.5 bg-[#0B5FFF] hover:bg-blue-700 text-white font-semibold">
+            <Plus className="h-4 w-4" /> New Report
+          </Button>
+        </div>
       </div>
+
+
+      <div className="flex flex-col-reverse lg:flex-row gap-6 flex-1 min-h-0">
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col gap-6 min-w-0">
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -335,12 +420,25 @@ export function Reports() {
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
                   <span className="text-[10px] text-slate-400 font-mono">{report.id}</span>
-                  <button
-                    onClick={e => { e.stopPropagation(); setDeletingReportId(report.id); }}
-                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        exportSingleReportPDF(report, getProjectName(report.projectId));
+                      }}
+                      className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-600 transition-colors"
+                      title="Export Daily Report as PDF"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); setDeletingReportId(report.id); }}
+                      className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
+                      title="Delete Report"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -381,8 +479,19 @@ export function Reports() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      exportSingleReportPDF(report, getProjectName(report.projectId));
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-600 transition-colors"
+                    title="Export Daily Report as PDF"
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                  <button
                     onClick={e => { e.stopPropagation(); setDeletingReportId(report.id); }}
                     className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
+                    title="Delete Report"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -404,6 +513,72 @@ export function Reports() {
         onCancel={() => setDeletingReportId(null)}
         confirmLabel="Delete Report"
       />
+
+      {/* PDF Summary & Email Export Modal */}
+      <DailyPdfSummaryModal
+        isOpen={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
+      />
+
+
+        </div>
+{/* Right Panel */}
+        <div className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
+          <WeatherWidget />
+          
+          <Card className="border-slate-200 dark:border-slate-800 shadow-sm flex-1">
+             <CardHeader className="pb-2 border-b border-slate-100 dark:border-slate-800">
+               <CardTitle className="text-sm flex items-center gap-2">
+                 <MapPin className="h-4 w-4 text-emerald-500" />
+                 Active Sites
+               </CardTitle>
+             </CardHeader>
+             <CardContent className="p-0">
+               <div className="flex flex-col">
+                 {projects.filter(p => p.status === 'In Progress').map((project, i) => {
+                   const colorClass = ['bg-emerald-500', 'bg-blue-500', 'bg-amber-500', 'bg-purple-500', 'bg-pink-500'][i % 5];
+                   const reportCount = reports.filter(r => r.projectId === project.id).length;
+                   return (
+                     <div key={project.id} className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer">
+                       <div className="flex items-center gap-3">
+                         <div className={`w-2 h-2 rounded-full ${colorClass}`}></div>
+                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[150px]" title={project.name}>{project.name}</span>
+                       </div>
+                       <span className="text-xs text-slate-400 font-mono">{reportCount} Rep{reportCount !== 1 && 's'}</span>
+                     </div>
+                   );
+                 })}
+                 {projects.filter(p => p.status === 'In Progress').length === 0 && (
+                   <div className="p-4 text-center text-sm text-slate-500">No active sites found.</div>
+                 )}
+               </div>
+             </CardContent>
+          </Card>
+        </div>
+        
+        
+      </div>
+      {/* Project Summary PDF Modal */}
+      <ProjectSummaryPdfModal
+        isOpen={isProjectSummaryPdfModalOpen}
+        onClose={() => setIsProjectSummaryPdfModalOpen(false)}
+        defaultProjectId={filterProject !== 'all' ? filterProject : undefined}
+      />
+
+      {isRecordingModalOpen && (
+        <RecordActivityModal
+          projectId={filterProject !== 'all' ? filterProject : (projects[0]?.id || '')}
+          onClose={() => setIsRecordingModalOpen(false)}
+          onReportGenerated={(report) => {
+            const newReport: DailyReport = {
+              id: `REP-${Date.now()}`,
+              ...report
+            } as DailyReport;
+            addReport(newReport);
+            setSelectedReport(newReport);
+          }}
+        />
+      )}
     </div>
   );
 }

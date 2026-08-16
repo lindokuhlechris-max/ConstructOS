@@ -1,19 +1,8 @@
 import React, { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../ui';
 import { AlertTriangle, Plus, ShieldCheck, CheckCircle2, ArrowLeft, HeartPulse, FileText } from 'lucide-react';
-
-interface SafetyIncident {
-  id: string;
-  type: 'Near Miss' | 'First Aid' | 'Property Damage' | 'Lost Time Injury';
-  description: string;
-  location: string;
-  reporter: string;
-  date: string;
-  severity: 'Low' | 'Medium' | 'High' | 'Critical';
-  status: 'Open' | 'Investigating' | 'Closed';
-}
-
 import { useAppContext } from '../../context/AppContext';
+import { SafetyIncident } from '../../types';
 
 interface SafetyModuleProps {
   onBack: () => void;
@@ -26,9 +15,9 @@ export function SafetyModule({ onBack }: SafetyModuleProps) {
   const [formData, setFormData] = useState<{
     description: string;
     location: string;
-    reporter: string;
+    reportedBy: string;
     type: SafetyIncident['type'];
-    severity: SafetyIncident['severity'];
+    priority: SafetyIncident['priority'];
   }>(() => {
     const draft = localStorage.getItem('safetyDraft');
     if (draft) {
@@ -41,9 +30,9 @@ export function SafetyModule({ onBack }: SafetyModuleProps) {
     return {
       description: '',
       location: '',
-      reporter: '',
+      reportedBy: '',
       type: 'Near Miss',
-      severity: 'Low',
+      priority: 'Low',
     };
   });
 
@@ -57,12 +46,14 @@ export function SafetyModule({ onBack }: SafetyModuleProps) {
 
     const newItem: SafetyIncident = {
       id: `HSE-${Math.floor(300 + Math.random() * 700)}`,
+      projectId: projects[0]?.id || 'PRJ-001',
+      title: formData.description.length > 40 ? formData.description.slice(0, 40) + '...' : formData.description,
       type: formData.type,
       description: formData.description,
       location: formData.location || 'General Site',
-      reporter: formData.reporter || 'Safety Officer',
-      date: new Date().toISOString().split('T')[0],
-      severity: formData.severity,
+      reportedBy: formData.reportedBy || 'Safety Officer',
+      dateReported: new Date().toISOString().split('T')[0],
+      priority: formData.priority,
       status: 'Open',
     };
 
@@ -71,9 +62,9 @@ export function SafetyModule({ onBack }: SafetyModuleProps) {
     setFormData({
       description: '',
       location: '',
-      reporter: '',
+      reportedBy: '',
       type: 'Near Miss',
-      severity: 'Low',
+      priority: 'Low',
     });
     localStorage.removeItem('safetyDraft');
   };
@@ -119,8 +110,8 @@ export function SafetyModule({ onBack }: SafetyModuleProps) {
               </select>
 
               <select
-                value={formData.severity}
-                onChange={e => setFormData({ ...formData, severity: e.target.value as SafetyIncident['severity'] })}
+                value={formData.priority}
+                onChange={e => setFormData({ ...formData, priority: e.target.value as SafetyIncident['priority'] })}
                 className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm"
               >
                 <option value="Low">Severity: Low</option>
@@ -140,8 +131,8 @@ export function SafetyModule({ onBack }: SafetyModuleProps) {
               <input
                 type="text"
                 placeholder="Reporter Name / ID"
-                value={formData.reporter}
-                onChange={e => setFormData({ ...formData, reporter: e.target.value })}
+                value={formData.reportedBy}
+                onChange={e => setFormData({ ...formData, reportedBy: e.target.value })}
                 className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm"
               />
             </div>
@@ -216,17 +207,17 @@ export function SafetyModule({ onBack }: SafetyModuleProps) {
                   {item.type}
                 </Badge>
                 <Badge className={
-                  item.severity === 'Critical' ? 'bg-rose-500 text-white' :
-                  item.severity === 'High' ? 'bg-orange-500 text-white' :
-                  item.severity === 'Medium' ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700'
+                  item.priority === 'Critical' ? 'bg-rose-500 text-white' :
+                  item.priority === 'High' ? 'bg-orange-500 text-white' :
+                  item.priority === 'Medium' ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700'
                 }>
-                  {item.severity} Severity
+                  {item.priority} Severity
                 </Badge>
               </div>
 
               <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
                 item.status === 'Closed' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40' :
-                item.status === 'Investigating' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40' :
+                item.status === 'Under Investigation' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40' :
                 'bg-rose-100 text-rose-800 dark:bg-rose-950/40'
               }`}>
                 {item.status}
@@ -238,8 +229,8 @@ export function SafetyModule({ onBack }: SafetyModuleProps) {
             <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-3">
                 <span>Location: {item.location}</span>
-                <span>Reported by: {item.reporter}</span>
-                <span>Date: {item.date}</span>
+                <span>Reported by: {item.reportedBy}</span>
+                <span>Date: {item.dateReported}</span>
               </div>
 
               {item.status !== 'Closed' && (
@@ -247,7 +238,7 @@ export function SafetyModule({ onBack }: SafetyModuleProps) {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleStatusChange(item.id, 'Investigating')}
+                    onClick={() => handleStatusChange(item.id, 'Under Investigation')}
                     className="text-xs h-7 px-2"
                   >
                     Investigate

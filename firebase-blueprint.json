@@ -1,0 +1,27 @@
+{
+  "collections": [
+    {
+      "name": "app_state",
+      "description": "Main application state synced via firestoreService",
+      "documentId": "main",
+      "fields": [],
+      "securityRules": {
+        "read": "request.auth != null && (get(/databases/$(database)/documents/permissions/$(request.auth.token.email)).data.role in ['admin', 'write', 'view'] || request.auth.token.email == 'Lindokuhlechris@gmail.com')",
+        "write": "request.auth != null && (get(/databases/$(database)/documents/permissions/$(request.auth.token.email)).data.role in ['admin', 'write'] || request.auth.token.email == 'Lindokuhlechris@gmail.com')"
+      }
+    },
+    {
+      "name": "permissions",
+      "description": "User permissions keyed by email",
+      "documentId": "email",
+      "fields": [
+        { "name": "role", "type": "string", "description": "admin, write, or view" },
+        { "name": "addedBy", "type": "string" }
+      ],
+      "securityRules": {
+        "read": "request.auth != null",
+        "write": "request.auth != null && (get(/databases/$(database)/documents/permissions/$(request.auth.token.email)).data.role == 'admin' || request.auth.token.email == 'Lindokuhlechris@gmail.com')"
+      }
+    }
+  ]
+}

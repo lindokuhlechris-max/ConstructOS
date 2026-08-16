@@ -1,28 +1,315 @@
 import React, { useState } from 'react';
 import { Card, CardContent, Badge, ProgressBar, Button } from '../components/ui';
-import { Activity } from '../types';
+import { Activity, ActivityStatus, SubTask, DailyReport, canManage } from '../types';
 import { ActivityDetail } from '../components/ActivityDetail';
 import { ActivityForm } from '../components/ActivityForm';
 import { CameraCapture } from '../components/CameraCapture';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
-import { Search, Filter, CalendarClock, AlertCircle, PlayCircle, CheckCircle, Plus, Camera, Image as ImageIcon, LayoutGrid, List as ListIcon, Trash2, MoreVertical, Layers, ChevronRight } from 'lucide-react';
+import { RecordActivityModal } from '../components/RecordActivityModal';
+import { ActivitySlideOver } from '../components/ActivitySlideOver';
+import { ActivityTimeline } from '../components/ActivityTimeline';
+import { ActivityAuditScreen } from '../components/ActivityAuditScreen';
+import { 
+  Search, 
+  Filter, 
+  History, 
+  CalendarClock, 
+  AlertCircle, 
+  PlayCircle, 
+  CheckCircle, 
+  Plus, 
+  Camera, 
+  Image as ImageIcon, 
+  LayoutGrid, 
+  List as ListIcon, 
+  Trash2, 
+  MoreVertical, 
+  Layers, 
+  ChevronRight, 
+  FileSpreadsheet, 
+  Mic, 
+  PanelRightOpen, 
+  Printer, 
+  Copy, 
+  CalendarDays,
+  Users,
+  CheckSquare,
+  TrendingUp,
+  MapPin,
+  Sparkles,
+  Save,
+  X,
+  Sun,
+  CloudRain,
+  Cloud,
+  Thermometer,
+  Wind,
+  Check,
+  Target,
+  FileText,
+  Eye,
+  ShieldCheck,
+  Lock,
+  CheckCircle2
+} from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { exportActivitiesToCSV } from '../lib/csvExport';
+import { printActivitiesSummary } from '../lib/pdfPrint';
 
 export function Activities() {
-  const { activities, updateActivity, addActivity, deleteActivity, addAuditLog, userRole } = useAppContext();
+  const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole } = useAppContext();
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [slideOverActivity, setSlideOverActivity] = useState<Activity | null>(null);
   const [capturingActivityId, setCapturingActivityId] = useState<string | null>(null);
   const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
   const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  const [isAuditView, setIsAuditView] = useState(false);
+  const [duplicateInitialValues, setDuplicateInitialValues] = useState<Partial<Activity> | null>(null);
+  const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'timeline'>('list');
+  const [timeframe, setTimeframe] = useState<'all' | 'day' | 'week' | 'month'>('all');
 
-  const filtered = activities.filter(a => 
-    a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    a.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.workPackage.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Quick Log Progress Modal State
+  const [loggingProgressActivity, setLoggingProgressActivity] = useState<Activity | null>(null);
+  const [logProgressActualQty, setLogProgressActualQty] = useState<number>(0);
+  const [logProgressPercent, setLogProgressPercent] = useState<number>(0);
+  const [logProgressStatus, setLogProgressStatus] = useState<ActivityStatus>('Not Started');
+  const [logProgressNotes, setLogProgressNotes] = useState('');
+  const [logProgressDate, setLogProgressDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [logProgressWeather, setLogProgressWeather] = useState<string>('Sunny');
+  const [logProgressTemp, setLogProgressTemp] = useState<string>('24°C');
+  const [logProgressSiteConditions, setLogProgressSiteConditions] = useState<string>('Site dry and fully accessible');
+  const [logProgressSubtasks, setLogProgressSubtasks] = useState<SubTask[]>([]);
+
+  const handleOpenLogProgress = (act: Activity) => {
+    setLoggingProgressActivity(act);
+    setLogProgressActualQty(act.actualQuantity || 0);
+    setLogProgressPercent(act.progress || 0);
+    setLogProgressStatus(act.status || 'Not Started');
+    setLogProgressNotes('');
+    setLogProgressDate(new Date().toISOString().split('T')[0]);
+    setLogProgressWeather('Sunny');
+    setLogProgressTemp('24°C');
+    setLogProgressSiteConditions('Site dry and fully accessible');
+    setLogProgressSubtasks(act.subtasks ? JSON.parse(JSON.stringify(act.subtasks)) : []);
+  };
+
+  const handleToggleLogSubtask = (stId: string) => {
+    setLogProgressSubtasks(prev => prev.map(st => {
+      if (st.id === stId) {
+        const nextStatus = st.status === 'Completed' ? 'In Progress' : 'Completed';
+        const nextCompleted = nextStatus === 'Completed';
+        const completedQty = nextCompleted ? (st.targetQuantity || 1) : 0;
+        return {
+          ...st,
+          status: nextStatus,
+          completed: nextCompleted,
+          completedQuantity: completedQty
+        };
+      }
+      return st;
+    }));
+  };
+
+  const handleQuickLogProgressSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loggingProgressActivity) return;
+
+    const totalLabourHours = (loggingProgressActivity.assignedLabour || []).reduce((sum, l) => sum + (l.hours || 0), 0);
+    const workersCount = (loggingProgressActivity.assignedLabour || []).length;
+    const equipmentCount = (loggingProgressActivity.assignedEquipment || []).length;
+
+    // Structured subtasks summary
+    const subtaskSummary = logProgressSubtasks.length > 0 
+      ? logProgressSubtasks.map((st, idx) => 
+          `[${st.status === 'Completed' ? 'x' : ' '}] #${idx + 1} ${st.title} (${st.category || 'General'}) - ${st.completedQuantity || 0}/${st.targetQuantity || 0} ${st.unit || 'units'} [${st.status}]`
+        ).join('\n')
+      : 'No subtasks configured.';
+
+    // Structured resource allocations
+    const crewSummary = (loggingProgressActivity.assignedLabour || []).length > 0
+      ? (loggingProgressActivity.assignedLabour || []).map(l => `• ${l.role || 'Worker'}: ${l.name || 'Worker'} (${l.hours || 0} hrs)`).join('\n')
+      : 'No dedicated crew allocated.';
+
+    const machinerySummary = (loggingProgressActivity.assignedEquipment || []).length > 0
+      ? (loggingProgressActivity.assignedEquipment || []).map(e => `• ${e.name || e.equipmentId} (Operator: ${e.operator || 'Assigned'})`).join('\n')
+      : 'No heavy machinery allocated.';
+
+    const materialSummary = (loggingProgressActivity.assignedMaterials || []).length > 0
+      ? (loggingProgressActivity.assignedMaterials || []).map(m => `• ${m.name}: ${m.quantity} ${m.unit}`).join('\n')
+      : 'Standard material stock.';
+
+    const fullSupervisorNotes = `=== DAILY PROGRESS LOG: ${loggingProgressActivity.name} (${loggingProgressActivity.id}) ===
+Discipline / Package: ${loggingProgressActivity.workPackage} | ${loggingProgressActivity.discipline}
+Overall Activity Progress: ${logProgressPercent}% | Output: ${logProgressActualQty} / ${loggingProgressActivity.targetQuantity || 0} ${loggingProgressActivity.unit || ''}
+Priority: ${loggingProgressActivity.priority || 'Normal'} | Shift Hours: ${totalLabourHours} hrs
+
+--- SUBTASK & METHOD EXECUTION STATUS ---
+${subtaskSummary}
+
+--- RESOURCE ALLOCATIONS ON SHIFT ---
+Crew Workforce (${workersCount} personnel):
+${crewSummary}
+
+Plant & Machinery (${equipmentCount} active units):
+${machinerySummary}
+
+Materials Allocated:
+${materialSummary}
+
+--- FIELD REMARKS & OBSERVATIONS ---
+${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets executed in accordance with method statement and QA/QC specifications.'}`;
+
+    const reportId = `RPT-${Math.floor(10000 + Math.random() * 90000)}`;
+    const newDailyReport: DailyReport = {
+      id: reportId,
+      date: logProgressDate,
+      projectId: loggingProgressActivity.projectId || projects[0]?.id || 'PROJ-001',
+      weather: logProgressWeather,
+      temperature: logProgressTemp,
+      siteConditions: logProgressSiteConditions,
+      significantEvents: `Progress logged on ${loggingProgressActivity.name}: advanced to ${logProgressPercent}% (${logProgressActualQty} / ${loggingProgressActivity.targetQuantity || 0} ${loggingProgressActivity.unit || ''}). ${logProgressNotes ? logProgressNotes.slice(0, 100) : ''}`,
+      workersOnSite: workersCount || 1,
+      equipmentRunning: equipmentCount || 0,
+      incidents: 0,
+      ncr: 0,
+      activitiesLogged: [loggingProgressActivity.id],
+      manpowerBreakdown: (loggingProgressActivity.assignedLabour || []).map(l => ({
+        trade: l.role || 'General Worker',
+        count: 1,
+        hours: l.hours || 8
+      })),
+      equipmentLogged: (loggingProgressActivity.assignedEquipment || []).map(e => ({
+        equipmentId: e.equipmentId,
+        hours: 8,
+        status: 'Operating'
+      })),
+      photos: loggingProgressActivity.photos ? [...loggingProgressActivity.photos] : [],
+      supervisorNotes: fullSupervisorNotes
+    };
+
+    if (addReport) {
+      addReport(newDailyReport);
+    }
+
+    const updatedActivity: Activity = {
+      ...loggingProgressActivity,
+      progress: logProgressPercent,
+      actualQuantity: logProgressActualQty,
+      status: logProgressStatus,
+      subtasks: logProgressSubtasks,
+      updatedAt: new Date().toISOString().split('T')[0],
+      remarks: logProgressNotes.trim()
+        ? `[${logProgressDate} Progress Log (${logProgressPercent}%)]: ${logProgressNotes.trim()}\n${loggingProgressActivity.remarks || ''}`
+        : loggingProgressActivity.remarks
+    };
+
+    if (updateActivity) {
+      updateActivity(updatedActivity);
+    }
+
+    if (addAuditLog) {
+      addAuditLog({
+        id: `AL-${Math.random().toString(36).substr(2, 9)}`,
+        projectId: loggingProgressActivity.projectId || projects[0]?.id || 'PROJ-001',
+        userId: userRole === 'Manager' ? 'Current User' : 'Current User',
+        action: 'Progress Logged & Report Posted',
+        details: `Logged progress on "${loggingProgressActivity.name}" (${logProgressPercent}%, ${logProgressActualQty} ${loggingProgressActivity.unit || ''}) and posted Daily Report #${reportId}.`,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    setLoggingProgressActivity(null);
+  };
+
+  // Direct Subtask Status Toggle from Grid Cards
+  const handleToggleSubtask = (activity: Activity, subtaskId: string) => {
+    const subtasks = activity.subtasks || [];
+    const targetSubtask = subtasks.find(s => s.id === subtaskId);
+    if (!targetSubtask) return;
+
+    // If hold point and not approved yet, open full detail screen to sign off
+    if (targetSubtask.isHoldPoint && !targetSubtask.holdPointSignOff?.approved && targetSubtask.status !== 'Completed') {
+      setSelectedActivity(activity);
+      return;
+    }
+
+    const nextStatus: 'Not Started' | 'In Progress' | 'Completed' = 
+      targetSubtask.status === 'Completed' ? 'In Progress' : 'Completed';
+    
+    const updatedSubtasks = subtasks.map(s => {
+      if (s.id === subtaskId) {
+        return {
+          ...s,
+          status: nextStatus,
+          completedQuantity: nextStatus === 'Completed' ? (s.targetQuantity || s.completedQuantity) : s.completedQuantity
+        };
+      }
+      return s;
+    });
+
+    const total = updatedSubtasks.length;
+    const completed = updatedSubtasks.filter(s => s.status === 'Completed').length;
+    const newProgress = total > 0 ? Math.round((completed / total) * 100) : activity.progress;
+    const newActivityStatus: ActivityStatus = newProgress === 100 ? 'Completed' : newProgress > 0 ? 'In Progress' : activity.status;
+
+    if (updateActivity) {
+      updateActivity({
+        ...activity,
+        subtasks: updatedSubtasks,
+        progress: newProgress,
+        status: newActivityStatus,
+        updatedAt: new Date().toISOString().split('T')[0]
+      });
+    }
+  };
+
+  const filtered = activities.filter(a => {
+    // 1. Search Filter
+    const matchesSearch = a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          a.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          a.workPackage.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (!matchesSearch) return false;
+
+    // 2. Timeframe Filter
+    if (timeframe === 'all') return true;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const start = new Date(a.startDate);
+    start.setHours(0, 0, 0, 0);
+    
+    const end = a.finishDate ? new Date(a.finishDate) : new Date(a.startDate);
+    end.setHours(23, 59, 59, 999);
+
+    if (timeframe === 'day') {
+      return start <= today && end >= today;
+    } 
+    
+    if (timeframe === 'week') {
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay());
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+      
+      return start <= weekEnd && end >= weekStart;
+    } 
+    
+    if (timeframe === 'month') {
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      monthEnd.setHours(23, 59, 59, 999);
+      
+      return start <= monthEnd && end >= monthStart;
+    }
+    
+    return true;
+  });
 
   const handleDeleteActivity = (id: string) => {
     setDeletingActivityId(id);
@@ -47,7 +334,50 @@ export function Activities() {
 
   const handleAddActivity = (newActivity: Activity) => {
     addActivity(newActivity);
+    addAuditLog({
+      id: `AL-${Math.random().toString(36).substr(2, 9)}`,
+      projectId: newActivity.projectId || projects[0]?.id || 'PROJ-001',
+      userId: userRole === 'Manager' ? 'Current User' : 'Current User',
+      action: duplicateInitialValues ? 'Activity Duplicated' : 'Activity Created',
+      details: duplicateInitialValues 
+        ? `Created duplicate activity "${newActivity.name}" (${newActivity.id})`
+        : `Created activity "${newActivity.name}" (${newActivity.id})`,
+      timestamp: new Date().toISOString()
+    });
     setIsAdding(false);
+    setDuplicateInitialValues(null);
+  };
+
+  const handleDuplicateActivity = (sourceActivity: Activity) => {
+    const nextId = `ACT-${Math.floor(1000 + Math.random() * 9000)}`;
+    const clonedValues: Partial<Activity> = {
+      ...sourceActivity,
+      id: nextId,
+      name: `${sourceActivity.name} (Copy)`,
+      status: 'Not Started',
+      progress: 0,
+      actualQuantity: 0,
+      actualHours: 0,
+      createdAt: new Date().toISOString().split('T')[0],
+      updatedAt: new Date().toISOString().split('T')[0],
+      startDate: sourceActivity.startDate || new Date().toISOString().split('T')[0],
+      finishDate: sourceActivity.finishDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      photos: [],
+      voiceNotes: [],
+      digitalSignature: undefined,
+      remarks: sourceActivity.remarks ? `Copied from ${sourceActivity.name} (${sourceActivity.id})\n${sourceActivity.remarks}` : `Copied from ${sourceActivity.name} (${sourceActivity.id})`,
+      subtasks: sourceActivity.subtasks?.map(st => ({
+        ...st,
+        id: `ST-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        completed: false
+      })) || [],
+      assignedMaterials: sourceActivity.assignedMaterials ? [...sourceActivity.assignedMaterials] : [],
+      assignedLabour: sourceActivity.assignedLabour ? [...sourceActivity.assignedLabour] : [],
+      assignedEquipment: sourceActivity.assignedEquipment ? [...sourceActivity.assignedEquipment] : []
+    };
+
+    setDuplicateInitialValues(clonedValues);
+    setIsAdding(true);
   };
 
   const handleQuickCapturePhoto = (targetActivity: Activity, photoDataUrl: string) => {
@@ -74,7 +404,29 @@ export function Activities() {
   if (isAdding) {
     return (
       <div className="p-4 md:p-8">
-        <ActivityForm onClose={() => setIsAdding(false)} onSubmit={handleAddActivity} />
+        <ActivityForm 
+          onClose={() => {
+            setIsAdding(false);
+            setDuplicateInitialValues(null);
+          }} 
+          onSubmit={handleAddActivity}
+          initialValues={duplicateInitialValues || undefined}
+          isDuplicate={Boolean(duplicateInitialValues)}
+        />
+      </div>
+    );
+  }
+
+  if (isAuditView) {
+    return (
+      <div className="p-4 md:p-8">
+        <ActivityAuditScreen 
+          onBack={() => setIsAuditView(false)}
+          onSelectActivity={(act) => {
+            setIsAuditView(false);
+            setSelectedActivity(act);
+          }}
+        />
       </div>
     );
   }
@@ -86,7 +438,8 @@ export function Activities() {
           activity={selectedActivity}
           onSave={handleSaveActivity}
           onClose={() => setSelectedActivity(null)}
-          onDelete={userRole === 'Manager' ? handleDeleteActivity : undefined}
+          onDelete={canManage(userRole) ? handleDeleteActivity : undefined}
+          onDuplicate={handleDuplicateActivity}
         />
       </div>
     );
@@ -98,7 +451,7 @@ export function Activities() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex justify-between items-center w-full md:w-auto">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Activity Tracker</h1>
+            <h1 className="text-xl font-bold tracking-tight">Activity Tracker</h1>
             <p className="text-slate-500 dark:text-slate-400">Manage and monitor all construction activities.</p>
           </div>
           <Button onClick={() => setIsAdding(true)} className="md:hidden gap-2 rounded-xl bg-[#0B5FFF]">
@@ -106,6 +459,40 @@ export function Activities() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
+          <Button 
+            onClick={() => setIsAuditView(true)} 
+            variant="outline" 
+            className="gap-2 rounded-xl border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/30 text-[#0B5FFF] dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/50 font-semibold"
+            title="Open Activity & Subtask Audit Screen"
+          >
+            <History className="h-4 w-4" />
+            <span className="hidden sm:inline">Audit Trail</span>
+          </Button>
+
+          <Button 
+            onClick={() => exportActivitiesToCSV(filtered, projects)} 
+            variant="outline" 
+            className="gap-2 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            title="Export activities to offline CSV spreadsheet"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span className="hidden sm:inline">Export CSV</span>
+          </Button>
+
+          <Button 
+            onClick={() => printActivitiesSummary({
+              project: projects[0],
+              activities: filtered,
+              filterLabel: searchTerm ? `Search query: "${searchTerm}"` : 'All Activities',
+              totalActivitiesCount: activities.length
+            })} 
+            variant="outline" 
+            className="gap-2 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            title="Print or Export summary report as clean PDF"
+          >
+            <Printer className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+            <span className="hidden sm:inline">Print / PDF</span>
+          </Button>
           <Button onClick={() => setIsAdding(true)} className="hidden md:flex gap-2 rounded-xl bg-[#0B5FFF]">
             <Plus className="h-4 w-4" /> Add Activity
           </Button>
@@ -119,10 +506,43 @@ export function Activities() {
               className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-sm focus:border-[#0B5FFF] focus:outline-none focus:ring-1 focus:ring-[#0B5FFF] dark:border-slate-800 dark:bg-slate-900"
             />
           </div>
+          <div className="hidden lg:flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-sm font-medium">
+            <button
+              onClick={() => setTimeframe('all')}
+              className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'all' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setTimeframe('day')}
+              className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'day' ? 'bg-white dark:bg-slate-700 shadow-sm text-[#0B5FFF]' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            >
+              Today
+            </button>
+            <button
+              onClick={() => setTimeframe('week')}
+              className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'week' ? 'bg-white dark:bg-slate-700 shadow-sm text-[#0B5FFF]' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            >
+              This Week
+            </button>
+            <button
+              onClick={() => setTimeframe('month')}
+              className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'month' ? 'bg-white dark:bg-slate-700 shadow-sm text-[#0B5FFF]' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            >
+              This Month
+            </button>
+          </div>
           <Button variant="outline" size="icon" className="shrink-0 rounded-xl">
             <Filter className="h-4 w-4" />
           </Button>
           <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+            <button
+              onClick={() => setViewMode('timeline')}
+              className={`p-1.5 rounded-lg transition-colors ${viewMode === 'timeline' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              title="Timeline view"
+            >
+              <CalendarDays className="h-4 w-4" />
+            </button>
             <button
               onClick={() => setViewMode('grid')}
               className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
@@ -140,150 +560,704 @@ export function Activities() {
           </div>
         </div>
       </div>
+      
+      {/* Timeframe Progress Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Total Activities</div>
+          <div className="text-xl font-black text-slate-900 dark:text-white">{filtered.length}</div>
+        </div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">In Progress</div>
+          <div className="text-xl font-black text-[#0B5FFF]">{filtered.filter(a => a.status === 'In Progress').length}</div>
+        </div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Completed</div>
+          <div className="text-xl font-black text-[#2E7D32]">{filtered.filter(a => a.status === 'Completed').length}</div>
+        </div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Blocked / At Risk</div>
+          <div className="text-xl font-black text-[#D32F2F]">{filtered.filter(a => a.status === 'Blocked').length}</div>
+        </div>
+      </div>
 
-      {/* Activity List */}
-      <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" : "flex flex-col gap-4"}>
-        {filtered.map((activity) => (
-          <Card 
-            key={activity.id} 
-            onClick={() => setExpandedActivityId(expandedActivityId === activity.id ? null : activity.id)}
-            className="hover:border-[#0B5FFF]/40 dark:hover:border-blue-500/40 hover:shadow-md transition-all cursor-pointer overflow-hidden group relative"
-          >
+      {/* Activity List or Timeline */}
+      {viewMode === 'timeline' ? (
+        <ActivityTimeline activities={filtered} onSelectActivity={(id) => setExpandedActivityId(expandedActivityId === id ? null : id)} />
+      ) : (
+        <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start" : "flex flex-col gap-4"}>
+          {filtered.map((activity) => {
+            const subtasks = activity.subtasks || [];
+            const subtasksCount = subtasks.length;
+            const completedSubtasksCount = subtasks.filter(s => s.status === 'Completed').length;
+            const subtasksPct = subtasksCount > 0 ? Math.round((completedSubtasksCount / subtasksCount) * 100) : 0;
+            const milestonesCount = subtasks.filter(s => s.isMilestone).length;
 
-            <div className={`flex ${viewMode === 'grid' ? 'flex-col h-full' : 'flex-col md:flex-row'}`}>
-              {/* Status Color Bar */}
-              <div className={`${viewMode === 'grid' ? 'h-1 w-full' : 'w-1 h-auto md:w-1'} ${
-                activity.status === 'In Progress' ? 'bg-[#0B5FFF]' :
-                activity.status === 'Blocked' ? 'bg-[#D32F2F]' :
-                activity.status === 'Completed' ? 'bg-[#2E7D32]' : 'bg-[#F9A825]'
-              }`} />
-              
-              <CardContent className={`flex-1 p-4 flex ${viewMode === 'grid' ? 'flex-col gap-4' : 'flex-col md:flex-row md:items-center justify-between gap-4'}`}>
-                <div className="flex flex-col gap-2 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-semibold tracking-wider text-slate-500">{activity.id}</span>
-                    <Badge variant="outline" className="text-[10px] uppercase font-bold">{activity.workPackage}</Badge>
-                    {activity.priority === 'Critical' && <Badge variant="danger" className="text-[10px] uppercase font-bold">Critical</Badge>}
-                    {activity.photos && activity.photos.length > 0 && (
-                      <Badge variant="default" className="text-[10px] bg-blue-50 text-[#0B5FFF] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 font-bold gap-1">
-                        <ImageIcon className="h-3 w-3" /> {activity.photos.length} {activity.photos.length === 1 ? 'Photo' : 'Photos'}
-                      </Badge>
-                    )}
-                  </div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{activity.name}</h3>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 font-medium">
-                    <span className="flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5" /> {activity.startDate}</span>
-                    <span>Area: {activity.area}</span>
-                    <span>Team: {activity.assignedTo}</span>
-                  </div>
+            return (
+              <Card 
+                key={activity.id} 
+                onClick={() => setExpandedActivityId(expandedActivityId === activity.id ? null : activity.id)}
+                className="hover:border-[#0B5FFF]/40 dark:hover:border-blue-500/40 hover:shadow-md transition-all cursor-pointer overflow-hidden group relative flex flex-col"
+              >
 
-                  {/* Thumbnail Preview strip if photos exist */}
-                  {activity.photos && activity.photos.length > 0 && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      {activity.photos.slice(0, 4).map((photo, pIdx) => (
-                        <img 
-                          key={pIdx} 
-                          src={photo} 
-                          alt="Thumbnail" 
-                          className="w-9 h-9 rounded-md object-cover border border-slate-200 dark:border-slate-700 shadow-xs" 
-                        />
-                      ))}
-                      {activity.photos.length > 4 && (
-                        <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-2 rounded-md">
-                          +{activity.photos.length - 4}
+                <div className={`flex ${viewMode === 'grid' ? 'flex-col' : 'flex-col md:flex-row'}`}>
+                  {/* Status Color Bar */}
+                  <div className={`${viewMode === 'grid' ? 'h-1 w-full' : 'w-1 h-auto md:w-1'} ${
+                    activity.status === 'In Progress' ? 'bg-[#0B5FFF]' :
+                    activity.status === 'Blocked' ? 'bg-[#D32F2F]' :
+                    activity.status === 'Completed' ? 'bg-[#2E7D32]' : 'bg-[#F9A825]'
+                  }`} />
+                  
+                  <CardContent className={`flex-1 p-4 flex ${viewMode === 'grid' ? 'flex-col gap-3' : 'flex-col md:flex-row md:items-center justify-between gap-4'}`}>
+                    <div className="flex flex-col gap-2 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold tracking-wider text-slate-500">{activity.id}</span>
+                        <Badge variant="outline" className="text-[10px] uppercase font-bold">{activity.workPackage}</Badge>
+                        {activity.priority === 'Critical' && <Badge variant="danger" className="text-[10px] uppercase font-bold">Critical</Badge>}
+                        {activity.priority === 'High' && <Badge variant="outline" className="text-[10px] uppercase font-bold text-amber-600 border-amber-300">High</Badge>}
+                        
+                        {/* Subtask Mini-Progress Pill */}
+                        {subtasksCount > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0B5FFF] dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            <CheckSquare className="h-3 w-3 text-[#0B5FFF]" />
+                            {completedSubtasksCount}/{subtasksCount} Subtasks ({subtasksPct}%)
+                          </span>
+                        )}
+                        
+                        {/* Milestone Badge */}
+                        {milestonesCount > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                            🎯 {milestonesCount} {milestonesCount === 1 ? 'Milestone' : 'Milestones'}
+                          </span>
+                        )}
+
+                        {/* QA Hold Point Badge */}
+                        {subtasks.filter(s => s.isHoldPoint).length > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                            <ShieldCheck className="h-3 w-3 text-rose-600" />
+                            {subtasks.filter(s => s.isHoldPoint && s.holdPointSignOff?.approved).length}/{subtasks.filter(s => s.isHoldPoint).length} Hold Points
+                          </span>
+                        )}
+
+                        {activity.photos && activity.photos.length > 0 && (
+                          <Badge variant="default" className="text-[10px] bg-blue-50 text-[#0B5FFF] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 font-bold gap-1">
+                            <ImageIcon className="h-3 w-3" /> {activity.photos.length} {activity.photos.length === 1 ? 'Photo' : 'Photos'}
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <h3 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedActivity(activity);
+                        }}
+                        className="text-base font-bold text-slate-900 dark:text-slate-100 hover:text-[#0B5FFF] transition-colors cursor-pointer"
+                        title="Click to view full activity details"
+                      >
+                        {activity.name}
+                      </h3>
+                      
+                      {/* Clean Metadata & Team Chips */}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-500 font-medium mt-0.5">
+                        <span className="flex items-center gap-1" title="Start Date">
+                          <CalendarClock className="h-3.5 w-3.5 text-emerald-500" /> Start: {activity.startDate}
                         </span>
+                        <span className="text-slate-400">Created: {activity.createdAt || activity.startDate}</span>
+                        {activity.updatedAt && <span className="text-purple-600 dark:text-purple-400">Edited: {activity.updatedAt}</span>}
+                        
+                        {activity.area && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-medium">
+                            <MapPin className="h-3 w-3 text-slate-400" /> Area: {activity.area}
+                          </span>
+                        )}
+                        
+                        {activity.assignedTo ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-semibold text-[10px]">
+                            <Users className="h-3 w-3" /> Team: {activity.assignedTo}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 text-[10px]">
+                            <Users className="h-3 w-3" /> Unassigned Team
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Thumbnail Preview strip if photos exist */}
+                      {activity.photos && activity.photos.length > 0 && (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {activity.photos.slice(0, 4).map((photo, pIdx) => (
+                            <img 
+                              key={pIdx} 
+                              src={photo} 
+                              alt="Thumbnail" 
+                              className="w-9 h-9 rounded-md object-cover border border-slate-200 dark:border-slate-700 shadow-sm" 
+                            />
+                          ))}
+                          {activity.photos.length > 4 && (
+                            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-2 rounded-md">
+                              +{activity.photos.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Grid View Scrollable Subtasks Container */}
+                      {viewMode === 'grid' && (
+                        <div className="mt-2 flex flex-col gap-1.5 flex-1 min-h-[130px]">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 px-0.5">
+                            <span className="flex items-center gap-1.5">
+                              <CheckSquare className="h-3.5 w-3.5 text-[#0B5FFF]" />
+                              Subtasks ({completedSubtasksCount}/{subtasksCount})
+                            </span>
+                            {subtasksCount > 0 && (
+                              <span className="text-[10px] font-mono text-[#0B5FFF] font-bold bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">
+                                {subtasksPct}%
+                              </span>
+                            )}
+                          </div>
+
+                          {subtasksCount > 0 ? (
+                            <div 
+                              className="max-h-36 overflow-y-auto space-y-1.5 pr-1 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 p-2 text-xs"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {subtasks.map((st, sIdx) => {
+                                const isDone = st.status === 'Completed';
+                                const isInProg = st.status === 'In Progress';
+                                return (
+                                  <div 
+                                    key={st.id || sIdx}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleSubtask(activity, st.id);
+                                    }}
+                                    className={`flex items-center justify-between gap-2 p-1.5 rounded-lg border text-[11px] transition-all cursor-pointer select-none ${
+                                      isDone 
+                                        ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200/80 dark:border-emerald-900/50 text-emerald-900 dark:text-emerald-300' 
+                                        : isInProg 
+                                        ? 'bg-blue-50/80 dark:bg-blue-950/30 border-blue-200/80 dark:border-blue-900/50 text-blue-900 dark:text-blue-300' 
+                                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                                    }`}
+                                    title={
+                                      st.isHoldPoint && !st.holdPointSignOff?.approved
+                                        ? '🔒 QA Hold Point: Click to open inspection details'
+                                        : `Click to toggle: ${st.status}`
+                                    }
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-colors ${
+                                        isDone 
+                                          ? 'bg-emerald-600 border-emerald-600 text-white' 
+                                          : isInProg 
+                                          ? 'bg-blue-600 border-blue-600 text-white' 
+                                          : 'border-slate-300 dark:border-slate-600'
+                                      }`}>
+                                        {isDone && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                                        {isInProg && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
+                                      </div>
+                                      <span className={`font-medium truncate ${isDone ? 'line-through opacity-70 text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                        #{sIdx + 1} {st.title}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {st.completedQuantity !== undefined && (
+                                        <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                          {st.completedQuantity}/{st.targetQuantity || 0} {st.unit || ''}
+                                        </span>
+                                      )}
+                                      {st.isMilestone && (
+                                        <span className="text-[10px]" title="Milestone">🎯</span>
+                                      )}
+                                      {st.isHoldPoint && (
+                                        <span 
+                                          className={`text-[10px] px-1 py-0.5 rounded font-bold ${
+                                            st.holdPointSignOff?.approved 
+                                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950' 
+                                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950'
+                                          }`} 
+                                          title={st.holdPointSignOff?.approved ? `QA Approved by ${st.holdPointSignOff.signedBy}` : 'QA Hold Point'}
+                                        >
+                                          🔒
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedActivity(activity);
+                              }}
+                              className="flex-1 min-h-[90px] flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-center hover:bg-blue-50/40 hover:border-blue-200 transition-colors group/sub cursor-pointer"
+                            >
+                              <CheckSquare className="h-5 w-5 text-slate-300 dark:text-slate-600 group-hover/sub:text-[#0B5FFF] transition-colors mb-1" />
+                              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 group-hover/sub:text-[#0B5FFF]">
+                                No subtasks defined
+                              </span>
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                Click Details to configure WBS
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
 
-                <div className={`flex ${viewMode === 'grid' ? 'flex-row items-center justify-between mt-auto pt-4' : 'flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-3 w-full md:w-56 pt-3 md:pt-0'} border-t md:border-t-0 border-slate-100 dark:border-slate-800`}>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      {getStatusIcon(activity.status)}
-                      <span className="text-sm font-bold">{activity.status}</span>
+                    <div className={`flex ${viewMode === 'grid' ? 'flex-row items-center justify-between mt-auto pt-3' : 'flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-3 w-full md:w-64 pt-3 md:pt-0'} border-t md:border-t-0 border-slate-100 dark:border-slate-800`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 mr-1">
+                          {getStatusIcon(activity.status)}
+                          <span className="text-xs font-bold whitespace-nowrap">{activity.status}</span>
+                        </div>
+
+                        {/* Direct "Details" Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedActivity(activity);
+                          }}
+                          className="h-8 rounded-xl px-2.5 gap-1.5 text-xs text-[#0B5FFF] bg-blue-50 hover:bg-blue-100 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800 font-semibold shadow-sm"
+                          title="View Full Activity Details, Resources & WBS"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-[#0B5FFF] dark:text-blue-300" />
+                          <span className="font-semibold">Details</span>
+                        </Button>
+
+                        {/* Direct "Log Progress" Quick Action Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenLogProgress(activity);
+                          }}
+                          className="h-8 rounded-xl px-2.5 gap-1.5 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 font-semibold shadow-sm"
+                          title="Log Daily Progress & Post Report"
+                        >
+                          <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span className="font-semibold">Log</span>
+                        </Button>
+
+                        {/* Quick Camera Capture Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCapturingActivityId(activity.id);
+                          }}
+                          className="h-8 rounded-xl px-2 gap-1 text-xs text-[#0B5FFF] border-blue-200 hover:bg-blue-50 dark:hover:bg-blue-950/50 dark:border-blue-900"
+                          title="Capture Site Progress Photo"
+                        >
+                          <Camera className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline font-semibold">Photo</span>
+                        </Button>
+
+                        {/* Quick Copy / Duplicate Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDuplicateActivity(activity);
+                          }}
+                          className="h-8 rounded-xl px-2 gap-1 text-xs text-indigo-600 dark:text-indigo-400 border-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 dark:border-indigo-900"
+                          title="Duplicate activity with prefilled resources & edit minor differences"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline font-semibold">Copy</span>
+                        </Button>
+                      </div>
+                      
+                      <div className={`flex flex-col gap-1 ${viewMode === 'grid' ? 'w-24' : 'w-1/2 md:w-full'}`}>
+                        <div className="flex items-center justify-between text-[10px] font-bold uppercase text-gray-500">
+                          <span>Progress</span>
+                          <span className="text-[#1A1C1E] dark:text-slate-50 font-mono">{activity.progress}%</span>
+                        </div>
+                        <ProgressBar value={activity.progress} />
+                      </div>
                     </div>
+                  </CardContent>
+                </div>
 
-                    {/* Quick Camera Capture Button */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCapturingActivityId(activity.id);
-                      }}
-                      className="h-8 rounded-xl px-2.5 gap-1.5 text-xs text-[#0B5FFF] border-blue-200 hover:bg-blue-50 dark:hover:bg-blue-950/50 dark:border-blue-900"
-                      title="Capture Site Progress Photo"
-                    >
-                      <Camera className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline font-semibold">Photo</span>
-                    </Button>
-                  </div>
-                  
-                  <div className={`flex flex-col gap-1 ${viewMode === 'grid' ? 'w-24' : 'w-1/2 md:w-full'}`}>
-                    <div className="flex items-center justify-between text-[10px] font-bold uppercase text-gray-500">
-                      <span>Progress</span>
-                      <span className="text-[#1A1C1E] dark:text-slate-50">{activity.progress}%</span>
+                {expandedActivityId === activity.id && (
+                  <div className="px-4 pb-4 pt-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20">
+                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 text-xs mt-3">
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Date Created</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{activity.createdAt || activity.startDate || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Start Date</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{activity.startDate}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Finish Date</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{activity.finishDate}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Date Edited</span>
+                        <span className="font-semibold text-purple-600 dark:text-purple-400">{activity.updatedAt || 'Not edited'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Supervisor</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{activity.supervisor}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Assigned</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{activity.assignedTo}</span>
+                      </div>
                     </div>
-                    <ProgressBar value={activity.progress} />
+                    <div className="mt-4 flex justify-end gap-2 flex-wrap">
+                      {canManage(userRole) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteActivity(activity.id);
+                          }}
+                          className="gap-2 rounded-xl text-red-500 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/30 dark:border-red-900"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete Activity
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDuplicateActivity(activity);
+                        }}
+                        className="gap-2 rounded-xl text-indigo-600 dark:text-indigo-400 border-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 dark:border-indigo-900"
+                        title="Duplicate activity to create multiple items with minor differences"
+                      >
+                        <Copy className="h-4 w-4" />
+                        Duplicate Activity
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSlideOverActivity(activity);
+                        }}
+                        className="gap-2 rounded-xl text-[#0B5FFF] border-blue-200 hover:bg-blue-50 dark:hover:bg-blue-950/50 dark:border-blue-900"
+                      >
+                        <PanelRightOpen className="h-4 w-4" />
+                        Slide-over Panel
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedActivity(activity);
+                        }}
+                        className="gap-2 rounded-xl text-[#0B5FFF] border-blue-200 hover:bg-blue-50 dark:hover:bg-blue-950/50 dark:border-blue-900"
+                      >
+                        View Full Details
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
 
-            {expandedActivityId === activity.id && (
-              <div className="px-4 pb-4 pt-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mt-3">
-                  <div>
-                    <span className="block text-xs font-semibold text-slate-500 mb-1">Start Date</span>
-                    <span className="font-medium text-slate-700 dark:text-slate-300">{activity.startDate}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs font-semibold text-slate-500 mb-1">Finish Date</span>
-                    <span className="font-medium text-slate-700 dark:text-slate-300">{activity.finishDate}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs font-semibold text-slate-500 mb-1">Supervisor</span>
-                    <span className="font-medium text-slate-700 dark:text-slate-300">{activity.supervisor}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs font-semibold text-slate-500 mb-1">Assigned Personnel</span>
-                    <span className="font-medium text-slate-700 dark:text-slate-300">{activity.assignedTo}</span>
-                  </div>
+      )}
+      {/* Direct Camera Capture Overlay for list view */}
+      {capturingActivityId && (
+        <CameraCapture
+          onCapture={(dataUrl) => {
+            const targetAct = activities.find(a => a.id === capturingActivityId);
+            if (targetAct) {
+              handleQuickCapturePhoto(targetAct, dataUrl);
+            }
+          }}
+          onCancel={() => setCapturingActivityId(null)}
+        />
+      )}
+
+      {/* Slide-over Metadata Panel Drawer */}
+      <ActivitySlideOver
+        activity={slideOverActivity}
+        isOpen={Boolean(slideOverActivity)}
+        onClose={() => setSlideOverActivity(null)}
+        onOpenFullDetail={(act) => {
+          setSlideOverActivity(null);
+          setSelectedActivity(act);
+        }}
+        onDuplicate={(act) => {
+          setSlideOverActivity(null);
+          handleDuplicateActivity(act);
+        }}
+      />
+
+      {/* Record Activity Modal */}
+      {isRecordingModalOpen && (
+        <RecordActivityModal
+          projectId={projects[0]?.id || 'PROJ-001'}
+          onClose={() => setIsRecordingModalOpen(false)}
+          onReportGenerated={(newReport) => {
+            if (addReport) {
+              addReport(newReport);
+            }
+          }}
+        />
+      )}
+
+      {/* Quick Log Progress & Daily Report Modal (from List View) */}
+      {loggingProgressActivity && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-blue-50/50 to-indigo-50/30 dark:from-slate-800/40 dark:to-slate-800/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                  <TrendingUp className="h-5 w-5" />
                 </div>
-                <div className="mt-4 flex justify-end gap-2">
-                  {userRole === 'Manager' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteActivity(activity.id);
-                      }}
-                      className="gap-2 rounded-xl text-red-500 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/30 dark:border-red-900"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete Activity
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedActivity(activity);
-                    }}
-                    className="gap-2 rounded-xl text-[#0B5FFF] border-blue-200 hover:bg-blue-50 dark:hover:bg-blue-950/50 dark:border-blue-900"
-                  >
-                    View Full Details
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    Log Progress & Daily Report
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {loggingProgressActivity.name} ({loggingProgressActivity.id}) • {loggingProgressActivity.workPackage}
+                  </p>
                 </div>
               </div>
-            )}
-          </Card>
-        ))}
-      </div>
+              <button 
+                onClick={() => setLoggingProgressActivity(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleQuickLogProgressSubmit} className="p-6 space-y-6 flex-1">
+              {/* Target & Measured Output Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-500">Progress Completion</label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      min="0"
+                      max="100"
+                      required
+                      value={logProgressPercent}
+                      onChange={(e) => setLogProgressPercent(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                      className="w-full h-10 px-3 pr-8 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-sm focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-500">
+                    Actual Output ({loggingProgressActivity.unit || 'units'})
+                  </label>
+                  <input 
+                    type="number"
+                    min="0"
+                    value={logProgressActualQty}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setLogProgressActualQty(val);
+                      if (loggingProgressActivity.targetQuantity && loggingProgressActivity.targetQuantity > 0) {
+                        const calculatedPct = Math.min(100, Math.round((val / loggingProgressActivity.targetQuantity) * 100));
+                        setLogProgressPercent(calculatedPct);
+                      }
+                    }}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-sm focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+                    placeholder={`Target: ${loggingProgressActivity.targetQuantity || 0}`}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-500">Activity Status</label>
+                  <select 
+                    value={logProgressStatus}
+                    onChange={(e) => setLogProgressStatus(e.target.value as ActivityStatus)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-semibold text-sm focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+                  >
+                    <option value="Not Started">Not Started</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Blocked">Blocked</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Progress Slider */}
+              <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold text-slate-600 dark:text-slate-300">Quick Adjust Progress</span>
+                  <span className="font-mono font-bold text-[#0B5FFF]">{logProgressPercent}%</span>
+                </div>
+                <input 
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={logProgressPercent}
+                  onChange={(e) => {
+                    const pct = parseInt(e.target.value);
+                    setLogProgressPercent(pct);
+                    if (loggingProgressActivity.targetQuantity && loggingProgressActivity.targetQuantity > 0) {
+                      setLogProgressActualQty(Math.round((pct / 100) * loggingProgressActivity.targetQuantity));
+                    }
+                    if (pct === 100) setLogProgressStatus('Completed');
+                    else if (pct > 0) setLogProgressStatus('In Progress');
+                  }}
+                  className="w-full accent-[#0B5FFF] cursor-pointer"
+                />
+              </div>
+
+              {/* Subtasks Checklist Gating */}
+              {logProgressSubtasks.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase text-slate-500 flex items-center gap-1.5">
+                      <CheckSquare className="h-4 w-4 text-[#0B5FFF]" />
+                      Update Active Subtasks ({logProgressSubtasks.filter(s => s.status === 'Completed').length}/{logProgressSubtasks.length} Completed)
+                    </label>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800">
+                    {logProgressSubtasks.map((st) => {
+                      const isCompleted = st.status === 'Completed';
+                      return (
+                        <div 
+                          key={st.id}
+                          onClick={() => handleToggleLogSubtask(st.id)}
+                          className={`p-3 flex items-center justify-between gap-3 text-xs cursor-pointer transition-colors ${
+                            isCompleted ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                              isCompleted ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600'
+                            }`}>
+                              {isCompleted && <Check className="h-3 w-3 stroke-[3]" />}
+                            </div>
+                            <div>
+                              <span className={`font-semibold ${isCompleted ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white'}`}>
+                                {st.title}
+                              </span>
+                              <span className="text-[10px] text-slate-400 ml-2">({st.category || 'General'})</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {st.isMilestone && (
+                              <span className="text-[10px] font-bold text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
+                                🎯 Milestone
+                              </span>
+                            )}
+                            {st.isHoldPoint && (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                st.holdPointSignOff?.approved 
+                                  ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
+                                  : 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800'
+                              }`}>
+                                🔒 {st.holdPointSignOff?.approved ? 'QA Approved' : 'Hold Point'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Weather & Site Environment */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-500">Report Date</label>
+                  <input 
+                    type="date"
+                    required
+                    value={logProgressDate}
+                    onChange={(e) => setLogProgressDate(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-500">Weather</label>
+                  <select 
+                    value={logProgressWeather}
+                    onChange={(e) => setLogProgressWeather(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+                  >
+                    <option value="Sunny">☀️ Sunny / Clear</option>
+                    <option value="Partly Cloudy">⛅ Partly Cloudy</option>
+                    <option value="Overcast">☁️ Overcast</option>
+                    <option value="Rain">🌧️ Rain / Wet</option>
+                    <option value="Stormy">⛈️ Stormy / Suspended</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-500">Temperature</label>
+                  <input 
+                    type="text"
+                    value={logProgressTemp}
+                    onChange={(e) => setLogProgressTemp(e.target.value)}
+                    placeholder="e.g. 24°C"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Field Notes & Remarks */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase text-slate-500">Supervisor Field Remarks</label>
+                <textarea 
+                  rows={3}
+                  value={logProgressNotes}
+                  onChange={(e) => setLogProgressNotes(e.target.value)}
+                  placeholder="Record shift production summary, weather impacts, inspection approvals, or contractor handover notes..."
+                  className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+                />
+              </div>
+
+              {/* Automatic Report Notice */}
+              <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/50 flex items-start gap-2.5 text-xs text-blue-900 dark:text-blue-200">
+                <FileText className="h-4 w-4 text-[#0B5FFF] shrink-0 mt-0.5" />
+                <p>
+                  Saving this progress log will automatically generate and publish a verified <strong>Executive Daily Site Report</strong> with complete subtask status, workforce hours, and plant allocations.
+                </p>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setLoggingProgressActivity(null)}
+                  className="rounded-xl px-4 text-xs font-semibold"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="rounded-xl px-5 text-xs font-semibold bg-[#0B5FFF] hover:bg-blue-700 text-white gap-2 shadow-sm"
+                >
+                  <Save className="h-4 w-4" /> Save Progress & Post Report
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Direct Camera Capture Overlay for list view */}
       {capturingActivityId && (
@@ -295,6 +1269,34 @@ export function Activities() {
             }
           }}
           onCancel={() => setCapturingActivityId(null)}
+        />
+      )}
+
+      {/* Slide-over Metadata Panel Drawer */}
+      <ActivitySlideOver
+        activity={slideOverActivity}
+        isOpen={Boolean(slideOverActivity)}
+        onClose={() => setSlideOverActivity(null)}
+        onOpenFullDetail={(act) => {
+          setSlideOverActivity(null);
+          setSelectedActivity(act);
+        }}
+        onDuplicate={(act) => {
+          setSlideOverActivity(null);
+          handleDuplicateActivity(act);
+        }}
+      />
+
+      {/* Record Activity Modal */}
+      {isRecordingModalOpen && (
+        <RecordActivityModal
+          projectId={projects[0]?.id || 'PROJ-001'}
+          onClose={() => setIsRecordingModalOpen(false)}
+          onReportGenerated={(newReport) => {
+            if (addReport) {
+              addReport(newReport);
+            }
+          }}
         />
       )}
 

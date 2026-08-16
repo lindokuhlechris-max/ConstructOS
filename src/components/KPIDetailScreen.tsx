@@ -36,7 +36,7 @@ export function KPIDetailScreen({ metric, onClose, onSelectActivity }: KPIDetail
   const tradeDistribution = useMemo(() => {
     const counts: Record<string, number> = {};
     employees.forEach(emp => {
-      const role = emp.role || 'General Labour';
+      const role = emp.position || 'General Labour';
       counts[role] = (counts[role] || 0) + 1;
     });
     return Object.entries(counts).map(([trade, count]) => ({ trade, count }));
@@ -225,7 +225,7 @@ export function KPIDetailScreen({ metric, onClose, onSelectActivity }: KPIDetail
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={eq.status === 'Operating' ? 'default' : 'secondary'} className={eq.status === 'Operating' ? 'bg-blue-100 text-blue-700' : ''}>
+                      <Badge variant={eq.status === 'Operating' ? 'default' : 'outline'} className={eq.status === 'Operating' ? 'bg-blue-100 text-blue-700' : ''}>
                         {eq.status}
                       </Badge>
                       <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-[#0B5FFF] transition-colors" />
@@ -238,7 +238,7 @@ export function KPIDetailScreen({ metric, onClose, onSelectActivity }: KPIDetail
         );
 
       case 'activities-delayed':
-        const delayed = activities.filter(a => a.status === 'Blocked' || a.status === 'Delayed');
+        const delayed = activities.filter(a => a.status === 'Blocked');
         return (
           <div className="space-y-6">
             <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg border border-red-100 dark:border-red-900/30">

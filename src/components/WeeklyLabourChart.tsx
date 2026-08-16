@@ -28,10 +28,10 @@ export function WeeklyLabourChart({ labourLogs, activities }: WeeklyLabourChartP
     // Aggregate hours by activityId
     const aggregated: Record<string, number> = {};
     currentWeekLogs.forEach(log => {
-      if (!aggregated[log.activityId]) {
-        aggregated[log.activityId] = 0;
+      if (!aggregated[log?.activityId]) {
+        aggregated[log?.activityId] = 0;
       }
-      aggregated[log.activityId] += log.hours || 0;
+      aggregated[log?.activityId] += log.hours || 0;
     });
 
     // Map to chart data format with activity names

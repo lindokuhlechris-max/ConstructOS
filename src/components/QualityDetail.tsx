@@ -23,9 +23,10 @@ import {
   Clock,
   Layers,
   Edit3,
-  UserCheck
+  UserCheck,
+  Printer
 } from 'lucide-react';
-import { QAInspectionItem } from '../types';
+import { QAInspectionItem, canManage, canUserEditSection } from '../types';
 import { useAppContext } from '../context/AppContext';
 
 interface QualityDetailProps {
@@ -36,7 +37,8 @@ interface QualityDetailProps {
 }
 
 export function QualityDetail({ inspection, onSave, onClose, onDelete }: QualityDetailProps) {
-  const { activities, projects, userRole } = useAppContext();
+  const { activities, projects, userRole, currentUserProfile } = useAppContext();
+  const canEditQuality = canUserEditSection(currentUserProfile, 'quality');
   const [activeTab, setActiveTab] = useState<'overview' | 'ncr' | 'tests' | 'photos'>('overview');
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
@@ -53,7 +55,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     location: inspection.location,
     inspector: inspection.inspector,
     date: inspection.date,
-    activityId: inspection.activityId,
+    activityId: inspection?.activityId,
     clientQCRepresentative: inspection.clientQCRepresentative || '',
     clientQCStatus: inspection.clientQCStatus || 'Pending Client Review',
     clientQCNotes: inspection.clientQCNotes || '',
@@ -82,7 +84,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     pass: true
   });
 
-  const linkedActivity = activities.find(a => a.id === (editForm.activityId || inspection.activityId));
+  const linkedActivity = activities.find(a => a.id === (editForm?.activityId || inspection?.activityId));
   const linkedProject = projects.find(p => p.id === inspection.projectId);
 
   const handleSaveEditInspection = (e: React.FormEvent) => {
@@ -94,7 +96,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       location: editForm.location || inspection.location,
       inspector: editForm.inspector || inspection.inspector,
       date: editForm.date || inspection.date,
-      activityId: editForm.activityId,
+      activityId: editForm?.activityId,
       clientQCRepresentative: editForm.clientQCRepresentative,
       clientQCStatus: editForm.clientQCStatus as any,
       clientQCNotes: editForm.clientQCNotes,
@@ -194,7 +196,15 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
 
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          {userRole === 'Manager' && (
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
+            title="Print quality inspection report using browser print"
+          >
+            <Printer className="h-4 w-4 text-slate-500" /> Print Inspection
+          </button>
+
+          {canEditQuality && (
             <button
               onClick={() => {
                 setEditForm({
@@ -203,7 +213,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   location: inspection.location,
                   inspector: inspection.inspector,
                   date: inspection.date,
-                  activityId: inspection.activityId,
+                  activityId: inspection?.activityId,
                   clientQCRepresentative: inspection.clientQCRepresentative || '',
                   clientQCStatus: inspection.clientQCStatus || 'Pending Client Review',
                   clientQCNotes: inspection.clientQCNotes || '',
@@ -217,19 +227,19 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
             </button>
           )}
 
-          {inspection.status !== 'Passed' && userRole === 'Manager' && (
+          {inspection.status !== 'Passed' && canEditQuality && (
             <Button onClick={() => setIsSignoffModalOpen(true)} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold">
               <CheckCircle2 className="h-4 w-4" /> Approve QA Signoff
             </Button>
           )}
 
-          {inspection.status !== 'Failed' && userRole === 'Manager' && (
+          {inspection.status !== 'Failed' && canEditQuality && (
             <Button onClick={() => setIsNCRModalOpen(true)} variant="outline" className="gap-1.5 border-rose-200 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-semibold">
               <AlertTriangle className="h-4 w-4" /> Issue Non-Conformance (NCR)
             </Button>
           )}
 
-          {onDelete && userRole === 'Manager' && (
+          {onDelete && canManage(userRole) && (
             <button
               onClick={() => {
                 if (confirm('Are you sure you want to delete this QA/QC inspection record?')) {
@@ -447,7 +457,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
               <ShieldCheck className="h-12 w-12 text-emerald-500 mx-auto mb-3 opacity-80" />
               <h3 className="font-bold text-lg text-slate-800 dark:text-slate-200">No Open Non-Conformance Report (NCR)</h3>
               <p className="text-xs text-slate-500 mt-1">This inspection has zero reported quality non-conformances.</p>
-              {userRole === 'Manager' && (
+              {canManage(userRole) && (
                 <Button onClick={() => setIsNCRModalOpen(true)} className="mt-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs gap-2">
                   <AlertTriangle className="h-4 w-4" /> Issue Non-Conformance Ticket
                 </Button>
@@ -462,12 +472,12 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
         <div className="flex flex-col gap-6 w-full">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <h2 className="text-lg font-bold text-[#0B5FFF] dark:text-white flex items-center gap-2">
                 <Award className="h-5 w-5 text-emerald-600" /> Laboratory & NDT Test Parameters
               </h2>
               <p className="text-xs text-slate-500">Quantitative test measurements (e.g., Concrete Slump, Ultrasonic NDT, Pressure tests).</p>
             </div>
-            {userRole === 'Manager' && (
+            {canManage(userRole) && (
               <Button onClick={() => setIsAddMetricModalOpen(true)} className="gap-2 bg-emerald-600 text-white rounded-xl text-xs">
                 <Plus className="h-4 w-4" /> Add Test Metric
               </Button>
@@ -519,7 +529,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
               </h2>
               <p className="text-xs text-slate-500">Inspection photos and defect markups.</p>
             </div>
-            {userRole === 'Manager' && (
+            {canManage(userRole) && (
               <label className="cursor-pointer bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2">
                 <Plus className="h-4 w-4" /> Upload Evidence Photo
                 <input type="file" accept="image/*" onChange={handleAddPhoto} className="hidden" />
@@ -631,7 +641,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Linked Construction Activity</label>
                   <select
-                    value={editForm.activityId}
+                    value={editForm?.activityId}
                     onChange={e => setEditForm({ ...editForm, activityId: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
                   >

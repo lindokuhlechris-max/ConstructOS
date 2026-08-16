@@ -2,7 +2,15 @@ export type ProjectStatus = 'Not Started' | 'In Progress' | 'Delayed' | 'Complet
 export type ActivityStatus = 'Not Started' | 'Ready' | 'In Progress' | 'Waiting' | 'Blocked' | 'Completed' | 'Cancelled';
 export type Priority = 'Low' | 'Medium' | 'High' | 'Critical';
 
-export type UserRole = 'Worker' | 'Manager';
+export type UserRole = 'Admin' | 'Manager' | 'Engineer' | 'Inspector' | 'Worker' | 'Viewer';
+
+export function canManage(role: UserRole): boolean {
+  return role === 'Admin' || role === 'Manager';
+}
+
+export function isAdmin(role: UserRole): boolean {
+  return role === 'Admin';
+}
 
 export type ReminderStatus = 'Pending' | 'Completed' | 'Overdue';
 
@@ -12,6 +20,9 @@ export interface Reminder {
   description: string;
   dueDate: string;
   dueTime?: string;
+  startTime?: string;
+  endTime?: string;
+  location?: string;
   status: ReminderStatus;
   priority: Priority;
   linkedModules: string[];
@@ -64,6 +75,14 @@ export type SubTaskCategory =
   | 'Quality & Inspection'
   | 'Custom';
 
+export interface SubTaskHoldPointSignOff {
+  signedBy: string;
+  signedAt: string;
+  signatureNote?: string;
+  photoUrl?: string;
+  approved: boolean;
+}
+
 export interface SubTask {
   id: string;
   title: string;
@@ -73,9 +92,24 @@ export interface SubTask {
   completedQuantity?: number;
   unit?: string;
   assignedPerson?: string;
+  assignedWorkers?: string[];
   assignedEquipment?: string;
+  assignedEquipmentList?: string[];
+  assignedTeam?: string;
+  assignedTeams?: string[];
+  startDate?: string;
+  endDate?: string;
   dueDate?: string;
   notes?: string;
+  assignments?: MaterialAssignment[];
+  parentId?: string;
+  isMilestone?: boolean;
+  milestoneCriteria?: string;
+  isHoldPoint?: boolean;
+  holdPointSignOff?: SubTaskHoldPointSignOff;
+  predecessorId?: string;
+  requiresPhotoEvidence?: boolean;
+  requiresSupervisorSignOff?: boolean;
 }
 
 export interface ActivityExplainerItem {
@@ -86,12 +120,17 @@ export interface ActivityExplainerItem {
   methodSpecs?: string;
   status: 'Not Started' | 'In Progress' | 'Completed';
   targetDate?: string;
+  subtaskId?: string;
+  assignedTo?: string;
 }
+
+export type SubtaskExplainerItem = ActivityExplainerItem;
 
 export interface Activity {
   id: string;
   projectId: string;
   name: string;
+  isMilestone?: boolean;
   description: string;
   workPackage: string;
   area: string;
@@ -108,15 +147,21 @@ export interface Activity {
   status: ActivityStatus;
   startDate: string;
   finishDate: string;
+  createdAt?: string;
+  updatedAt?: string;
   plannedHours: number;
   actualHours: number;
   progress: number;
+  planningType?: 'Daily' | 'Weekly' | 'Monthly' | 'Project Duration';
+  dailyTargetQuantity?: number;
+  dailyTargetPercentage?: number;
   dependencies?: string[];
   constraints?: string[];
   remarks?: string;
   methodStatement?: string;
   explainerItems?: ActivityExplainerItem[];
   photos?: string[];
+  photoTags?: Record<number, string>;
   attachments?: string[];
   gpsLocation?: { lat: number; lng: number } | string;
   qrCode?: string;
@@ -182,9 +227,22 @@ export interface AuditLog {
   id: string;
   projectId: string;
   userId: string;
+  userRole?: string;
   action: string;
   details: string;
   timestamp: string;
+  entityType?: 'Activity' | 'LabourLog' | 'Equipment' | 'Material' | 'Safety' | 'Report' | 'Project' | 'Employee' | 'Profile' | 'QA' | 'Reminder' | 'System';
+  entityId?: string;
+  actionType?: 'create' | 'update' | 'delete' | 'status_change' | 'security_permission' | 'other';
+  previousValue?: string;
+  newValue?: string;
+  ipAddress?: string;
+  activityName?: string;
+  subtaskTitle?: string;
+  subtaskId?: string;
+  inspectorName?: string;
+  photoUrl?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface LabourLog {
@@ -196,7 +254,13 @@ export interface LabourLog {
   workerName?: string;
   startTime?: string;
   endTime?: string;
+  lunchBreak?: number;
   hours: number;
+  workersCount?: number;
+  trade?: string;
+  hoursWorked?: number;
+  supervisorName?: string;
+  notes?: string;
 }
 
 export interface WorkerCheckIn {
@@ -216,8 +280,11 @@ export interface LabourAllocation {
   id: string;
   projectId: string;
   activityId: string;
+  subtaskId?: string;
+  employeeId?: string;
   workerName: string;
   workerRole: string;
+  hours?: number;
   startDate: string;
   endDate: string;
   status: 'Scheduled' | 'Active' | 'Completed' | 'Cancelled';
@@ -227,14 +294,20 @@ export interface LabourAllocation {
 export interface ResourceAllocation {
   id: string;
   projectId: string;
+  activityId?: string;
+  subtaskId?: string;
+  resourceId?: string;
+  equipmentId?: string;
   resourceType: 'Material' | 'Equipment';
   name: string;
   quantity: number;
   unit?: string;
-  status: 'Allocated' | 'In Use' | 'Depleted' | 'Returned';
+  status: 'Allocated' | 'In Use' | 'Depleted' | 'Returned' | 'Completed';
   assignedDate: string;
   expectedReturnDate?: string;
   assignedTo?: string;
+  operatorEmployeeId?: string;
+  plannedHours?: number;
   notes?: string;
 }
 
@@ -269,6 +342,22 @@ export interface SafetyPolicy {
   documentUrl?: string;
 }
 
+export interface SiteInspectionPhoto {
+  id: string;
+  projectId: string;
+  activityId?: string;
+  inspectionId?: string;
+  title: string;
+  category: 'General Site' | 'Working at Heights' | 'PPE Compliance' | 'Scaffolding' | 'Electrical' | 'Excavation' | 'Hazard' | 'Housekeeping';
+  url: string;
+  capturedAt: string;
+  inspectorName: string;
+  location?: string;
+  gpsLocation?: { lat: number; lng: number } | string;
+  notes?: string;
+  tags?: string[];
+}
+
 export interface ActivitySafetyInspection {
   id: string;
   projectId: string;
@@ -280,6 +369,8 @@ export interface ActivitySafetyInspection {
   status: 'Scheduled' | 'In Progress' | 'Passed' | 'Failed';
   checklistItems: { id: string; item: string; passed: boolean }[];
   notes?: string;
+  photos?: string[];
+  location?: string;
 }
 
 export interface PPEMaterialItem {
@@ -324,6 +415,65 @@ export interface QAInspectionItem {
   clientQCNotes?: string;
 }
 
+export interface ProjectSectionPermissions {
+  activities: boolean;
+  reports: boolean;
+  labour: boolean;
+  materials: boolean;
+  safety: boolean;
+  quality: boolean;
+  equipment: boolean;
+  documents: boolean;
+  settings: boolean;
+}
+
+export const DEFAULT_SECTION_PERMISSIONS: Record<UserRole, ProjectSectionPermissions> = {
+  Admin: { activities: true, reports: true, labour: true, materials: true, safety: true, quality: true, equipment: true, documents: true, settings: true },
+  Manager: { activities: true, reports: true, labour: true, materials: true, safety: true, quality: true, equipment: true, documents: true, settings: false },
+  Engineer: { activities: true, reports: true, labour: false, materials: true, safety: true, quality: true, equipment: false, documents: true, settings: false },
+  Inspector: { activities: false, reports: true, labour: false, materials: false, safety: true, quality: true, equipment: false, documents: true, settings: false },
+  Worker: { activities: false, reports: true, labour: false, materials: false, safety: true, quality: false, equipment: false, documents: true, settings: false },
+  Viewer: { activities: false, reports: false, labour: false, materials: false, safety: false, quality: false, equipment: false, documents: true, settings: false },
+};
+
+export type DocumentCategory = 
+  | 'Drawings & Blueprints'
+  | 'Contracts & Agreements'
+  | 'Specifications & Specs'
+  | 'Safety & Compliance'
+  | 'QA/QC Inspections'
+  | 'Financial & Invoices'
+  | 'Material Data Sheets (MSDS)'
+  | 'Daily Logs & Site Records'
+  | 'Method Statements'
+  | 'General';
+
+export type DocumentFileType = 'pdf' | 'excel' | 'word' | 'image' | 'cad' | 'archive' | 'text' | 'other';
+export type DocumentStatus = 'Approved' | 'Draft' | 'Under Review' | 'Archived' | 'Superseded';
+
+export interface DocumentItem {
+  id: string;
+  projectId: string;
+  title: string;
+  fileName: string;
+  fileType: DocumentFileType;
+  fileExtension: string; // e.g. pdf, xlsx, docx, png, dwg
+  fileSize: number; // in bytes
+  fileSizeFormatted?: string; // e.g. 2.4 MB
+  category: DocumentCategory;
+  tags?: string[];
+  version: string;
+  status: DocumentStatus;
+  fileUrl?: string; // base64 data URL or asset link for preview/download
+  linkedActivityId?: string; // optional assignment to an Activity
+  linkedActivityName?: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  lastModified?: string;
+  description?: string;
+  confidential?: boolean;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -336,6 +486,30 @@ export interface UserProfile {
   avatarUrl?: string;
   initials: string;
   certifications?: string[];
+  accessAllowed?: boolean;
+  permissions?: Partial<ProjectSectionPermissions>;
+  allowedProjectIds?: string[];
+}
+
+export interface AccessRequest {
+  id: string;
+  name: string;
+  email: string;
+  company: string;
+  requestedRole: UserRole;
+  reason: string;
+  timestamp: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+}
+
+export function canUserEditSection(profile: UserProfile | null | undefined, section: keyof ProjectSectionPermissions): boolean {
+  if (!profile) return false;
+  if (profile.accessAllowed === false) return false;
+  if (profile.role === 'Admin') return true;
+  if (profile.permissions && typeof profile.permissions[section] === 'boolean') {
+    return profile.permissions[section]!;
+  }
+  return DEFAULT_SECTION_PERMISSIONS[profile.role]?.[section] ?? false;
 }
 
 export interface SafetyIncident {
@@ -375,13 +549,25 @@ export interface MaterialDocument {
   fileType?: string;
 }
 
+export interface MaterialAssignment {
+  id: string;
+  employeeId: string;
+  assignedDate: string;
+  returnedDate?: string;
+  notes?: string;
+  assignedBy?: string;
+}
+
 export interface MaterialInventory {
   id: string;
   projectId: string;
   name: string;
   sku?: string;
   category: string;
+  type: 'Consumable' | 'Non-Consumable';
   unit: string;
+  baseUnit?: string;
+  baseAmount?: number;
   estimatedQuantity: number;
   receivedQuantity: number;
   usedQuantity: number;
@@ -389,9 +575,11 @@ export interface MaterialInventory {
   unitCost?: number;
   location?: string;
   reorderLevel?: number;
+  costPerUnit?: number;
   certificates?: MaterialCertificate[];
   photos?: string[];
   manuals?: MaterialDocument[];
+  assignments?: MaterialAssignment[];
   notes?: string;
 }
 
@@ -414,6 +602,41 @@ export interface MaterialUsage {
   quantity: number;
   recordedBy: string;
   notes?: string;
+}
+
+export type WeatherCondition = 
+  | 'Sunny'
+  | 'Clear'
+  | 'Partly Cloudy'
+  | 'Overcast'
+  | 'Light Rain'
+  | 'Heavy Rain'
+  | 'Thunderstorm'
+  | 'High Winds'
+  | 'Extreme Heat'
+  | 'Freezing'
+  | 'Dust / Haze'
+  | 'Fog';
+
+export type WeatherImpactLevel = 'Normal Operations' | 'Caution / Monitoring' | 'Work Package Delay' | 'Site Suspension';
+
+export interface WeatherLog {
+  id: string;
+  projectId: string;
+  date: string; // YYYY-MM-DD
+  time?: string; // HH:mm
+  condition: WeatherCondition;
+  temperature: number;
+  humidity?: number; // %
+  windSpeed?: number; // km/h or mph
+  windDirection?: string;
+  rainfall?: number; // mm or in
+  impactLevel: WeatherImpactLevel;
+  safetyAdvisories: string[];
+  affectedActivityIds?: string[];
+  notes?: string;
+  loggedBy: string;
+  createdAt: string;
 }
 
 export interface DailyReport {
@@ -493,6 +716,18 @@ export interface Employee {
   notes?: string;
   leaveRecords?: LeaveRecord[];
   leaveBalance?: EmployeeLeaveBalance;
+  hasAccommodation?: boolean;
+  accommodationDetails?: {
+    campName?: string;
+    roomNumber?: string;
+    subsidyAmount?: number;
+    notes?: string;
+  };
+  hasTransport?: boolean;
+  transportDetails?: {
+    route?: string;
+    pickupPoint?: string;
+  };
 }
 
 export interface Team {
@@ -508,25 +743,52 @@ export interface Team {
 
 export type EquipmentStatus = 'Operating' | 'Idle' | 'Maintenance' | 'Out of Service';
 
+export type EquipmentCategory = 
+  | 'Cars & Light Vehicles'
+  | 'Heavy Machinery'
+  | 'Haulage & Dump Trucks'
+  | 'Stationary & Generators'
+  | 'Lifting & Cranes'
+  | 'Light Equipment & Tools';
+
+export type PrimaryUsageMetric = 
+  | 'Engine Hours'
+  | 'Mileage / Odometer'
+  | 'Loads & Trips'
+  | 'Power Output (kWh)';
+
 export interface Equipment {
   id: string;
   name: string;
   type: string;
-  category?: string;
+  category?: EquipmentCategory | string;
+  primaryMetric?: PrimaryUsageMetric;
   status: EquipmentStatus;
   operator: string;
   location: string;
-  engineHours: number;
+  engineHours: number; // h
+  mileage?: number; // km
+  totalLoads?: number; // count of loads/trips
+  totalPowerKWh?: number; // kWh output for generators/power units
+  licensePlate?: string; // for vehicles/trucks
+  fuelLevel: number; // percentage (0 - 100)
+  fuelColor?: string;
+  fuelCapacityLitres?: number;
+  fuelConsumptionRate?: number; // L/hr or L/100km
   lastService: string;
   nextService?: string;
-  fuelLevel: number; // percentage
-  fuelColor?: string;
-  serialNumber?: string;
+  lastServiceKm?: number;
+  nextServiceKm?: number;
+  serviceIntervalKm?: number;
+  serviceIntervalHours?: number;
+  serialNumber?: string; // Legacy
+  vinSerial?: string;
+  accessories?: string;
   model?: string;
   notes?: string;
 }
 
-export type EquipmentLogType = 'Hours' | 'Refuel' | 'Maintenance';
+export type EquipmentLogType = 'Hours' | 'Mileage' | 'Loads & Trips' | 'Power Output' | 'Refuel' | 'Maintenance';
 
 export interface EquipmentLog {
   id: string;
@@ -536,12 +798,41 @@ export interface EquipmentLog {
   loggedBy: string;
   hoursAdded?: number;
   totalHours?: number;
+  mileageAdded?: number;
+  odometerReading?: number;
+  loadsAdded?: number;
+  materialHauled?: string;
+  loadWeightTonnes?: number;
+  powerKWhAdded?: number;
+  generatorLoadPercent?: number;
   fuelLitres?: number;
   fuelLevelAfter?: number;
-  maintenanceType?: string;
+  fuelCost?: number;
   cost?: number;
+  tripRoute?: string;
+  driverOperator?: string;
+  maintenanceType?: string;
   notes?: string;
   setStatus?: EquipmentStatus;
 }
 
+export interface SyncConflict {
+  id: string;
+  entityType: string;
+  entityId: string;
+  entityName: string;
+  timestamp: string;
+  localVersion: Record<string, any>;
+  serverVersion: Record<string, any>;
+  changedFields?: {
+    fieldName: string;
+    label: string;
+    localValue: any;
+    serverValue: any;
+  }[];
+}
 
+
+
+
+export type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'ZAR' | 'AUD' | 'CAD' | 'INR';

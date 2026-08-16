@@ -56,22 +56,68 @@ html.dark, html.dark body {
   color: #f8fafc !important;
 }
 
+
 @media print {
   @page {
     margin: 1cm;
+    size: auto;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-family: sans-serif;
+      font-size: 9pt;
+      color: #94a3b8;
+    }
   }
-
   body {
     background: white !important;
     color: black !important;
+    font-size: 11pt;
   }
-
   /* Hide app navigation and interactive elements */
   header, 
   nav, 
   button,
-  .no-print {
+  .no-print,
+  ::-webkit-scrollbar {
     display: none !important;
+  }
+
+  /* Handle Print Modal Visibility overrides */
+  body.print-modal-open { visibility: hidden; }
+  body.print-modal-open .print-modal-wrapper, body.print-modal-open .print-modal-wrapper * { visibility: visible; }
+  body.print-modal-open .print-modal-wrapper { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; width: 100% !important; }
+
+  .print-modal-wrapper {
+    display: block !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+  }
+  .print-modal-content {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .print-modal-body {
+    background: transparent !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  .print-modal-header {
+    display: none !important;
+  }
+  .print-content-container {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    margin: 0 !important;
   }
 
   /* Ensure main content takes full width and height */
@@ -88,24 +134,73 @@ html.dark, html.dark body {
     margin: 0 !important;
     background: transparent !important;
   }
-
+  /* Expand hidden scroll areas */
+  .max-h-[300px],
+  .max-h-[400px],
+  .max-h-[500px],
+  .max-h-96,
+  .max-h-screen {
+    max-height: none !important;
+    overflow: visible !important;
+  }
   /* Cards should be bordered and not broken */
-  .rounded-2xl, .rounded-xl, .card {
+  .rounded-2xl, .rounded-xl, .card, .bg-white {
     break-inside: avoid;
     page-break-inside: avoid;
     border: 1px solid #cbd5e1 !important;
     box-shadow: none !important;
+    background-color: #ffffff !important;
+    margin-bottom: 1rem !important;
   }
-
+  /* Tables formatting for print */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+  }
+  thead {
+    display: table-header-group; /* Repeat headers on new pages */
+  }
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  th, td {
+    border: 1px solid #e2e8f0 !important;
+    padding: 0.5rem !important;
+    color: #000 !important;
+  }
+  /* Charts and visual wrappers */
+  .recharts-wrapper, 
+  svg, 
+  canvas,
+  [class*="chart"] {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  /* Grid layout adjustment for print - convert tight grids to blocks if needed or allow them to span properly */
+  .grid {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 1rem !important;
+  }
+  
+  .grid > * {
+    flex: 1 1 auto !important;
+    min-width: 250px !important;
+  }
+  /* Ensure text colors are readable */
+  .text-slate-500, .text-slate-400, .text-gray-500 {
+    color: #475569 !important;
+  }
   /* Ensure background colors print */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-
-  /* Expand hidden scroll areas (like comments) */
-  .max-h-\[300px\] {
-    max-height: none !important;
-    overflow: visible !important;
+  /* Utility to force page breaks */
+  .page-break {
+    page-break-before: always;
+    break-before: page;
   }
 }

@@ -24,11 +24,15 @@ import {
   MapPin,
   DollarSign,
   AlertCircle,
+  AlertTriangle,
   Clock,
   CheckCircle2,
   Calendar,
   Layers,
-  Paperclip
+  ClipboardList,
+  UserCheck,
+  Paperclip,
+  Copy
 } from 'lucide-react';
 
 interface MaterialDetailProps {
@@ -36,24 +40,104 @@ interface MaterialDetailProps {
   onSave?: (updated: MaterialInventory) => void;
   onClose?: () => void;
   onDelete?: (id: string) => void;
+  onDuplicate?: (material: MaterialInventory) => void;
 }
 
-export function MaterialDetail({ material: initialMaterial, onSave, onClose, onDelete }: MaterialDetailProps) {
+export function MaterialDetail({ material: initialMaterial, onSave, onClose, onDelete, onDuplicate }: MaterialDetailProps) {
   const { 
-    materials, 
+    materials, currency, 
     materialReceipts, 
     materialUsages, 
     activities, 
+    projects,
     updateMaterial, 
     deleteMaterial, 
     addMaterialReceipt, 
     addMaterialUsage, 
     addAuditLog, 
-    userRole 
+    userRole, 
+    employees, 
+    currentUserProfile
   } = useAppContext();
 
   const [material, setMaterial] = useState<MaterialInventory>(initialMaterial);
   const [isEditing, setIsEditing] = useState(false);
+
+    const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [assignEmployeeId, setAssignEmployeeId] = useState('');
+  const [assignNotes, setAssignNotes] = useState('');
+  
+  const handleAssignTool = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignEmployeeId) return;
+    
+    const newAssignment = {
+      id: crypto.randomUUID(),
+      employeeId: assignEmployeeId,
+      assignedDate: new Date().toISOString(),
+      notes: assignNotes,
+      assignedBy: currentUserProfile?.name || 'Admin'
+    };
+    
+    updateMaterial({
+      ...material,
+      assignments: [...(material.assignments || []), newAssignment]
+    });
+    
+    setMaterial(prev => ({
+      ...prev,
+      assignments: [...(prev.assignments || []), newAssignment]
+    }));
+    
+    setIsAssignModalOpen(false);
+    setAssignEmployeeId('');
+    setAssignNotes('');
+    
+    addAuditLog({
+      id: `AUD-${Date.now()}`,
+      projectId: material.projectId || projects[0]?.id || 'PRJ-001',
+      userId: currentUserProfile?.id || 'admin',
+      userRole: currentUserProfile?.role || 'Admin',
+      action: 'Tool Assigned',
+      details: `Tool assigned to ${employees.find(e => e.id === assignEmployeeId)?.firstName}`,
+      timestamp: new Date().toISOString(),
+      entityType: 'Material',
+      entityId: material.id
+    });
+  };
+
+  const handleReturnTool = (assignmentId: string) => {
+    const updatedAssignments = (material.assignments || []).map(a => 
+      a.id === assignmentId ? { ...a, returnedDate: new Date().toISOString() } : a
+    );
+    
+    updateMaterial({
+      ...material,
+      assignments: updatedAssignments
+    });
+    
+    setMaterial(prev => ({
+      ...prev,
+      assignments: updatedAssignments
+    }));
+    
+    addAuditLog({
+      id: `AUD-${Date.now()}`,
+      projectId: material.projectId || projects[0]?.id || 'PRJ-001',
+      userId: currentUserProfile?.id || 'admin',
+      userRole: currentUserProfile?.role || 'Admin',
+      action: 'Tool Returned',
+      details: 'Tool marked as returned',
+      timestamp: new Date().toISOString(),
+      entityType: 'Material',
+      entityId: material.id
+    });
+  };
+
+  const formatCurrency = (amount: number, curr: string) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: curr }).format(amount);
+  };
+
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
 
@@ -93,10 +177,14 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
   // Calculations
   const balance = material.receivedQuantity - material.usedQuantity;
   const percentUsed = (material.usedQuantity / (material.estimatedQuantity || 1)) * 100;
+  const threshold = material.reorderLevel !== undefined && material.reorderLevel >= 0 
+    ? material.reorderLevel 
+    : Math.round((material.estimatedQuantity || 100) * 0.1);
+  const isBelowThreshold = balance <= threshold;
   
   let statusColor = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
-  if (balance <= 0) statusColor = 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-  else if (balance < (material.reorderLevel || material.estimatedQuantity * 0.1)) statusColor = 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+  if (balance <= 0) statusColor = 'bg-red-600 text-white font-bold';
+  else if (isBelowThreshold) statusColor = 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-300 font-extrabold';
   else if (material.usedQuantity > material.estimatedQuantity) statusColor = 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
 
   // Filter receipt & usage transactions for this material
@@ -272,13 +360,15 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const quantity = Number(form.get('quantity'));
+    const projectId = form.get('projectId') as string;
+    
     if (quantity > 0) {
       addMaterialUsage({
         id: `USE-${Math.random().toString(36).substr(2, 9)}`,
         materialId: material.id,
         date: new Date().toISOString(),
         quantity,
-        recordedBy: userRole === 'Manager' ? 'Current User' : 'Current User',
+        recordedBy: currentUserProfile?.name || 'Current User',
         notes: form.get('notes') as string,
       });
       setMaterial(prev => ({ ...prev, usedQuantity: prev.usedQuantity + quantity }));
@@ -343,6 +433,18 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
             <Edit3 className="h-4 w-4" />
             <span>{isEditing ? 'Cancel Edit' : 'Edit'}</span>
           </Button>
+
+          {onDuplicate && (
+            <Button 
+              variant="outline" 
+              onClick={() => onDuplicate(material)} 
+              className="gap-1.5 rounded-xl text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-xs font-medium px-3.5 h-10"
+              title="Duplicate material with specs & edit minor differences"
+            >
+              <Copy className="h-4 w-4" />
+              <span>Duplicate</span>
+            </Button>
+          )}
 
           {onDelete && (
             <Button 
@@ -441,6 +543,17 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
                   className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
                 />
               </div>
+
+              <div>
+                <label className="text-xs font-bold text-amber-800 dark:text-amber-300 block mb-1">User Alert Threshold Level ({editForm.unit})</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editForm.reorderLevel}
+                  onChange={e => setEditForm({ ...editForm, reorderLevel: Number(e.target.value) })}
+                  className="w-full h-10 px-3 rounded-xl border-2 border-amber-300 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 text-sm font-bold"
+                />
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
@@ -451,6 +564,38 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
         </Card>
       )}
 
+      {/* Critical Low Stock Alert Banner */}
+      {isBelowThreshold && (
+        <div className="p-4 bg-red-600 text-white rounded-2xl shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="p-2.5 bg-white/20 rounded-xl shrink-0 mt-0.5 sm:mt-0">
+              <AlertTriangle className="h-6 w-6 text-white animate-bounce" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded bg-white text-red-700 shadow-2xs">
+                  CRITICAL STOCK ALERT
+                </span>
+                <span className="text-xs text-red-100 font-semibold">
+                  Quantity Below Threshold
+                </span>
+              </div>
+              <p className="text-sm font-bold text-white mt-1">
+                Current Available Balance ({balance.toLocaleString()} {material.unit}) is at or below user alert threshold ({threshold.toLocaleString()} {material.unit})!
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button 
+              onClick={() => setIsReceiptModalOpen(true)} 
+              className="bg-white text-red-700 hover:bg-red-50 font-extrabold text-xs rounded-xl h-9 px-3 shadow-xs"
+            >
+              <ArrowDownToLine className="h-4 w-4 mr-1" /> Receive Stock
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -459,42 +604,63 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
           
           {/* Key Metrics Overview Card */}
           <Card className="rounded-2xl border-slate-200 dark:border-slate-800">
-            <CardHeader>
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm font-bold uppercase text-slate-500 tracking-wider flex items-center gap-2">
                 <Package className="h-4 w-4 text-[#0B5FFF]" /> Stock Levels & Requirement
               </CardTitle>
+              <span className="text-xs font-semibold text-slate-500">
+                Threshold Mode: <strong className="text-amber-800 dark:text-amber-300">{threshold.toLocaleString()} {material.unit}</strong>
+              </span>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="bg-blue-50 dark:bg-blue-950/40 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50">
+            <CardContent className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+              <div className={isBelowThreshold ? "bg-red-50 dark:bg-red-950/80 p-3.5 rounded-xl border-2 border-red-500 shadow-2xs col-span-2 sm:col-span-1" : "bg-blue-50 dark:bg-blue-950/40 p-3.5 rounded-xl border border-blue-100 dark:border-blue-900/50"}>
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Available Balance</span>
-                <span className="text-2xl font-extrabold text-[#0B5FFF] dark:text-blue-400 block mt-1">
+                <span className={`text-xl font-extrabold block mt-1 ${isBelowThreshold ? 'text-red-600 dark:text-red-400 flex items-center gap-1' : 'text-[#0B5FFF] dark:text-blue-400'}`}>
+                  {isBelowThreshold && <AlertTriangle className="h-4 w-4 shrink-0 animate-pulse" />}
                   {balance.toLocaleString()}
                 </span>
-                <span className="text-xs text-slate-500 font-medium">{material.unit} in stock</span>
+                <span className={`text-[11px] font-semibold ${isBelowThreshold ? 'text-red-600 dark:text-red-300' : 'text-slate-500'}`}>
+                  {isBelowThreshold ? '⚠️ Below threshold' : `${material.unit} in stock`}
+                </span>
               </div>
 
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="bg-amber-50/80 dark:bg-amber-950/50 p-3.5 rounded-xl border border-amber-200 dark:border-amber-800">
+                <span className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-400 block">Alert Threshold</span>
+                <span className="text-xl font-extrabold text-amber-900 dark:text-amber-200 block mt-1">
+                  {threshold.toLocaleString()}
+                </span>
+                <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">{material.unit} minimum</span>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Estimated Target</span>
-                <span className="text-2xl font-bold text-slate-800 dark:text-slate-200 block mt-1">
+                <span className="text-xl font-bold text-slate-800 dark:text-slate-200 block mt-1">
                   {material.estimatedQuantity.toLocaleString()}
                 </span>
-                <span className="text-xs text-slate-500 font-medium">{material.unit} target</span>
+                <span className="text-[11px] text-slate-500 font-medium">{material.unit} target</span>
+              </div>
+              <div className="bg-indigo-50 dark:bg-indigo-950/40 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                <span className="text-[10px] font-bold uppercase text-indigo-500 dark:text-indigo-400 block">Cost / {material.unit}</span>
+                <span className="text-xl font-bold text-indigo-700 dark:text-indigo-300 block mt-1">
+                  {material.costPerUnit ? formatCurrency(material.costPerUnit, currency || 'USD') : 'N/A'}
+                </span>
+                <span className="text-[11px] text-indigo-500 font-medium">{material.costPerUnit ? 'Unit Price' : 'Unset'}</span>
               </div>
 
-              <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/50">
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3.5 rounded-xl border border-emerald-100 dark:border-emerald-900/50">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Total Received</span>
-                <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 block mt-1">
+                <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400 block mt-1">
                   {material.receivedQuantity.toLocaleString()}
                 </span>
-                <span className="text-xs text-slate-500 font-medium">{material.unit} received</span>
+                <span className="text-[11px] text-slate-500 font-medium">{material.unit} received</span>
               </div>
 
-              <div className="bg-amber-50 dark:bg-amber-950/40 p-4 rounded-xl border border-amber-100 dark:border-amber-900/50">
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Total Used</span>
-                <span className="text-2xl font-bold text-amber-600 dark:text-amber-400 block mt-1">
+                <span className="text-xl font-bold text-amber-600 dark:text-amber-400 block mt-1">
                   {material.usedQuantity.toLocaleString()}
                 </span>
-                <span className="text-xs text-slate-500 font-medium">{percentUsed.toFixed(0)}% of target</span>
+                <span className="text-[11px] text-slate-500 font-medium">{percentUsed.toFixed(0)}% used</span>
               </div>
             </CardContent>
           </Card>
@@ -730,7 +896,13 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
                         {tx.txType === 'RECEIPT' && tx.supplier && (
                           <p className="text-[11px] text-slate-500">Supplier: {tx.supplier}</p>
                         )}
-                        <p className="text-[10px] text-slate-400 mt-0.5">
+                        {tx.txType === 'USAGE' && (tx as any).projectId && (
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded w-fit flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {projects.find(p => p.id === (tx as any).projectId)?.name || 'Unknown Project'}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-400 mt-1">
                           {new Date(tx.date).toLocaleDateString()} by {'receivedBy' in tx ? tx.receivedBy : tx.recordedBy}
                         </p>
                       </div>
@@ -741,6 +913,70 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
             </CardContent>
           </Card>
 
+          {material.type === 'Non-Consumable' && (
+            <Card className="rounded-2xl border-slate-200 dark:border-slate-800">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-bold uppercase text-slate-500 tracking-wider flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-[#0B5FFF]" />
+                  Assignment History ({(material.assignments || []).length})
+                </CardTitle>
+                <Button
+                  size="sm"
+                  onClick={() => setIsAssignModalOpen(true)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 h-8 text-xs font-semibold"
+                >
+                  <UserCheck className="h-3.5 w-3.5 mr-1.5" />
+                  Assign Tool
+                </Button>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 max-h-[400px] overflow-y-auto pr-1">
+                {!(material.assignments && material.assignments.length > 0) ? (
+                  <p className="text-xs text-slate-400 italic p-4 text-center">No assignments logged yet.</p>
+                ) : (
+                  [...(material.assignments || [])]
+                  .sort((a, b) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime())
+                  .map(assign => {
+                    const emp = employees.find(e => e.id === assign.employeeId);
+                    return (
+                      <div key={assign.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex flex-col gap-2">
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-col">
+                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                              {emp ? `${emp.firstName} ${emp.lastName}` : 'Unknown Employee'}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Assigned: {new Date(assign.assignedDate).toLocaleDateString()}
+                            </p>
+                            {assign.returnedDate && (
+                              <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                                Returned: {new Date(assign.returnedDate).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                          {!assign.returnedDate && (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              className="h-7 text-[10px] px-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:border-emerald-900 dark:hover:bg-emerald-900/30"
+                              onClick={() => handleReturnTool(assign.id)}
+                            >
+                              Mark Returned
+                            </Button>
+                          )}
+                        </div>
+                        {assign.notes && (
+                          <p className="text-xs text-slate-600 dark:text-slate-400 italic mt-1 bg-white dark:bg-slate-900 p-2 rounded-md border border-slate-100 dark:border-slate-800">
+                            {assign.notes}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+          )}
+          
           {/* Linked Construction Tasks */}
           <Card className="rounded-2xl border-slate-200 dark:border-slate-800">
             <CardHeader>
@@ -949,8 +1185,59 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
                   </div>
                 </div>
                 <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Project / Site Location</label>
+                  <select name="projectId" required className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+                    <option value="">Select a project...</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.location})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
                   <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Usage Notes</label>
-                  <textarea name="notes" className="w-full h-20 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+                  <textarea name="notes" placeholder="Where or how was this used?" className="w-full h-20 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+                </div>
+              </CardContent>
+              <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex justify-end gap-2 rounded-b-xl">
+                <Button type="button" variant="outline" onClick={() => setIsReceiptModalOpen(false)}>Cancel</Button>
+                <Button type="submit" className="bg-emerald-600 text-white">Record Receipt</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* Usage Stock Modal */}
+      {isUsageModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md shadow-xl border-slate-200 dark:border-slate-800">
+            <CardHeader className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 pb-4">
+              <CardTitle className="text-lg flex items-center gap-2 text-amber-600">
+                <ArrowUpFromLine className="h-5 w-5" /> Record Stock Usage
+              </CardTitle>
+              <p className="text-sm text-slate-500">{material.name}</p>
+            </CardHeader>
+            <form onSubmit={handleUseSubmit}>
+              <CardContent className="p-6 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Quantity Used</label>
+                  <div className="relative">
+                    <input name="quantity" type="number" min="0.01" step="0.01" required className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">{material.unit}</span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Project / Site Location</label>
+                  <select name="projectId" required className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+                    <option value="">Select a project...</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.location})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Usage Notes</label>
+                  <textarea name="notes" placeholder="Where or how was this used?" className="w-full h-20 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
                 </div>
               </CardContent>
               <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex justify-end gap-2 rounded-b-xl">
@@ -970,6 +1257,51 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
         />
       )}
 
+      {/* Assign Tool Modal */}
+      {isAssignModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md shadow-xl border-slate-200 dark:border-slate-800">
+            <CardHeader className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 pb-4">
+              <CardTitle className="text-lg flex items-center gap-2 text-[#0B5FFF]">
+                <UserCheck className="h-5 w-5" /> Assign Tool / Equipment
+              </CardTitle>
+              <p className="text-sm text-slate-500">{material.name}</p>
+            </CardHeader>
+            <form onSubmit={handleAssignTool}>
+              <CardContent className="p-6 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Assign To Employee *</label>
+                  <select 
+                    required 
+                    value={assignEmployeeId}
+                    onChange={e => setAssignEmployeeId(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                  >
+                    <option value="">Select Employee...</option>
+                    {employees.filter(emp => emp.status === 'Active').map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} - {emp.position}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Notes / Condition</label>
+                  <textarea 
+                    value={assignNotes}
+                    onChange={e => setAssignNotes(e.target.value)}
+                    placeholder="E.g. Verified working condition before handover"
+                    className="w-full h-20 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" 
+                  />
+                </div>
+              </CardContent>
+              <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex justify-end gap-2 rounded-b-xl">
+                <Button type="button" variant="outline" onClick={() => setIsAssignModalOpen(false)}>Cancel</Button>
+                <Button type="submit" className="bg-[#0B5FFF] hover:bg-blue-600 text-white font-semibold">Assign Tool</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+      
       {/* Photo Lightbox Preview */}
       {previewPhoto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
