@@ -757,6 +757,8 @@ export type PrimaryUsageMetric =
   | 'Loads & Trips'
   | 'Power Output (kWh)';
 
+export type EquipmentOwnership = 'Owned' | 'Rented';
+
 export interface Equipment {
   id: string;
   name: string;
@@ -786,6 +788,18 @@ export interface Equipment {
   accessories?: string;
   model?: string;
   notes?: string;
+
+  // Rented & Financial/Rate Tracking Fields
+  ownership?: EquipmentOwnership; // 'Owned' | 'Rented'
+  hourlyRate?: number; // Rate in Rands (ZAR) per operating hour (e.g. 850)
+  dailyRate?: number; // Optional daily rate in Rands
+  standbyRate?: number; // Optional standby/idle rate in Rands
+  rentalVendor?: string; // Rental company / supplier (e.g. "Barloworld Equipment", "Goscor", "Coastal Hire")
+  rentalAgreementNumber?: string; // Contract / PO / Agreement #
+  rentalStartDate?: string; // YYYY-MM-DD
+  rentalEndDate?: string; // YYYY-MM-DD (Return deadline)
+  rentalBillingCycle?: 'Hourly' | 'Daily' | 'Weekly' | 'Monthly';
+  rentalDeposit?: number; // Deposit in Rands
 }
 
 export type EquipmentLogType = 'Hours' | 'Mileage' | 'Loads & Trips' | 'Power Output' | 'Refuel' | 'Maintenance';
@@ -808,7 +822,10 @@ export interface EquipmentLog {
   fuelLitres?: number;
   fuelLevelAfter?: number;
   fuelCost?: number;
-  cost?: number;
+  fuelPricePerLitre?: number;
+  hourlyRateApplied?: number; // Operating hourly rate in Rands applied at log time
+  calculatedOperatingCost?: number; // hoursAdded * hourlyRateApplied (in Rands)
+  cost?: number; // Direct maintenance or refuel cost
   tripRoute?: string;
   driverOperator?: string;
   maintenanceType?: string;

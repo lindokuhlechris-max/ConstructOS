@@ -1540,55 +1540,66 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addEquipmentLog = (log: EquipmentLog) => {
-    setEquipmentLogs(prev => [log, ...prev]);
-    syncToServer('add_equipment_log', log);
+    const targetEq = equipment.find(e => e.id === log.equipmentId);
+    const enrichedLog: EquipmentLog = { ...log };
+    if (log.type === 'Hours' && log.hoursAdded) {
+      if (enrichedLog.hourlyRateApplied === undefined && targetEq?.hourlyRate) {
+        enrichedLog.hourlyRateApplied = targetEq.hourlyRate;
+      }
+      if (enrichedLog.calculatedOperatingCost === undefined && enrichedLog.hourlyRateApplied) {
+        enrichedLog.calculatedOperatingCost = log.hoursAdded * enrichedLog.hourlyRateApplied;
+      }
+    }
+
+    setEquipmentLogs(prev => [enrichedLog, ...prev]);
+    syncToServer('add_equipment_log', enrichedLog);
 
     // Automatically update equipment details based on the log entry
     setEquipment(prev => prev.map(eq => {
-      if (eq.id !== log.equipmentId) return eq;
+      if (eq.id !== enrichedLog.equipmentId) return eq;
 
       let updated = { ...eq };
-      if (log.type === 'Hours' && log.hoursAdded) {
+      if (enrichedLog.type === 'Hours' && enrichedLog.hoursAdded) {
         const currentHours = typeof eq.engineHours === 'number' ? eq.engineHours : (parseInt(String(eq.engineHours)) || 0);
-        updated.engineHours = currentHours + log.hoursAdded;
-      } else if (log.type === 'Mileage') {
+        updated.engineHours = currentHours + enrichedLog.hoursAdded;
+      } else if (enrichedLog.type === 'Mileage') {
         const currentMileage = eq.mileage || 0;
-        if (log.odometerReading) {
-          updated.mileage = log.odometerReading;
-        } else if (log.mileageAdded) {
-          updated.mileage = currentMileage + log.mileageAdded;
+        if (enrichedLog.odometerReading) {
+          updated.mileage = enrichedLog.odometerReading;
+        } else if (enrichedLog.mileageAdded) {
+          updated.mileage = currentMileage + enrichedLog.mileageAdded;
         }
-        if (log.hoursAdded) {
-          updated.engineHours = (eq.engineHours || 0) + log.hoursAdded;
+        if (enrichedLog.hoursAdded) {
+          updated.engineHours = (eq.engineHours || 0) + enrichedLog.hoursAdded;
         }
-      } else if (log.type === 'Loads & Trips') {
-        if (log.loadsAdded) {
-          updated.totalLoads = (eq.totalLoads || 0) + log.loadsAdded;
+      } else if (enrichedLog.type === 'Loads & Trips') {
+        if (enrichedLog.loadsAdded) {
+          updated.totalLoads = (eq.totalLoads || 0) + enrichedLog.loadsAdded;
         }
-        if (log.mileageAdded) {
-          updated.mileage = (eq.mileage || 0) + log.mileageAdded;
+        if (enrichedLog.mileageAdded) {
+          updated.mileage = (eq.mileage || 0) + enrichedLog.mileageAdded;
         }
-        if (log.hoursAdded) {
-          updated.engineHours = (eq.engineHours || 0) + log.hoursAdded;
+        if (enrichedLog.hoursAdded) {
+          updated.engineHours = (eq.engineHours || 0) + enrichedLog.hoursAdded;
         }
-      } else if (log.type === 'Power Output') {
-        if (log.powerKWhAdded) {
-          updated.totalPowerKWh = (eq.totalPowerKWh || 0) + log.powerKWhAdded;
+      } else if (enrichedLog.type === 'Power Output') {
+        if (enrichedLog.powerKWhAdded) {
+          updated.totalPowerKWh = (eq.totalPowerKWh || 0) + enrichedLog.powerKWhAdded;
         }
-        if (log.hoursAdded) {
-          updated.engineHours = (eq.engineHours || 0) + log.hoursAdded;
+        if (enrichedLog.hoursAdded) {
+          updated.engineHours = (eq.engineHours || 0) + enrichedLog.hoursAdded;
         }
-      } else if (log.type === 'Refuel' && log.fuelLevelAfter !== undefined) {
-        updated.fuelLevel = log.fuelLevelAfter;
-        updated.fuelColor = log.fuelLevelAfter < 25 ? 'bg-red-500' : log.fuelLevelAfter < 50 ? 'bg-amber-500' : 'bg-emerald-500';
-      } else if (log.type === 'Maintenance') {
-        updated.lastService = log.date.split(' ')[0] || new Date().toISOString().split('T')[0];
-        if (eq.mileage && log.odometerReading) {
-          updated.lastServiceKm = log.odometerReading;
+      } else if (enrichedLog.type === 'Refuel' && enrichedLog.fuelLevelAfter !== undefined) {
+        updated.fuelLevel = enrichedLog.fuelLevelAfter;
+        updated.fuelColor = enrichedLog.fuelLevelAfter < 25 ? 'bg-red-500' : enrichedLog.fuelLevelAfter < 50 ? 'bg-amber-500' : 'bg-emerald-500';
+      } else if (enrichedLog.type === 'Maintenance') {
+        updated.lastService = enrichedLog.date.split(' ')[0] || new Date().toISOString().split('T')[0];
+        if (eq.mileage && enrichedLog.odometerReading) {
+          updated.lastServiceKm = enrichedLog.odometerReading;
         }
-        if (log.setStatus) {
-          updated.status = log.setStatus;
-        } else if (log.notes?.toLowerCase().includes('maintenance') || log.maintenanceType?.toLowerCase().includes('repair')) {
+        if (enrichedLog.setStatus) {
+          updated.status = enrichedLog.setStatus;
+        } else if (enrichedLog.notes?.toLowerCase().includes('maintenance') || enrichedLog.maintenanceType?.toLowerCase().includes('repair')) {
           updated.status = 'Maintenance';
         }
       }

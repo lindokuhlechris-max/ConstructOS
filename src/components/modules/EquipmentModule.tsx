@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Card, Button, Badge } from '../ui';
-import { Truck, Plus, Wrench, Fuel, Clock, CheckCircle2, ArrowLeft, Edit3, Trash2, ClipboardList, X } from 'lucide-react';
+import { Truck, Plus, Wrench, Fuel, Clock, CheckCircle2, ArrowLeft, Edit3, Trash2, ClipboardList, X, Building2, Handshake, CircleDollarSign } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { Equipment as EquipmentType, EquipmentLog, EquipmentStatus, EquipmentLogType } from '../../types';
+import { Equipment as EquipmentType, EquipmentLog, EquipmentStatus, EquipmentLogType, EquipmentOwnership } from '../../types';
 import { RemindersWidget } from '../RemindersWidget';
+import { formatRand, formatRandShort, calculateEquipmentCosts } from '../../pages/Equipment';
 
 interface EquipmentModuleProps {
   onBack: () => void;
@@ -14,6 +15,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
 
   const [isAdding, setIsAdding] = useState(false);
   const [filter, setFilter] = useState<string>('All');
+  const [ownershipFilter, setOwnershipFilter] = useState<'All' | 'Owned' | 'Rented'>('All');
   const [editingEq, setEditingEq] = useState<EquipmentType | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [logModalEq, setLogModalEq] = useState<EquipmentType | null>(null);
@@ -27,14 +29,19 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
   const [newStatus, setNewStatus] = useState<EquipmentStatus>('Operating');
   const [newVinSerial, setNewVinSerial] = useState('');
   const [newAccessories, setNewAccessories] = useState('');
+  const [newOwnership, setNewOwnership] = useState<EquipmentOwnership>('Owned');
+  const [newRentalVendor, setNewRentalVendor] = useState('');
+  const [newHourlyRate, setNewHourlyRate] = useState<number | ''>(850);
 
   // Log states
   const [logHours, setLogHours] = useState(8);
   const [logStartTime, setLogStartTime] = useState('07:00');
   const [logEndTime, setLogEndTime] = useState('15:00');
+  const [logHourlyRateApplied, setLogHourlyRateApplied] = useState<number | ''>(850);
   const [logFuelLitres, setLogFuelLitres] = useState(100);
   const [logFuelLevel, setLogFuelLevel] = useState(100);
   const [logMaintType, setLogMaintType] = useState('Routine Service');
+  const [logCost, setLogCost] = useState<number | ''>('');
   const [logNotes, setLogNotes] = useState('');
   const [logUser, setLogUser] = useState('');
 
@@ -76,6 +83,9 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       lastService: new Date().toISOString().split('T')[0],
       vinSerial: newVinSerial,
       accessories: newAccessories,
+      ownership: newOwnership,
+      rentalVendor: newOwnership === 'Rented' ? newRentalVendor : undefined,
+      hourlyRate: newHourlyRate !== '' ? Number(newHourlyRate) : 850,
     };
 
     addEquipment(newItem);
@@ -84,6 +94,9 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
     setNewOperator('');
     setNewVinSerial('');
     setNewAccessories('');
+    setNewOwnership('Owned');
+    setNewRentalVendor('');
+    setNewHourlyRate(850);
   };
 
   const handleEditSave = (e: React.FormEvent) => {
@@ -100,6 +113,9 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       status: newStatus,
       vinSerial: newVinSerial,
       accessories: newAccessories,
+      ownership: newOwnership,
+      rentalVendor: newOwnership === 'Rented' ? newRentalVendor : undefined,
+      hourlyRate: newHourlyRate !== '' ? Number(newHourlyRate) : 850,
     });
 
     setEditingEq(null);
@@ -114,6 +130,9 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
     setNewStatus(item.status);
     setNewVinSerial(item.vinSerial || item.serialNumber || '');
     setNewAccessories(item.accessories || '');
+    setNewOwnership(item.ownership || 'Owned');
+    setNewRentalVendor(item.rentalVendor || '');
+    setNewHourlyRate(item.hourlyRate !== undefined ? item.hourlyRate : 850);
   };
 
   const openLog = (item: EquipmentType) => {
@@ -122,9 +141,11 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
     setLogStartTime('07:00');
     setLogEndTime('15:00');
     setLogHours(8);
+    setLogHourlyRateApplied(item.hourlyRate !== undefined ? item.hourlyRate : 850);
     setLogFuelLitres(100);
     setLogFuelLevel(item.fuelLevel ?? 100);
     setLogMaintType('Routine Service');
+    setLogCost('');
     setLogNotes('');
     setLogUser(item.operator !== 'Unassigned' ? item.operator : 'Operator');
   };
@@ -135,6 +156,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
 
     const now = new Date();
     const formattedDate = `${now.toISOString().split('T')[0]} ${now.toTimeString().slice(0, 5)}`;
+    const appliedRate = logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : (logModalEq.hourlyRate || 850);
 
     const newLog: EquipmentLog = {
       id: `EQL-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -143,15 +165,21 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       date: formattedDate,
       loggedBy: logUser || 'Operator',
       notes: logNotes,
+      hourlyRateApplied: appliedRate,
     };
 
     if (logTab === 'Hours') {
       newLog.hoursAdded = logHours;
+      newLog.calculatedOperatingCost = logHours * appliedRate;
     } else if (logTab === 'Refuel') {
       newLog.fuelLitres = logFuelLitres;
       newLog.fuelLevelAfter = logFuelLevel;
+      const fuelTotal = logCost !== '' ? Number(logCost) : logFuelLitres * 23.50;
+      newLog.fuelCost = fuelTotal;
+      newLog.cost = fuelTotal;
     } else if (logTab === 'Maintenance') {
       newLog.maintenanceType = logMaintType;
+      if (logCost !== '') newLog.cost = Number(logCost);
     }
 
     addEquipmentLog(newLog);
@@ -159,8 +187,12 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
   };
 
   const filtered = equipment.filter(item => {
-    if (filter === 'All') return true;
-    return item.status === filter;
+    const matchesStatus = filter === 'All' || item.status === filter;
+    const matchesOwnership = 
+      ownershipFilter === 'All' ||
+      (ownershipFilter === 'Owned' && (item.ownership === 'Owned' || !item.ownership)) ||
+      (ownershipFilter === 'Rented' && item.ownership === 'Rented');
+    return matchesStatus && matchesOwnership;
   });
 
   const getStatusBadge = (status: EquipmentStatus) => {
@@ -176,6 +208,8 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
     }
   };
 
+  const totalFleetCost = equipment.reduce((sum, eq) => sum + calculateEquipmentCosts(eq, equipmentLogs).totalCost, 0);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
@@ -185,7 +219,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Equipment Tracking</h1>
-            <p className="text-slate-500 text-sm">Monitor fleet availability, fuel levels, and maintenance status.</p>
+            <p className="text-slate-500 text-sm">Monitor fleet availability, rented machinery, rates (ZAR), and running costs.</p>
           </div>
         </div>
         <Button onClick={() => setIsAdding(!isAdding)} className="gap-2 bg-[#0B5FFF] rounded-xl">
@@ -197,6 +231,29 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
         <Card className="p-4 border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20">
           <form onSubmit={handleAddEquipment} className="flex flex-col gap-4">
             <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Register New Fleet Equipment</h3>
+            
+            {/* Ownership Switcher */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setNewOwnership('Owned')}
+                className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+                  newOwnership === 'Owned' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                <Building2 className="h-4 w-4" /> Company Owned
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewOwnership('Rented')}
+                className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+                  newOwnership === 'Rented' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                <Handshake className="h-4 w-4" /> Hired / Rented
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <input
                 type="text"
@@ -217,13 +274,37 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                 <option value="Compaction">Compaction</option>
                 <option value="Generator/Power">Generator/Power</option>
               </select>
-              <input
-                type="text"
-                placeholder="Assigned Operator Name"
-                value={newOperator}
-                onChange={e => setNewOperator(e.target.value)}
-                className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
-              />
+
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  placeholder="Hourly Rate (Rands/hr)"
+                  value={newHourlyRate}
+                  onChange={e => setNewHourlyRate(e.target.value ? Number(e.target.value) : '')}
+                  required
+                  className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-emerald-600 dark:text-emerald-400 flex-1"
+                />
+              </div>
+
+              {newOwnership === 'Rented' ? (
+                <input
+                  type="text"
+                  placeholder="Rental Supplier (e.g. Barloworld / Coastal Hire)"
+                  value={newRentalVendor}
+                  onChange={e => setNewRentalVendor(e.target.value)}
+                  required
+                  className="h-10 px-3 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Assigned Operator Name"
+                  value={newOperator}
+                  onChange={e => setNewOperator(e.target.value)}
+                  className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                />
+              )}
+
               <input
                 type="text"
                 placeholder="Current Site Location (e.g., Zone C)"
@@ -238,19 +319,12 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                 onChange={e => setNewVinSerial(e.target.value)}
                 className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
               />
-              <input
-                type="text"
-                placeholder="Included Accessories (e.g. Buckets, Auger)"
-                value={newAccessories}
-                onChange={e => setNewAccessories(e.target.value)}
-                className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF] md:col-span-2"
-              />
             </div>
             <div className="flex justify-end gap-2 mt-2">
               <Button type="button" variant="outline" onClick={() => setIsAdding(false)} className="rounded-xl text-xs">
                 Cancel
               </Button>
-              <Button type="submit" className="bg-[#0B5FFF] rounded-xl text-xs">
+              <Button type="submit" className="bg-[#0B5FFF] rounded-xl text-xs font-semibold px-4">
                 Save Equipment
               </Button>
             </div>
@@ -261,7 +335,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       <RemindersWidget moduleName="Equipment" />
 
       {/* Stats Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/30">
@@ -280,24 +354,35 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
             </div>
             <div>
               <div className="text-2xl font-bold">{equipment.filter(e => e.status === 'Operating').length}</div>
-              <div className="text-xs text-slate-500">Active / Operating</div>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-orange-100 text-orange-600 dark:bg-orange-900/30">
-              <Wrench className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold">{equipment.filter(e => e.status === 'Maintenance').length}</div>
-              <div className="text-xs text-slate-500">In Maintenance</div>
+              <div className="text-xs text-slate-500">Active Units</div>
             </div>
           </div>
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/30">
+              <Handshake className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{equipment.filter(e => e.ownership === 'Rented').length}</div>
+              <div className="text-xs text-slate-500">Hired / Rented</div>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30">
+              <CircleDollarSign className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-lg font-black truncate">{formatRandShort(totalFleetCost)}</div>
+              <div className="text-xs text-slate-500">Fleet Cost (ZAR)</div>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-orange-100 text-orange-600 dark:bg-orange-900/30">
               <Fuel className="h-5 w-5" />
             </div>
             <div>
@@ -311,93 +396,123 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
-        {['All', 'Operating', 'Idle', 'Maintenance'].map(status => (
-          <button
-            key={status}
-            onClick={() => setFilter(status)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-              filter === status
-                ? 'bg-[#0B5FFF] text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            {status}
-          </button>
-        ))}
+      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          {['All', 'Operating', 'Idle', 'Maintenance'].map(status => (
+            <button
+              key={status}
+              onClick={() => setFilter(status)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                filter === status
+                  ? 'bg-[#0B5FFF] text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="text-slate-400 text-[11px] mr-1">Ownership:</span>
+          {(['All', 'Owned', 'Rented'] as const).map(own => (
+            <button
+              key={own}
+              onClick={() => setOwnershipFilter(own)}
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                ownershipFilter === own
+                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-bold'
+                  : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {own}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filtered.map(item => (
-          <Card key={item.id} className="p-4 flex flex-col justify-between gap-4">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-mono text-slate-400">{item.id}</span>
-                  <Badge variant="outline" className="text-[10px]">{item.type || item.category}</Badge>
+        {filtered.map(item => {
+          const costs = calculateEquipmentCosts(item, equipmentLogs);
+
+          return (
+            <Card key={item.id} className="p-4 flex flex-col justify-between gap-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="text-xs font-mono text-slate-400">{item.id}</span>
+                    {item.ownership === 'Rented' ? (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold border border-amber-500/30">
+                        🤝 Hired: {item.rentalVendor || 'Supplier'}
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-700 dark:text-blue-400 text-[10px] font-semibold border border-blue-500/20">
+                        🏢 Owned
+                      </span>
+                    )}
+                    <Badge variant="outline" className="text-[10px]">{item.type || item.category}</Badge>
+                  </div>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">{item.name}</h3>
                 </div>
-                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">{item.name}</h3>
-                {(item.vinSerial || item.serialNumber) && (
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">S/N: {item.vinSerial || item.serialNumber}</div>
-                )}
-                {item.accessories && (
-                  <div className="text-[10px] text-slate-500 mt-0.5 truncate max-w-[200px]" title={item.accessories}>Acc: {item.accessories}</div>
-                )}
+                {getStatusBadge(item.status)}
               </div>
-              {getStatusBadge(item.status)}
-            </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl">
-              <div>
-                <span className="text-slate-400 block text-[10px]">Operator</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{item.operator}</span>
+              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Operator</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">{item.operator}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Location</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">{item.location}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Engine Hours</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">{item.engineHours} hrs</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Operating Rate</span>
+                  <span className="font-bold text-blue-600 dark:text-blue-400">{formatRandShort(item.hourlyRate || 850)}/hr</span>
+                </div>
+                <div className="col-span-2 pt-1 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                  <span className="text-slate-400 text-[10px]">Total Logged Cost</span>
+                  <span className="font-black text-emerald-600 dark:text-emerald-400 text-xs">{formatRand(costs.totalCost)}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-slate-400 block text-[10px]">Location</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{item.location}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px]">Engine Hours</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{item.engineHours} hrs</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px]">Last Service</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{item.lastService}</span>
-              </div>
-            </div>
 
-            {/* Fuel Bar */}
-            <div className="flex flex-col gap-1">
-              <div className="flex justify-between text-[10px] font-semibold text-slate-500">
-                <span className="flex items-center gap-1"><Fuel className="h-3 w-3" /> Fuel Tank</span>
-                <span>{item.fuelLevel}%</span>
+              {/* Fuel Bar */}
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between text-[10px] font-semibold text-slate-500">
+                  <span className="flex items-center gap-1"><Fuel className="h-3 w-3" /> Fuel Tank</span>
+                  <span>{item.fuelLevel}%</span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${
+                      item.fuelLevel < 25 ? 'bg-red-500' : item.fuelLevel < 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${item.fuelLevel}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all ${
-                    item.fuelLevel < 25 ? 'bg-red-500' : item.fuelLevel < 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                  }`}
-                  style={{ width: `${item.fuelLevel}%` }}
-                />
-              </div>
-            </div>
 
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
-              <Button size="sm" variant="outline" onClick={() => openLog(item)} className="h-7 text-xs text-blue-600 dark:text-blue-400 rounded-lg gap-1">
-                <ClipboardList className="h-3 w-3" /> Log
-              </Button>
-              <div className="flex items-center gap-1">
-                <Button size="sm" variant="ghost" onClick={() => openEdit(item)} className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100">
-                  <Edit3 className="h-3.5 w-3.5" />
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                <Button size="sm" variant="outline" onClick={() => openLog(item)} className="h-7 text-xs text-blue-600 dark:text-blue-400 rounded-lg gap-1">
+                  <ClipboardList className="h-3 w-3" /> Log Activity
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setDeletingId(item.id)} className="h-7 w-7 p-0 text-rose-500 hover:text-rose-700">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => openEdit(item)} className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100">
+                    <Edit3 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setDeletingId(item.id)} className="h-7 w-7 p-0 text-rose-500 hover:text-rose-700">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
 
       {/* Edit Modal */}
@@ -422,13 +537,21 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500">Status</label>
-                  <select value={newStatus} onChange={e => setNewStatus(e.target.value as EquipmentStatus)} className="w-full h-9 px-2 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent">
-                    <option value="Operating">Operating</option>
-                    <option value="Idle">Idle</option>
-                    <option value="Maintenance">Maintenance</option>
-                    <option value="Out of Service">Out of Service</option>
+                  <label className="text-xs text-slate-500">Hourly Rate (R/hr)</label>
+                  <input type="number" value={newHourlyRate} onChange={e => setNewHourlyRate(e.target.value ? Number(e.target.value) : '')} className="w-full h-9 px-2 text-sm font-bold text-emerald-600 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-500">Ownership</label>
+                  <select value={newOwnership} onChange={e => setNewOwnership(e.target.value as EquipmentOwnership)} className="w-full h-9 px-2 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent">
+                    <option value="Owned">Company Owned</option>
+                    <option value="Rented">Hired / Rented</option>
                   </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500">Rental Vendor</label>
+                  <input type="text" value={newRentalVendor} onChange={e => setNewRentalVendor(e.target.value)} placeholder="Supplier name" className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -439,16 +562,6 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                 <div>
                   <label className="text-xs text-slate-500">Location</label>
                   <input type="text" value={newLocation} onChange={e => setNewLocation(e.target.value)} className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-slate-500">VIN / Serial</label>
-                  <input type="text" value={newVinSerial} onChange={e => setNewVinSerial(e.target.value)} className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500">Accessories</label>
-                  <input type="text" value={newAccessories} onChange={e => setNewAccessories(e.target.value)} className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">
@@ -483,7 +596,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
               <Button variant="ghost" size="icon" onClick={() => setLogModalEq(null)}><X className="h-4 w-4" /></Button>
             </div>
             <div className="flex border-b border-slate-200 dark:border-slate-800 text-xs font-semibold gap-2">
-              <button onClick={() => setLogTab('Hours')} className={`pb-2 px-2 border-b-2 ${logTab === 'Hours' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>Hours</button>
+              <button onClick={() => setLogTab('Hours')} className={`pb-2 px-2 border-b-2 ${logTab === 'Hours' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>Hours & Cost</button>
               <button onClick={() => setLogTab('Refuel')} className={`pb-2 px-2 border-b-2 ${logTab === 'Refuel' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400'}`}>Refueling</button>
               <button onClick={() => setLogTab('Maintenance')} className={`pb-2 px-2 border-b-2 ${logTab === 'Maintenance' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-400'}`}>Maintenance</button>
             </div>
@@ -513,7 +626,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-slate-500 font-semibold block mb-1">Hours Worked Today (Auto/Manual)</label>
+                      <label className="text-slate-500 font-semibold block mb-1">Hours Worked Today</label>
                       <input 
                         type="number" 
                         step="0.1" 
@@ -524,14 +637,19 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                       />
                     </div>
                     <div>
-                      <label className="text-slate-500 font-semibold block mb-1">Operator / Tech</label>
+                      <label className="text-slate-500 font-semibold block mb-1">Rate (Rands/hr)</label>
                       <input 
-                        type="text" 
-                        value={logUser} 
-                        onChange={e => setLogUser(e.target.value)} 
-                        className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm" 
+                        type="number" 
+                        value={logHourlyRateApplied} 
+                        onChange={e => setLogHourlyRateApplied(e.target.value ? Number(e.target.value) : '')} 
+                        className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm font-bold text-emerald-600" 
                       />
                     </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-bold flex justify-between">
+                    <span>Shift Operating Cost:</span>
+                    <span>{formatRand(Number(logHours || 0) * (logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : (logModalEq.hourlyRate || 850)))}</span>
                   </div>
                 </div>
               )}
@@ -548,9 +666,15 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                 </div>
               )}
               {logTab === 'Maintenance' && (
-                <div>
-                  <label className="text-slate-500">Service Type</label>
-                  <input type="text" value={logMaintType} onChange={e => setLogMaintType(e.target.value)} required className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-slate-500">Service Type</label>
+                    <input type="text" value={logMaintType} onChange={e => setLogMaintType(e.target.value)} required className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-slate-500">Cost (Rands - ZAR)</label>
+                    <input type="number" value={logCost} onChange={e => setLogCost(e.target.value ? Number(e.target.value) : '')} placeholder="e.g. 3500" className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm" />
+                  </div>
                 </div>
               )}
               <div>
