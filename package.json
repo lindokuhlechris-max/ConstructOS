@@ -7,6 +7,7 @@
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "build:exe": "npm run build && npx pkg -t node18-win-x64 dist/server.cjs --output Constructfield-App.exe",
+    "build:apk": "npm run build && npx cap sync android && cd android && .\\gradlew.bat assembleDebug && copy .\\app\\build\\outputs\\apk\\debug\\app-debug.apk ..\\ConstructOS.apk && cd ..",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
@@ -19,6 +20,9 @@
     ]
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@google/genai": "^2.4.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@react-google-maps/api": "^2.20.8",
