@@ -791,7 +791,8 @@ export interface Equipment {
 
   // Rented & Financial/Rate Tracking Fields
   ownership?: EquipmentOwnership; // 'Owned' | 'Rented'
-  hourlyRate?: number; // Rate in Rands (ZAR) per operating hour (e.g. 850)
+  trackOperationalCost?: boolean; // Toggle ON/OFF for tracking operational costs
+  hourlyRate?: number; // Rate in Rands (ZAR) per operating hour
   dailyRate?: number; // Optional daily rate in Rands
   standbyRate?: number; // Optional standby/idle rate in Rands
   rentalVendor?: string; // Rental company / supplier (e.g. "Barloworld Equipment", "Goscor", "Coastal Hire")

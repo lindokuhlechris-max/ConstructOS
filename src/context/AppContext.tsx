@@ -1543,11 +1543,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const targetEq = equipment.find(e => e.id === log.equipmentId);
     const enrichedLog: EquipmentLog = { ...log };
     if (log.type === 'Hours' && log.hoursAdded) {
-      if (enrichedLog.hourlyRateApplied === undefined && targetEq?.hourlyRate) {
-        enrichedLog.hourlyRateApplied = targetEq.hourlyRate;
+      const hasCostTracking = targetEq?.trackOperationalCost !== false && Boolean(targetEq?.hourlyRate);
+      if (enrichedLog.hourlyRateApplied === undefined) {
+        enrichedLog.hourlyRateApplied = hasCostTracking ? (targetEq?.hourlyRate || 0) : 0;
       }
-      if (enrichedLog.calculatedOperatingCost === undefined && enrichedLog.hourlyRateApplied) {
-        enrichedLog.calculatedOperatingCost = log.hoursAdded * enrichedLog.hourlyRateApplied;
+      if (enrichedLog.calculatedOperatingCost === undefined) {
+        enrichedLog.calculatedOperatingCost = (enrichedLog.hourlyRateApplied || 0) > 0 
+          ? (log.hoursAdded * (enrichedLog.hourlyRateApplied || 0)) 
+          : 0;
       }
     }
 

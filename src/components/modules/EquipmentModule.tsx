@@ -31,13 +31,14 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
   const [newAccessories, setNewAccessories] = useState('');
   const [newOwnership, setNewOwnership] = useState<EquipmentOwnership>('Owned');
   const [newRentalVendor, setNewRentalVendor] = useState('');
-  const [newHourlyRate, setNewHourlyRate] = useState<number | ''>(850);
+  const [newTrackOperationalCost, setNewTrackOperationalCost] = useState<boolean>(false);
+  const [newHourlyRate, setNewHourlyRate] = useState<number | ''>('');
 
   // Log states
   const [logHours, setLogHours] = useState(8);
   const [logStartTime, setLogStartTime] = useState('07:00');
   const [logEndTime, setLogEndTime] = useState('15:00');
-  const [logHourlyRateApplied, setLogHourlyRateApplied] = useState<number | ''>(850);
+  const [logHourlyRateApplied, setLogHourlyRateApplied] = useState<number | ''>('');
   const [logFuelLitres, setLogFuelLitres] = useState(100);
   const [logFuelLevel, setLogFuelLevel] = useState(100);
   const [logMaintType, setLogMaintType] = useState('Routine Service');
@@ -85,7 +86,8 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       accessories: newAccessories,
       ownership: newOwnership,
       rentalVendor: newOwnership === 'Rented' ? newRentalVendor : undefined,
-      hourlyRate: newHourlyRate !== '' ? Number(newHourlyRate) : 850,
+      trackOperationalCost: newTrackOperationalCost,
+      hourlyRate: newTrackOperationalCost && newHourlyRate !== '' ? Number(newHourlyRate) : 0,
     };
 
     addEquipment(newItem);
@@ -96,7 +98,8 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
     setNewAccessories('');
     setNewOwnership('Owned');
     setNewRentalVendor('');
-    setNewHourlyRate(850);
+    setNewTrackOperationalCost(false);
+    setNewHourlyRate('');
   };
 
   const handleEditSave = (e: React.FormEvent) => {
@@ -115,7 +118,8 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       accessories: newAccessories,
       ownership: newOwnership,
       rentalVendor: newOwnership === 'Rented' ? newRentalVendor : undefined,
-      hourlyRate: newHourlyRate !== '' ? Number(newHourlyRate) : 850,
+      trackOperationalCost: newTrackOperationalCost,
+      hourlyRate: newTrackOperationalCost && newHourlyRate !== '' ? Number(newHourlyRate) : 0,
     });
 
     setEditingEq(null);
@@ -132,7 +136,9 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
     setNewAccessories(item.accessories || '');
     setNewOwnership(item.ownership || 'Owned');
     setNewRentalVendor(item.rentalVendor || '');
-    setNewHourlyRate(item.hourlyRate !== undefined ? item.hourlyRate : 850);
+    const hasRate = (item.hourlyRate !== undefined && item.hourlyRate > 0) || item.trackOperationalCost === true;
+    setNewTrackOperationalCost(item.trackOperationalCost !== undefined ? item.trackOperationalCost : hasRate);
+    setNewHourlyRate(item.hourlyRate !== undefined && item.hourlyRate > 0 ? item.hourlyRate : (item.hourlyRate === 0 ? 0 : ''));
   };
 
   const openLog = (item: EquipmentType) => {
@@ -141,7 +147,8 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
     setLogStartTime('07:00');
     setLogEndTime('15:00');
     setLogHours(8);
-    setLogHourlyRateApplied(item.hourlyRate !== undefined ? item.hourlyRate : 850);
+    const rateToApply = (item.trackOperationalCost !== false && item.hourlyRate && item.hourlyRate > 0) ? item.hourlyRate : '';
+    setLogHourlyRateApplied(rateToApply);
     setLogFuelLitres(100);
     setLogFuelLevel(item.fuelLevel ?? 100);
     setLogMaintType('Routine Service');
@@ -156,7 +163,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
 
     const now = new Date();
     const formattedDate = `${now.toISOString().split('T')[0]} ${now.toTimeString().slice(0, 5)}`;
-    const appliedRate = logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : (logModalEq.hourlyRate || 850);
+    const appliedRate = logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : ((logModalEq.trackOperationalCost !== false && logModalEq.hourlyRate) ? logModalEq.hourlyRate : 0);
 
     const newLog: EquipmentLog = {
       id: `EQL-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -245,12 +252,39 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setNewOwnership('Rented')}
+                onClick={() => {
+                  setNewOwnership('Rented');
+                  setNewTrackOperationalCost(true);
+                }}
                 className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 ${
                   newOwnership === 'Rented' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
                 }`}
               >
                 <Handshake className="h-4 w-4" /> Hired / Rented
+              </button>
+            </div>
+
+            {/* Toggle Operational Cost Tracking */}
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800/40 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CircleDollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <div>
+                  <p className="text-xs font-bold text-emerald-900 dark:text-emerald-300">Track Operational Costs</p>
+                  <p className="text-[11px] text-slate-500">Enable hourly rate & shift cost calculation</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={newTrackOperationalCost}
+                onClick={() => setNewTrackOperationalCost(!newTrackOperationalCost)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  newTrackOperationalCost ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'
+                }`}
+              >
+                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  newTrackOperationalCost ? 'translate-x-4' : 'translate-x-0'
+                }`} />
               </button>
             </div>
 
@@ -275,16 +309,17 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                 <option value="Generator/Power">Generator/Power</option>
               </select>
 
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder="Hourly Rate (Rands/hr)"
-                  value={newHourlyRate}
-                  onChange={e => setNewHourlyRate(e.target.value ? Number(e.target.value) : '')}
-                  required
-                  className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-emerald-600 dark:text-emerald-400 flex-1"
-                />
-              </div>
+              {newTrackOperationalCost && (
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="Hourly Rate (Rands/hr)"
+                    value={newHourlyRate}
+                    onChange={e => setNewHourlyRate(e.target.value ? Number(e.target.value) : '')}
+                    className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-emerald-600 dark:text-emerald-400 flex-1"
+                  />
+                </div>
+              )}
 
               {newOwnership === 'Rented' ? (
                 <input
@@ -472,8 +507,12 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                   <span className="font-medium text-slate-800 dark:text-slate-200">{item.engineHours} hrs</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px]">Operating Rate</span>
-                  <span className="font-bold text-blue-600 dark:text-blue-400">{formatRandShort(item.hourlyRate || 850)}/hr</span>
+                  <span className="text-slate-400 block text-[10px]">
+                    {costs.isCostTrackingEnabled && costs.hourlyRate > 0 ? 'Operating Rate' : 'Cost Tracking'}
+                  </span>
+                  <span className={`font-bold ${costs.isCostTrackingEnabled && costs.hourlyRate > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
+                    {costs.isCostTrackingEnabled && costs.hourlyRate > 0 ? `${formatRandShort(costs.hourlyRate)}/hr` : 'Off'}
+                  </span>
                 </div>
                 <div className="col-span-2 pt-1 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
                   <span className="text-slate-400 text-[10px]">Total Logged Cost</span>
@@ -537,23 +576,52 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500">Hourly Rate (R/hr)</label>
-                  <input type="number" value={newHourlyRate} onChange={e => setNewHourlyRate(e.target.value ? Number(e.target.value) : '')} className="w-full h-9 px-2 text-sm font-bold text-emerald-600 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
                   <label className="text-xs text-slate-500">Ownership</label>
                   <select value={newOwnership} onChange={e => setNewOwnership(e.target.value as EquipmentOwnership)} className="w-full h-9 px-2 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent">
                     <option value="Owned">Company Owned</option>
                     <option value="Rented">Hired / Rented</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Toggle Operational Cost Tracking */}
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800/40 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CircleDollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <div>
+                    <p className="text-xs font-bold text-emerald-900 dark:text-emerald-300">Track Operational Costs</p>
+                    <p className="text-[10px] text-slate-500">Hourly rate & cost tracking</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={newTrackOperationalCost}
+                  onClick={() => setNewTrackOperationalCost(!newTrackOperationalCost)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                    newTrackOperationalCost ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'
+                  }`}
+                >
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    newTrackOperationalCost ? 'translate-x-4' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {newTrackOperationalCost && (
+                <div>
+                  <label className="text-xs text-slate-500">Hourly Rate (R/hr)</label>
+                  <input type="number" placeholder="0" value={newHourlyRate} onChange={e => setNewHourlyRate(e.target.value !== '' ? Number(e.target.value) : '')} className="w-full h-9 px-2 text-sm font-bold text-emerald-600 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
+                </div>
+              )}
+
+              {newOwnership === 'Rented' && (
                 <div>
                   <label className="text-xs text-slate-500">Rental Vendor</label>
                   <input type="text" value={newRentalVendor} onChange={e => setNewRentalVendor(e.target.value)} placeholder="Supplier name" className="w-full h-9 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent" />
                 </div>
-              </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-500">Operator</label>
@@ -640,6 +708,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                       <label className="text-slate-500 font-semibold block mb-1">Rate (Rands/hr)</label>
                       <input 
                         type="number" 
+                        placeholder="0"
                         value={logHourlyRateApplied} 
                         onChange={e => setLogHourlyRateApplied(e.target.value ? Number(e.target.value) : '')} 
                         className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm font-bold text-emerald-600" 
@@ -649,7 +718,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
 
                   <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-bold flex justify-between">
                     <span>Shift Operating Cost:</span>
-                    <span>{formatRand(Number(logHours || 0) * (logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : (logModalEq.hourlyRate || 850)))}</span>
+                    <span>{formatRand(Number(logHours || 0) * (logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : 0))}</span>
                   </div>
                 </div>
               )}

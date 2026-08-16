@@ -5,7 +5,7 @@ import {
   MapPin, Calendar, Clock, AlertCircle, FileText, X, Edit3, Trash2, 
   ClipboardList, Activity as ActivityIcon, ShieldAlert, Gauge, Zap, Boxes, Car,
   Sliders, Shield, Navigation, HardHat, Building2, Handshake, DollarSign,
-  TrendingUp, CircleDollarSign, Receipt, Timer, AlertTriangle
+  TrendingUp, CircleDollarSign, Receipt, Timer, AlertTriangle, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { 
@@ -33,27 +33,28 @@ export const formatRandShort = (amount: number | undefined | null): string => {
 // Helper for comprehensive equipment cost and rental calculations
 export const calculateEquipmentCosts = (eq: EquipmentType, logs: EquipmentLog[]) => {
   const eqLogs = logs.filter(l => l.equipmentId === eq.id);
-  const hourlyRate = eq.hourlyRate || 0;
+  const isCostTrackingEnabled = eq.trackOperationalCost !== false && (Boolean(eq.hourlyRate && eq.hourlyRate > 0) || Boolean(eq.dailyRate && eq.dailyRate > 0) || eq.ownership === 'Rented');
+  const hourlyRate = (eq.trackOperationalCost !== false && eq.hourlyRate) ? eq.hourlyRate : 0;
   const engineHours = typeof eq.engineHours === 'number' ? eq.engineHours : (parseInt(String(eq.engineHours)) || 0);
 
-  // Calculate hours cost based on direct engine hours or logged entries
+  // Calculate hours cost based on direct engine hours or logged entries only if rate > 0
   const directHoursCost = engineHours * hourlyRate;
   const loggedHoursCost = eqLogs
     .filter(l => l.type === 'Hours' || l.hoursAdded)
     .reduce((sum, l) => {
       const rate = l.hourlyRateApplied !== undefined ? l.hourlyRateApplied : hourlyRate;
       const calculated = l.calculatedOperatingCost !== undefined ? l.calculatedOperatingCost : (l.hoursAdded || 0) * rate;
-      return sum + calculated;
+      return sum + (calculated || 0);
     }, 0);
   
   const hoursCost = Math.max(directHoursCost, loggedHoursCost);
 
-  // Calculate maintenance cost
+  // Calculate maintenance cost (direct from maintenance logs)
   const maintenanceCost = eqLogs
     .filter(l => l.type === 'Maintenance')
     .reduce((sum, l) => sum + (l.cost || 0), 0);
 
-  // Calculate fuel cost
+  // Calculate fuel cost (direct from refuel logs)
   const fuelCost = eqLogs
     .filter(l => l.type === 'Refuel')
     .reduce((sum, l) => sum + (l.fuelCost || l.cost || ((l.fuelLitres || 0) * (l.fuelPricePerLitre || 23.50))), 0);
@@ -84,6 +85,7 @@ export const calculateEquipmentCosts = (eq: EquipmentType, logs: EquipmentLog[])
   return {
     engineHours,
     hourlyRate,
+    isCostTrackingEnabled,
     hoursCost,
     maintenanceCost,
     fuelCost,
@@ -138,9 +140,10 @@ export function Equipment() {
   const [formFuelLevel, setFormFuelLevel] = useState(100);
   const [formLastService, setFormLastService] = useState(new Date().toISOString().split('T')[0]);
 
-  // Rented & Financial Form State
+  // Rented & Financial Form State (with Optional Toggle)
   const [formOwnership, setFormOwnership] = useState<EquipmentOwnership>('Owned');
-  const [formHourlyRate, setFormHourlyRate] = useState<number | ''>(850);
+  const [formTrackOperationalCost, setFormTrackOperationalCost] = useState<boolean>(false);
+  const [formHourlyRate, setFormHourlyRate] = useState<number | ''>('');
   const [formDailyRate, setFormDailyRate] = useState<number | ''>('');
   const [formStandbyRate, setFormStandbyRate] = useState<number | ''>('');
   const [formRentalVendor, setFormRentalVendor] = useState('');
@@ -168,7 +171,7 @@ export function Equipment() {
   const [logFuelPricePerLitre, setLogFuelPricePerLitre] = useState<number>(23.50);
   const [logMaintenanceType, setLogMaintenanceType] = useState('Routine Service');
   const [logCost, setLogCost] = useState<number | ''>('');
-  const [logHourlyRateApplied, setLogHourlyRateApplied] = useState<number | ''>(850);
+  const [logHourlyRateApplied, setLogHourlyRateApplied] = useState<number | ''>('');
   const [logLoggedBy, setLogLoggedBy] = useState('');
   const [logNotes, setLogNotes] = useState('');
   const [logSetStatus, setLogSetStatus] = useState<EquipmentStatus | ''>('');
@@ -236,8 +239,8 @@ export function Equipment() {
     setFormTotalLoads(0);
     setFormTotalPowerKWh(0);
     setFormLicensePlate('');
-    setFormFuelCapacityLitres(250);
-    setFormFuelConsumptionRate(14.5);
+    setFormFuelCapacityLitres(200);
+    setFormFuelConsumptionRate(12.5);
     setFormServiceIntervalHours(250);
     setFormServiceIntervalKm(10000);
     setFormModel('');
@@ -250,7 +253,8 @@ export function Equipment() {
 
     // Financial & Rental defaults
     setFormOwnership('Owned');
-    setFormHourlyRate(850);
+    setFormTrackOperationalCost(false);
+    setFormHourlyRate('');
     setFormDailyRate('');
     setFormStandbyRate('');
     setFormRentalVendor('');
@@ -292,7 +296,9 @@ export function Equipment() {
 
     // Financial & Rental fields
     setFormOwnership(eq.ownership || 'Owned');
-    setFormHourlyRate(eq.hourlyRate !== undefined ? eq.hourlyRate : 850);
+    const hasConfiguredRate = (eq.hourlyRate !== undefined && eq.hourlyRate > 0) || (eq.dailyRate !== undefined && eq.dailyRate > 0) || eq.trackOperationalCost === true;
+    setFormTrackOperationalCost(eq.trackOperationalCost !== undefined ? eq.trackOperationalCost : hasConfiguredRate);
+    setFormHourlyRate(eq.hourlyRate !== undefined && eq.hourlyRate > 0 ? eq.hourlyRate : (eq.hourlyRate === 0 ? 0 : ''));
     setFormDailyRate(eq.dailyRate !== undefined ? eq.dailyRate : '');
     setFormStandbyRate(eq.standbyRate !== undefined ? eq.standbyRate : '');
     setFormRentalVendor(eq.rentalVendor || '');
@@ -334,7 +340,9 @@ export function Equipment() {
     setLogFuelPricePerLitre(23.50);
     setLogMaintenanceType('Routine Service');
     setLogCost('');
-    setLogHourlyRateApplied(eq.hourlyRate !== undefined ? eq.hourlyRate : 850);
+    
+    const rateToApply = (eq.trackOperationalCost !== false && eq.hourlyRate && eq.hourlyRate > 0) ? eq.hourlyRate : '';
+    setLogHourlyRateApplied(rateToApply);
     setLogLoggedBy(eq.operator !== 'Unassigned' ? eq.operator : 'Site Tech');
     setLogNotes('');
     setLogSetStatus(eq.status);
@@ -373,9 +381,10 @@ export function Equipment() {
 
       // Financial & Rental fields
       ownership: formOwnership,
-      hourlyRate: formHourlyRate !== '' ? Number(formHourlyRate) : undefined,
-      dailyRate: formDailyRate !== '' ? Number(formDailyRate) : undefined,
-      standbyRate: formStandbyRate !== '' ? Number(formStandbyRate) : undefined,
+      trackOperationalCost: formTrackOperationalCost,
+      hourlyRate: formTrackOperationalCost && formHourlyRate !== '' ? Number(formHourlyRate) : 0,
+      dailyRate: formTrackOperationalCost && formDailyRate !== '' ? Number(formDailyRate) : undefined,
+      standbyRate: formTrackOperationalCost && formStandbyRate !== '' ? Number(formStandbyRate) : undefined,
       rentalVendor: formOwnership === 'Rented' ? formRentalVendor : undefined,
       rentalAgreementNumber: formOwnership === 'Rented' ? formRentalAgreementNumber : undefined,
       rentalStartDate: formOwnership === 'Rented' ? formRentalStartDate : undefined,
@@ -420,9 +429,10 @@ export function Equipment() {
 
       // Financial & Rental fields
       ownership: formOwnership,
-      hourlyRate: formHourlyRate !== '' ? Number(formHourlyRate) : undefined,
-      dailyRate: formDailyRate !== '' ? Number(formDailyRate) : undefined,
-      standbyRate: formStandbyRate !== '' ? Number(formStandbyRate) : undefined,
+      trackOperationalCost: formTrackOperationalCost,
+      hourlyRate: formTrackOperationalCost && formHourlyRate !== '' ? Number(formHourlyRate) : 0,
+      dailyRate: formTrackOperationalCost && formDailyRate !== '' ? Number(formDailyRate) : undefined,
+      standbyRate: formTrackOperationalCost && formStandbyRate !== '' ? Number(formStandbyRate) : undefined,
       rentalVendor: formOwnership === 'Rented' ? formRentalVendor : undefined,
       rentalAgreementNumber: formOwnership === 'Rented' ? formRentalAgreementNumber : undefined,
       rentalStartDate: formOwnership === 'Rented' ? formRentalStartDate : undefined,
@@ -451,7 +461,10 @@ export function Equipment() {
     const now = new Date();
     const formattedDate = `${now.toISOString().split('T')[0]} ${now.toTimeString().slice(0, 5)}`;
 
-    const appliedRate = logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : (logModalEq.hourlyRate || 850);
+    const appliedRate = logHourlyRateApplied !== '' 
+      ? Number(logHourlyRateApplied) 
+      : ((logModalEq.trackOperationalCost !== false && logModalEq.hourlyRate) ? logModalEq.hourlyRate : 0);
+    
     const calculatedShiftCost = Number(logHoursAdded || 0) * appliedRate;
 
     const newLog: EquipmentLog = {
@@ -468,7 +481,11 @@ export function Equipment() {
       newLog.hoursAdded = Number(logHoursAdded);
       newLog.totalHours = (typeof logModalEq.engineHours === 'number' ? logModalEq.engineHours : parseInt(String(logModalEq.engineHours)) || 0) + Number(logHoursAdded);
       newLog.calculatedOperatingCost = calculatedShiftCost;
-      if (!newLog.notes) newLog.notes = `Logged ${logHoursAdded} operating hours (${logStartTime} - ${logEndTime}) @ R ${appliedRate}/hr`;
+      if (!newLog.notes) {
+        newLog.notes = appliedRate > 0 
+          ? `Logged ${logHoursAdded} operating hours (${logStartTime} - ${logEndTime}) @ R ${appliedRate}/hr`
+          : `Logged ${logHoursAdded} operating hours (${logStartTime} - ${logEndTime})`;
+      }
     } else if (logTab === 'Mileage') {
       newLog.mileageAdded = Number(logMileageAdded);
       newLog.odometerReading = logOdometerReading ? Number(logOdometerReading) : (logModalEq.mileage || 0) + Number(logMileageAdded);
@@ -608,21 +625,29 @@ export function Equipment() {
                     <CircleDollarSign className="h-5 w-5 text-emerald-500" /> Operating Rates & Cost Financials (ZAR)
                   </h3>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/20">
-                      Calculated from Logged Usage
-                    </span>
+                    {eqCosts.isCostTrackingEnabled ? (
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/20">
+                        Operational Cost Tracking: Active
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium border border-slate-200 dark:border-slate-700">
+                        Operational Cost Tracking: Off
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                   <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40">
                     <p className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold mb-1 flex items-center gap-1.5">
-                      <TrendingUp className="h-4 w-4" /> Total Operating Cost
+                      <TrendingUp className="h-4 w-4" /> Total Overall Asset Cost
                     </p>
                     <p className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                       {formatRand(eqCosts.totalCost)}
                     </p>
-                    <p className="text-[11px] text-slate-500 mt-1">Hours, maintenance & fuel combined</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {eqCosts.isCostTrackingEnabled ? 'Hours, maintenance & fuel combined' : 'Maintenance repairs & fuel only'}
+                    </p>
                   </div>
 
                   <div className="p-4 rounded-xl bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40">
@@ -630,10 +655,14 @@ export function Equipment() {
                       <Clock className="h-4 w-4" /> Operating Hourly Rate
                     </p>
                     <p className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                      {formatRand(currentEq.hourlyRate || 850)}<span className="text-xs font-normal text-slate-500"> / hr</span>
+                      {eqCosts.hourlyRate > 0 ? (
+                        <>{formatRand(eqCosts.hourlyRate)}<span className="text-xs font-normal text-slate-500"> / hr</span></>
+                      ) : (
+                        <span className="text-lg font-bold text-slate-400">Not Configured</span>
+                      )}
                     </p>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      {currentEq.dailyRate ? `Daily: ${formatRand(currentEq.dailyRate)} / day` : 'Standard equipment rate'}
+                      {currentEq.dailyRate ? `Daily: ${formatRand(currentEq.dailyRate)} / day` : 'Operating rate in Rands'}
                     </p>
                   </div>
 
@@ -644,7 +673,11 @@ export function Equipment() {
                     <p className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                       {formatRand(eqCosts.hoursCost)}
                     </p>
-                    <p className="text-[11px] text-slate-500 mt-1">{eqCosts.engineHours} hrs @ {formatRand(currentEq.hourlyRate || 850)}/hr</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {eqCosts.hourlyRate > 0 
+                        ? `${eqCosts.engineHours} hrs @ ${formatRand(eqCosts.hourlyRate)}/hr`
+                        : 'No operating rate applied'}
+                    </p>
                   </div>
 
                   <div className="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40">
@@ -880,11 +913,11 @@ export function Equipment() {
                               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{log.notes}</p>
                               <div className="flex gap-4 text-[11px] text-slate-500 mt-2 font-medium flex-wrap">
                                 <span>Logged by: {log.loggedBy}</span>
-                                {log.calculatedOperatingCost ? (
+                                {(log.calculatedOperatingCost && log.calculatedOperatingCost > 0) ? (
                                   <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                    Shift Cost: {formatRand(log.calculatedOperatingCost)} ({log.hoursAdded} hrs @ {formatRand(log.hourlyRateApplied || currentEq.hourlyRate || 850)}/hr)
+                                    Shift Cost: {formatRand(log.calculatedOperatingCost)} ({log.hoursAdded} hrs @ {formatRand(log.hourlyRateApplied || eqCosts.hourlyRate)}/hr)
                                   </span>
-                                ) : log.cost ? (
+                                ) : (log.cost && log.cost > 0) ? (
                                   <span className="font-bold text-emerald-600 dark:text-emerald-400">Cost: {formatRand(log.cost)}</span>
                                 ) : null}
                                 {log.odometerReading ? <span>Odometer: {log.odometerReading} km</span> : null}
@@ -1203,16 +1236,24 @@ export function Equipment() {
                         <p className="text-xs font-bold text-slate-900 dark:text-white">{(eq.mileage || 0).toLocaleString()} km</p>
                       </div>
 
-                      {/* Financial Rates & Overall Logged Cost Box */}
+                      {/* Financial Rates & Overall Cost Box */}
                       <div className="col-span-2 pt-2 mt-1 border-t border-slate-200 dark:border-slate-800/80 flex justify-between items-center">
                         <div>
-                          <p className="text-[10px] text-slate-500 font-medium">Operating Rate</p>
-                          <p className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                            {formatRandShort(eq.hourlyRate || 850)}<span className="text-[10px] font-normal text-slate-500">/hr</span>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            {costs.isCostTrackingEnabled && costs.hourlyRate > 0 ? 'Operating Rate' : 'Cost Tracking'}
+                          </p>
+                          <p className={`text-xs font-bold ${costs.isCostTrackingEnabled && costs.hourlyRate > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
+                            {costs.isCostTrackingEnabled && costs.hourlyRate > 0 ? (
+                              <>{formatRandShort(costs.hourlyRate)}<span className="text-[10px] font-normal text-slate-500">/hr</span></>
+                            ) : (
+                              'Off'
+                            )}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[10px] text-slate-500 font-medium">Total Asset Cost</p>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            {costs.isCostTrackingEnabled ? 'Total Asset Cost' : (costs.totalCost > 0 ? 'Direct Fuel / Maint' : 'Total Asset Cost')}
+                          </p>
                           <p className="text-xs font-black text-emerald-600 dark:text-emerald-400">
                             {formatRand(costs.totalCost)}
                           </p>
@@ -1324,7 +1365,13 @@ export function Equipment() {
                             <span className="text-slate-400 text-[11px]">{eq.location}</span>
                           </td>
                           <td className="px-5 py-4 text-slate-700 dark:text-slate-300 font-semibold">{eq.engineHours} hrs</td>
-                          <td className="px-5 py-4 text-blue-600 dark:text-blue-400 font-bold">{formatRandShort(eq.hourlyRate || 850)}/hr</td>
+                          <td className="px-5 py-4">
+                            {costs.isCostTrackingEnabled && costs.hourlyRate > 0 ? (
+                              <span className="text-blue-600 dark:text-blue-400 font-bold">{formatRandShort(costs.hourlyRate)}/hr</span>
+                            ) : (
+                              <span className="text-slate-400 italic">Off</span>
+                            )}
+                          </td>
                           <td className="px-5 py-4 text-emerald-600 dark:text-emerald-400 font-black text-sm">{formatRand(costs.totalCost)}</td>
                           <td className="px-5 py-4">
                             <div className="flex items-center gap-2 w-20">
@@ -1367,7 +1414,7 @@ export function Equipment() {
             <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700/50">
               <div>
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">Add New Fleet Equipment / Vehicle</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Register company machinery or hired equipment with operating rates.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Register company machinery or hired equipment with optional operating rates.</p>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full">
                 <X className="h-5 w-5" />
@@ -1400,7 +1447,10 @@ export function Equipment() {
 
                   <button
                     type="button"
-                    onClick={() => setFormOwnership('Rented')}
+                    onClick={() => {
+                      setFormOwnership('Rented');
+                      setFormTrackOperationalCost(true);
+                    }}
                     className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-all ${
                       formOwnership === 'Rented'
                         ? 'border-amber-500 bg-amber-50/80 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/20 font-bold'
@@ -1486,44 +1536,76 @@ export function Equipment() {
                 )}
               </div>
 
-              {/* Operating Rates in Rands (ZAR) */}
+              {/* Operating Rates in Rands (ZAR) with ON/OFF Toggle */}
               <div className="p-4 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 space-y-3">
-                <label className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                  <CircleDollarSign className="h-4 w-4 text-emerald-600" /> Operating & Financial Rates (in Rands - ZAR)
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Hourly Operating Rate (R/hr)*</label>
-                    <input 
-                      type="number" 
-                      placeholder="e.g. 850" 
-                      value={formHourlyRate} 
-                      onChange={e => setFormHourlyRate(e.target.value ? Number(e.target.value) : '')} 
-                      required
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-emerald-500" 
-                    />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <CircleDollarSign className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300 block">
+                        Track Operational & Hourly Rates (ZAR)
+                      </label>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {formTrackOperationalCost 
+                          ? 'Operating cost tracking enabled. Rates and shift costs will be calculated over logged use.'
+                          : 'Operational cost tracking is off. No hourly rates or operational expenses are enforced.'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Daily Rate (R/day - Optional)</label>
-                    <input 
-                      type="number" 
-                      placeholder="e.g. 6800" 
-                      value={formDailyRate} 
-                      onChange={e => setFormDailyRate(e.target.value ? Number(e.target.value) : '')} 
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={formTrackOperationalCost}
+                    onClick={() => setFormTrackOperationalCost(!formTrackOperationalCost)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      formTrackOperationalCost ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        formTrackOperationalCost ? 'translate-x-5' : 'translate-x-0'
+                      }`}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Standby Rate (R/hr - Optional)</label>
-                    <input 
-                      type="number" 
-                      placeholder="e.g. 350" 
-                      value={formStandbyRate} 
-                      onChange={e => setFormStandbyRate(e.target.value ? Number(e.target.value) : '')} 
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
-                    />
-                  </div>
+                  </button>
                 </div>
+
+                {formTrackOperationalCost && (
+                  <div className="grid grid-cols-3 gap-3 pt-3 border-t border-emerald-200/60 dark:border-emerald-800/40 animate-in fade-in">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Hourly Operating Rate (R/hr)</label>
+                      <input 
+                        type="number" 
+                        placeholder="e.g. 850" 
+                        value={formHourlyRate} 
+                        onChange={e => setFormHourlyRate(e.target.value !== '' ? Number(e.target.value) : '')} 
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-emerald-500" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Daily Rate (R/day - Optional)</label>
+                      <input 
+                        type="number" 
+                        placeholder="e.g. 6800" 
+                        value={formDailyRate} 
+                        onChange={e => setFormDailyRate(e.target.value !== '' ? Number(e.target.value) : '')} 
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Standby Rate (R/hr - Optional)</label>
+                      <input 
+                        type="number" 
+                        placeholder="e.g. 350" 
+                        value={formStandbyRate} 
+                        onChange={e => setFormStandbyRate(e.target.value !== '' ? Number(e.target.value) : '')} 
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* General Equipment Info */}
@@ -1703,7 +1785,10 @@ export function Equipment() {
 
                   <button
                     type="button"
-                    onClick={() => setFormOwnership('Rented')}
+                    onClick={() => {
+                      setFormOwnership('Rented');
+                      setFormTrackOperationalCost(true);
+                    }}
                     className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-all ${
                       formOwnership === 'Rented'
                         ? 'border-amber-500 bg-amber-50/80 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/20 font-bold'
@@ -1789,44 +1874,76 @@ export function Equipment() {
                 )}
               </div>
 
-              {/* Operating Rates in Rands */}
+              {/* Operating Rates in Rands with ON/OFF Toggle */}
               <div className="p-4 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 space-y-3">
-                <label className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                  <CircleDollarSign className="h-4 w-4 text-emerald-600" /> Operating & Financial Rates (in Rands - ZAR)
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Hourly Operating Rate (R/hr)*</label>
-                    <input 
-                      type="number" 
-                      placeholder="e.g. 850" 
-                      value={formHourlyRate} 
-                      onChange={e => setFormHourlyRate(e.target.value ? Number(e.target.value) : '')} 
-                      required
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-emerald-500" 
-                    />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <CircleDollarSign className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300 block">
+                        Track Operational & Hourly Rates (ZAR)
+                      </label>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {formTrackOperationalCost 
+                          ? 'Operating cost tracking enabled. Rates and shift costs will be calculated over logged use.'
+                          : 'Operational cost tracking is off. No hourly rates or operational expenses are enforced.'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Daily Rate (R/day)</label>
-                    <input 
-                      type="number" 
-                      placeholder="e.g. 6800" 
-                      value={formDailyRate} 
-                      onChange={e => setFormDailyRate(e.target.value ? Number(e.target.value) : '')} 
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={formTrackOperationalCost}
+                    onClick={() => setFormTrackOperationalCost(!formTrackOperationalCost)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      formTrackOperationalCost ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        formTrackOperationalCost ? 'translate-x-5' : 'translate-x-0'
+                      }`}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Standby Rate (R/hr)</label>
-                    <input 
-                      type="number" 
-                      placeholder="e.g. 350" 
-                      value={formStandbyRate} 
-                      onChange={e => setFormStandbyRate(e.target.value ? Number(e.target.value) : '')} 
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
-                    />
-                  </div>
+                  </button>
                 </div>
+
+                {formTrackOperationalCost && (
+                  <div className="grid grid-cols-3 gap-3 pt-3 border-t border-emerald-200/60 dark:border-emerald-800/40 animate-in fade-in">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Hourly Operating Rate (R/hr)</label>
+                      <input 
+                        type="number" 
+                        placeholder="e.g. 850" 
+                        value={formHourlyRate} 
+                        onChange={e => setFormHourlyRate(e.target.value !== '' ? Number(e.target.value) : '')} 
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-emerald-500" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Daily Rate (R/day)</label>
+                      <input 
+                        type="number" 
+                        placeholder="e.g. 6800" 
+                        value={formDailyRate} 
+                        onChange={e => setFormDailyRate(e.target.value !== '' ? Number(e.target.value) : '')} 
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Standby Rate (R/hr)</label>
+                      <input 
+                        type="number" 
+                        placeholder="e.g. 350" 
+                        value={formStandbyRate} 
+                        onChange={e => setFormStandbyRate(e.target.value !== '' ? Number(e.target.value) : '')} 
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -1954,7 +2071,7 @@ export function Equipment() {
         confirmLabel="Delete Equipment"
       />
 
-      {/* Equipment Activity Logging Modal (Hours, Mileage, Loads, Power, Refuel, Maintenance) */}
+      {/* Equipment Activity Logging Modal */}
       {logModalEq && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95">
@@ -1964,7 +2081,10 @@ export function Equipment() {
                   <ClipboardList className="h-5 w-5 text-blue-500" /> Log Equipment Activity
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {logModalEq.id} - {logModalEq.name} {logModalEq.licensePlate ? `(${logModalEq.licensePlate})` : ''} • Rate: {formatRand(logModalEq.hourlyRate || 850)}/hr
+                  {logModalEq.id} - {logModalEq.name} {logModalEq.licensePlate ? `(${logModalEq.licensePlate})` : ''} 
+                  {(logModalEq.trackOperationalCost !== false && logModalEq.hourlyRate && logModalEq.hourlyRate > 0) 
+                    ? ` • Configured Rate: ${formatRand(logModalEq.hourlyRate)}/hr` 
+                    : ' • Cost Tracking: Off'}
                 </p>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setLogModalEq(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full">
@@ -2088,12 +2208,12 @@ export function Equipment() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Applied Rate (Rands/hr)</label>
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Applied Rate (Rands/hr - Optional)</label>
                       <input 
                         type="number" 
+                        placeholder="0 (No rate)"
                         value={logHourlyRateApplied} 
-                        onChange={e => setLogHourlyRateApplied(e.target.value ? Number(e.target.value) : '')} 
-                        required
+                        onChange={e => setLogHourlyRateApplied(e.target.value !== '' ? Number(e.target.value) : '')} 
                         className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-emerald-600 dark:text-emerald-400 font-bold focus:outline-none focus:border-blue-500" 
                       />
                     </div>
@@ -2104,12 +2224,12 @@ export function Equipment() {
                     <div>
                       <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">Computed Shift Operating Cost</p>
                       <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                        {logHoursAdded} hrs × {formatRand(logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : (logModalEq.hourlyRate || 850))}/hr
+                        {logHoursAdded} hrs × {formatRand(logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : 0)}/hr
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-black text-emerald-700 dark:text-emerald-300">
-                        {formatRand(Number(logHoursAdded || 0) * (logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : (logModalEq.hourlyRate || 850)))}
+                        {formatRand(Number(logHoursAdded || 0) * (logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : 0))}
                       </p>
                     </div>
                   </div>
@@ -2305,7 +2425,7 @@ export function Equipment() {
                         value={logFuelLitres} 
                         onChange={e => setLogFuelLitres(Number(e.target.value))} 
                         required
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-emerald-600 dark:text-emerald-400 font-bold focus:outline-none focus:border-emerald-500" 
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
                       />
                     </div>
                     <div className="space-y-2">
