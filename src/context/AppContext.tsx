@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -34,6 +34,8 @@ interface AppContextType {
   currentUserProfile: UserProfile;
   hasPermission: (section: keyof ProjectSectionPermissions) => boolean;
   reminders: Reminder[];
+  accommodations: AccommodationUnit[];
+  accommodationUtilities: AccommodationUtilityLog[];
   theme: 'light' | 'dark';
   units: 'metric' | 'imperial';
   currency: import('../types').CurrencyCode;
@@ -41,7 +43,7 @@ interface AppContextType {
 
   // Authentication & Admission Control State
   isAuthenticated: boolean;
-  login: (email: string, password?: string) => { success: boolean; message?: string };
+  login: (passcode: string) => boolean;
   loginWithProfile: (profileId: string) => { success: boolean; message?: string };
   logout: () => void;
   accessRequests: AccessRequest[];
@@ -128,7 +130,7 @@ interface AppContextType {
   deleteSiteInspectionPhoto: (id: string) => void;
   addPPEItem: (item: PPEMaterialItem) => void;
   updatePPEItem: (item: PPEMaterialItem) => void;
-  deletePPEItem: (id: string) => void;
+  deletePPEItem: (item: PPEMaterialItem) => void;
   addQAInspection: (inspection: QAInspectionItem) => void;
   updateQAInspection: (inspection: QAInspectionItem) => void;
   deleteQAInspection: (id: string) => void;
@@ -143,6 +145,13 @@ interface AppContextType {
   updateDocument: (doc: DocumentItem) => void;
   deleteDocument: (id: string) => void;
   assignDocumentToActivity: (docId: string, activityId?: string, activityName?: string) => void;
+  addAccommodation: (acc: AccommodationUnit) => void;
+  updateAccommodation: (acc: AccommodationUnit) => void;
+  deleteAccommodation: (id: string) => void;
+  assignEmployeeToAccommodation: (accId: string, empId: string, roomNumber?: string) => void;
+  removeEmployeeFromAccommodation: (accId: string, empId: string) => void;
+  addAccommodationUtility: (log: AccommodationUtilityLog) => void;
+  deleteAccommodationUtility: (id: string) => void;
 }
 
 const DEFAULT_INITIAL_PROFILES: UserProfile[] = [
@@ -271,6 +280,132 @@ const DEFAULT_INITIAL_EQUIPMENT: Equipment[] = [];
 
 const DEFAULT_INITIAL_EQUIPMENT_LOGS: EquipmentLog[] = [];
 
+const DEFAULT_INITIAL_ACCOMMODATIONS: AccommodationUnit[] = [
+  {
+    id: 'ACC-101',
+    name: 'Central Site Camp (Modular Container Block A)',
+    type: 'Site Camp / Modular Cabin',
+    ownership: 'Owned',
+    location: 'Zone 1 - Main Construction Yard',
+    address: 'Plot 4, Site Village, N1 North Corridor',
+    totalCapacityBeds: 8,
+    occupantIds: [],
+    status: 'Available',
+    amenities: ['WiFi', 'Aircon / Heating', 'Generator Backup', 'Water Tank / Borehole', 'Kitchenette', 'En-suite Bathroom'],
+    notes: 'Company-owned parkhome cabins with backup diesel generator connection.',
+    contactPerson: 'Sipho Zulu (Camp Manager)',
+    contactPhone: '+27 82 455 1920',
+    createdAt: '2026-01-10'
+  },
+  {
+    id: 'ACC-102',
+    name: 'Polokwane Town Staff House #3',
+    type: 'Shared House / Flat',
+    ownership: 'Rented',
+    location: 'Polokwane Central',
+    address: '42 Grobler Street, Polokwane, Limpopo',
+    totalCapacityBeds: 4,
+    occupantIds: [],
+    status: 'Available',
+    rentalVendor: 'Limpopo Property Rentals Ltd',
+    rentalAgreementNumber: 'LPR-2026-ACC-88',
+    rentalStartDate: '2026-01-01',
+    rentalEndDate: '2026-12-31',
+    rentalMonthlyCost: 18500,
+    rentalDepositPaid: 20000,
+    rentalBillingCycle: 'Monthly',
+    amenities: ['WiFi', 'Aircon / Heating', 'En-suite Bathroom', 'Kitchenette', 'Laundry'],
+    notes: 'Leased 4-bedroom residential house for engineering and survey team.',
+    contactPerson: 'Mrs. Dlamini (Landlord Agent)',
+    contactPhone: '+27 15 291 8842',
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'ACC-103',
+    name: 'Makhado Executive Guest Lodge (Unit 4)',
+    type: 'Single Room / Lodge',
+    ownership: 'Rented',
+    location: 'Louis Trichardt / Makhado',
+    address: '12 Songozwi St, Makhado',
+    totalCapacityBeds: 2,
+    occupantIds: [],
+    status: 'Available',
+    rentalVendor: 'Songozwi Bush Lodge',
+    rentalAgreementNumber: 'SBL-2026-L4',
+    rentalStartDate: '2026-02-01',
+    rentalEndDate: '2026-08-31',
+    rentalMonthlyCost: 12000,
+    rentalDepositPaid: 12000,
+    rentalBillingCycle: 'Monthly',
+    amenities: ['WiFi', 'Aircon / Heating', 'En-suite Bathroom'],
+    notes: 'Rented executive lodge for senior project consultants.',
+    contactPerson: 'Reception Desk',
+    contactPhone: '+27 15 516 0001',
+    createdAt: '2026-02-01'
+  }
+];
+
+const DEFAULT_INITIAL_UTILITIES: AccommodationUtilityLog[] = [
+  {
+    id: 'ACC-UTL-001',
+    accommodationId: 'ACC-101',
+    accommodationName: 'Central Site Camp (Modular Container Block A)',
+    utilityType: 'Electricity / Eskom Tokens',
+    date: '2026-08-01',
+    amountZAR: 4500,
+    unitsConsumed: 1500,
+    unitLabel: 'kWh',
+    vendorOrProvider: 'Eskom Prepaid',
+    invoiceOrReceiptNumber: 'ESK-9041284',
+    paidStatus: 'Paid',
+    loggedBy: 'Sipho Zulu',
+    notes: 'Monthly bulk prepaid meter token top-up for camp air conditioning and lights.'
+  },
+  {
+    id: 'ACC-UTL-002',
+    accommodationId: 'ACC-101',
+    accommodationName: 'Central Site Camp (Modular Container Block A)',
+    utilityType: 'Water & Sanitation',
+    date: '2026-08-05',
+    amountZAR: 2200,
+    unitsConsumed: 10000,
+    unitLabel: 'Litres',
+    vendorOrProvider: 'Limpopo Water Tankers',
+    invoiceOrReceiptNumber: 'WT-5502',
+    paidStatus: 'Paid',
+    loggedBy: 'Sipho Zulu',
+    notes: '10,000L potable water delivery to camp header tanks.'
+  },
+  {
+    id: 'ACC-UTL-003',
+    accommodationId: 'ACC-101',
+    accommodationName: 'Central Site Camp (Modular Container Block A)',
+    utilityType: 'Camp Generator Diesel',
+    date: '2026-08-10',
+    amountZAR: 5400,
+    unitsConsumed: 220,
+    unitLabel: 'Litres',
+    vendorOrProvider: 'Engen Bulk Fuels',
+    invoiceOrReceiptNumber: 'ENG-88120',
+    paidStatus: 'Paid',
+    loggedBy: 'Pieter Venter',
+    notes: 'Diesel top-up for 65kVA camp backup generator.'
+  },
+  {
+    id: 'ACC-UTL-004',
+    accommodationId: 'ACC-102',
+    accommodationName: 'Polokwane Town Staff House #3',
+    utilityType: 'WiFi & Internet',
+    date: '2026-08-01',
+    amountZAR: 999,
+    vendorOrProvider: 'Openserve / Telkom Fiber',
+    invoiceOrReceiptNumber: 'TEL-44910',
+    paidStatus: 'Paid',
+    loggedBy: 'Lindokuhle Chris',
+    notes: 'Monthly 100Mbps uncapped fiber subscription.'
+  }
+];
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -314,6 +449,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ppeItems, setPPEItems] = useState<PPEMaterialItem[]>([]);
   const [qaInspections, setQAInspections] = useState<QAInspectionItem[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [accommodations, setAccommodations] = useState<AccommodationUnit[]>([]);
+  const [accommodationUtilities, setAccommodationUtilities] = useState<AccommodationUtilityLog[]>([]);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [currentUserProfile, setCurrentUserProfileState] = useState<UserProfile>({
     id: 'USR-001',
@@ -562,6 +699,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (getLocal('ppeItems')) setPPEItems(getLocal('ppeItems'));
       if (getLocal('qaInspections')) setQAInspections(getLocal('qaInspections'));
       if (getLocal('documents')) setDocuments(getLocal('documents'));
+      
+      const localAcc = getLocal('accommodations');
+      if (localAcc && Array.isArray(localAcc) && localAcc.length > 0) {
+        setAccommodations(localAcc);
+      } else {
+        setAccommodations(DEFAULT_INITIAL_ACCOMMODATIONS);
+        localStorage.setItem('accommodations', JSON.stringify(DEFAULT_INITIAL_ACCOMMODATIONS));
+      }
+
+      const localUtils = getLocal('accommodationUtilities');
+      if (localUtils && Array.isArray(localUtils) && localUtils.length > 0) {
+        setAccommodationUtilities(localUtils);
+      } else {
+        setAccommodationUtilities(DEFAULT_INITIAL_UTILITIES);
+        localStorage.setItem('accommodationUtilities', JSON.stringify(DEFAULT_INITIAL_UTILITIES));
+      }
+
       const localProfiles = getLocal('userProfiles');
       if (localProfiles && Array.isArray(localProfiles) && localProfiles.length > 0) {
         setUserProfiles(localProfiles);
@@ -626,6 +780,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         mergeServer('ppeItems', setPPEItems);
         mergeServer('qaInspections', setQAInspections);
         mergeServer('documents', setDocuments);
+        mergeServer('accommodations', setAccommodations);
+        mergeServer('accommodationUtilities', setAccommodationUtilities);
         mergeServer('userProfiles', setUserProfiles);
         mergeServer('reminders', setReminders);
       })
@@ -671,6 +827,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       syncOrMergeCollection(data.ppeItems, setPPEItems, 'ppeItems');
       syncOrMergeCollection(data.qaInspections, setQAInspections, 'qaInspections');
       syncOrMergeCollection(data.documents, setDocuments, 'documents');
+      syncOrMergeCollection(data.accommodations, setAccommodations, 'accommodations');
+      syncOrMergeCollection(data.accommodationUtilities, setAccommodationUtilities, 'accommodationUtilities');
       syncOrMergeCollection(data.userProfiles, setUserProfiles, 'userProfiles');
       syncOrMergeCollection(data.reminders, setReminders, 'reminders');
     });
@@ -721,6 +879,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   React.useEffect(() => { handleLocalChange('safetyRequirements', safetyRequirements); }, [safetyRequirements, handleLocalChange]);
   React.useEffect(() => { handleLocalChange('safetyPolicies', safetyPolicies); }, [safetyPolicies, handleLocalChange]);
   React.useEffect(() => { handleLocalChange('activityInspections', activityInspections); }, [activityInspections, handleLocalChange]);
+  React.useEffect(() => { handleLocalChange('accommodations', accommodations); }, [accommodations, handleLocalChange]);
+  React.useEffect(() => { handleLocalChange('accommodationUtilities', accommodationUtilities); }, [accommodationUtilities, handleLocalChange]);
   React.useEffect(() => { handleLocalChange('siteInspectionPhotos', siteInspectionPhotos); }, [siteInspectionPhotos, handleLocalChange]);
   React.useEffect(() => { handleLocalChange('ppeItems', ppeItems); }, [ppeItems, handleLocalChange]);
   React.useEffect(() => { handleLocalChange('qaInspections', qaInspections); }, [qaInspections, handleLocalChange]);
@@ -1901,6 +2061,175 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  const addAccommodation = (acc: AccommodationUnit) => {
+    setAccommodations(prev => [acc, ...prev]);
+    syncToServer('add_accommodation', acc);
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: acc.projectId || projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: 'Accommodation Facility Registered',
+      details: `Added ${acc.ownership} accommodation: "${acc.name}" (${acc.type}, Capacity: ${acc.totalCapacityBeds} beds)`,
+      timestamp: new Date().toISOString(),
+      entityType: 'Employee',
+      entityId: acc.id,
+      actionType: 'create'
+    });
+  };
+
+  const updateAccommodation = (acc: AccommodationUnit) => {
+    setAccommodations(prev => prev.map(a => a.id === acc.id ? acc : a));
+    syncToServer('update_accommodation', acc);
+  };
+
+  const deleteAccommodation = (id: string) => {
+    const accToDelete = accommodations.find(a => a.id === id);
+    setAccommodations(prev => prev.filter(a => a.id !== id));
+    syncToServer('delete_accommodation', { id });
+
+    // Also unassign any employees assigned to this facility
+    setEmployees(prev => prev.map(emp => {
+      if (emp.accommodationDetails?.campId === id || (accToDelete && emp.accommodationDetails?.campName === accToDelete.name)) {
+        const updated = {
+          ...emp,
+          hasAccommodation: false,
+          accommodationDetails: undefined
+        };
+        syncToServer('update_employee', updated);
+        return updated;
+      }
+      return emp;
+    }));
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: accToDelete?.projectId || projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: 'Accommodation Facility Deleted',
+      details: `Deleted accommodation facility "${accToDelete?.name || id}"`,
+      timestamp: new Date().toISOString(),
+      entityType: 'Employee',
+      entityId: id,
+      actionType: 'delete'
+    });
+  };
+
+  const assignEmployeeToAccommodation = (accId: string, empId: string, roomNumber?: string) => {
+    const targetAcc = accommodations.find(a => a.id === accId);
+    if (!targetAcc) return;
+
+    // 1. Update accommodation unit's occupantIds
+    setAccommodations(prev => prev.map(a => {
+      if (a.id === accId) {
+        const occupants = a.occupantIds.includes(empId) ? a.occupantIds : [...a.occupantIds, empId];
+        const isFull = occupants.length >= a.totalCapacityBeds;
+        const updated: AccommodationUnit = {
+          ...a,
+          occupantIds: occupants,
+          status: isFull ? 'Full' : (occupants.length > 0 ? 'Partially Occupied' : 'Available')
+        };
+        syncToServer('update_accommodation', updated);
+        return updated;
+      } else {
+        // If employee was assigned to a different unit, remove them
+        if (a.occupantIds.includes(empId)) {
+          const filtered = a.occupantIds.filter(id => id !== empId);
+          const updated: AccommodationUnit = {
+            ...a,
+            occupantIds: filtered,
+            status: filtered.length === 0 ? 'Available' : 'Partially Occupied'
+          };
+          syncToServer('update_accommodation', updated);
+          return updated;
+        }
+      }
+      return a;
+    }));
+
+    // 2. Update employee's accommodationDetails
+    setEmployees(prev => prev.map(emp => {
+      if (emp.id === empId) {
+        const updated: Employee = {
+          ...emp,
+          hasAccommodation: true,
+          accommodationDetails: {
+            ...emp.accommodationDetails,
+            campId: targetAcc.id,
+            campName: targetAcc.name,
+            roomNumber: roomNumber || emp.accommodationDetails?.roomNumber || 'Room 1',
+            checkInDate: emp.accommodationDetails?.checkInDate || new Date().toISOString().split('T')[0]
+          }
+        };
+        syncToServer('update_employee', updated);
+        return updated;
+      }
+      return emp;
+    }));
+  };
+
+  const removeEmployeeFromAccommodation = (accId: string, empId: string) => {
+    // 1. Remove from accommodation unit
+    setAccommodations(prev => prev.map(a => {
+      if (a.id === accId || a.occupantIds.includes(empId)) {
+        const filtered = a.occupantIds.filter(id => id !== empId);
+        const updated: AccommodationUnit = {
+          ...a,
+          occupantIds: filtered,
+          status: filtered.length === 0 ? 'Available' : 'Partially Occupied'
+        };
+        syncToServer('update_accommodation', updated);
+        return updated;
+      }
+      return a;
+    }));
+
+    // 2. Update employee
+    setEmployees(prev => prev.map(emp => {
+      if (emp.id === empId) {
+        const updated: Employee = {
+          ...emp,
+          hasAccommodation: false,
+          accommodationDetails: undefined
+        };
+        syncToServer('update_employee', updated);
+        return updated;
+      }
+      return emp;
+    }));
+  };
+
+  const addAccommodationUtility = (log: AccommodationUtilityLog) => {
+    setAccommodationUtilities(prev => [log, ...prev]);
+    syncToServer('add_accommodation_utility', log);
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: 'Accommodation Utility Logged',
+      details: `Logged ${log.utilityType} (R ${log.amountZAR.toLocaleString()}) for "${log.accommodationName}"`,
+      timestamp: new Date().toISOString(),
+      entityType: 'Employee',
+      entityId: log.id,
+      actionType: 'create'
+    });
+  };
+
+  const deleteAccommodationUtility = (id: string) => {
+    setAccommodationUtilities(prev => prev.filter(u => u.id !== id));
+    syncToServer('delete_accommodation_utility', { id });
+  };
+
   const setTheme = (newTheme: 'light' | 'dark') => {
     setThemeState(newTheme);
     localStorage.setItem('theme', newTheme);
@@ -2157,7 +2486,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addQAInspection, updateQAInspection, deleteQAInspection,
       addReminder, updateReminder, deleteReminder,
       addWeatherLog, updateWeatherLog, deleteWeatherLog,
-      addDocument, updateDocument, deleteDocument, assignDocumentToActivity
+      addDocument, updateDocument, deleteDocument, assignDocumentToActivity,
+      accommodations, accommodationUtilities,
+      addAccommodation, updateAccommodation, deleteAccommodation,
+      assignEmployeeToAccommodation, removeEmployeeFromAccommodation,
+      addAccommodationUtility, deleteAccommodationUtility
     }}>
       {children}
       <SyncNotificationToast />

@@ -31,7 +31,8 @@ import {
   LogOut,
   Zap,
   History,
-  Layers
+  Layers,
+  Home
 } from 'lucide-react';
 import { cn } from '../ui';
 import { useAppContext } from '../../context/AppContext';
@@ -130,6 +131,7 @@ export function AppLayout() {
     { name: 'Documents', path: '/documents', icon: FileText, section: 'documents' as any },
     { name: 'Employees', path: '/employees', icon: Users, section: 'labour' as any },
     { name: 'Equipment', path: '/equipment', icon: Truck, section: 'equipment' as any },
+    { name: 'Accommodation', path: '/accommodation', icon: Home, section: 'labour' as any },
     { name: 'Projects', path: '/projects', icon: FolderKanban },
     { name: 'Reports', path: '/reports', icon: FileBarChart, section: 'reports' as any },
     { name: 'Materials', path: '/materials', icon: Package, section: 'materials' as any },

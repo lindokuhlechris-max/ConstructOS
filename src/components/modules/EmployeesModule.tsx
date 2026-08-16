@@ -50,7 +50,28 @@ interface EmployeesModuleProps {
 }
 
 export function EmployeesModule({ onBack }: EmployeesModuleProps) {
-  const { employees, teams, projects, activities, workerCheckIns, labourLogs, addEmployee, updateEmployee, deleteEmployee, addTeam, updateTeam, deleteTeam, addLabourLog, updateLabourLog, deleteLabourLog, addWorkerCheckIn, currentUserProfile } = useAppContext();
+  const { 
+    employees, 
+    teams, 
+    projects, 
+    activities, 
+    workerCheckIns, 
+    labourLogs, 
+    addEmployee, 
+    updateEmployee, 
+    deleteEmployee, 
+    addTeam, 
+    updateTeam, 
+    deleteTeam, 
+    addLabourLog, 
+    updateLabourLog, 
+    deleteLabourLog, 
+    addWorkerCheckIn, 
+    currentUserProfile,
+    accommodations,
+    assignEmployeeToAccommodation,
+    removeEmployeeFromAccommodation
+  } = useAppContext();
   
   const canEditLabour = canUserEditSection(currentUserProfile, 'labour');
 
@@ -234,6 +255,20 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
     e.preventDefault();
     if (editingEmployee) {
       updateEmployee(editingEmployee);
+
+      if (editingEmployee.hasAccommodation && editingEmployee.accommodationDetails?.campId) {
+        assignEmployeeToAccommodation(
+          editingEmployee.accommodationDetails.campId,
+          editingEmployee.id,
+          editingEmployee.accommodationDetails.roomNumber
+        );
+      } else if (!editingEmployee.hasAccommodation) {
+        const existingAcc = accommodations.find(a => a.occupantIds.includes(editingEmployee.id));
+        if (existingAcc) {
+          removeEmployeeFromAccommodation(existingAcc.id, editingEmployee.id);
+        }
+      }
+
       setEditingEmployee(null);
     }
   };
@@ -1738,6 +1773,12 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
               </div>
 
               <div className="flex items-center gap-2">
+                <a
+                  href="/accommodation"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <Home className="h-4 w-4" /> Manage Camps & Housing Hub
+                </a>
                 <button
                   onClick={() => {
                     const accommodated = employees.filter(e => e.hasAccommodation || e.hasTransport);
@@ -3106,22 +3147,31 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                 {editingEmployee.hasAccommodation && (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-indigo-100/80 dark:border-indigo-900/30 animate-in fade-in">
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Camp / Residence</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Central Camp A"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
-                        value={editingEmployee.accommodationDetails?.campName || ''}
-                        onChange={e => setEditingEmployee({
-                          ...editingEmployee,
-                          accommodationDetails: {
-                            campName: e.target.value,
-                            roomNumber: editingEmployee.accommodationDetails?.roomNumber || '',
-                            subsidyAmount: editingEmployee.accommodationDetails?.subsidyAmount || 0,
-                            notes: editingEmployee.accommodationDetails?.notes || ''
-                          }
-                        })}
-                      />
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Camp / Facility</label>
+                      <select
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100"
+                        value={editingEmployee.accommodationDetails?.campId || ''}
+                        onChange={e => {
+                          const selectedAcc = accommodations.find(a => a.id === e.target.value);
+                          setEditingEmployee({
+                            ...editingEmployee,
+                            accommodationDetails: {
+                              campId: e.target.value,
+                              campName: selectedAcc ? selectedAcc.name : e.target.value,
+                              roomNumber: editingEmployee.accommodationDetails?.roomNumber || 'Room 1',
+                              subsidyAmount: editingEmployee.accommodationDetails?.subsidyAmount || 0,
+                              notes: editingEmployee.accommodationDetails?.notes || ''
+                            }
+                          });
+                        }}
+                      >
+                        <option value="">-- Select Registered Facility --</option>
+                        {accommodations.map(acc => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name} ({acc.ownership} • {acc.occupantIds?.length || 0}/{acc.totalCapacityBeds} beds)
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Room / Unit #</label>
@@ -3133,6 +3183,7 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                         onChange={e => setEditingEmployee({
                           ...editingEmployee,
                           accommodationDetails: {
+                            campId: editingEmployee.accommodationDetails?.campId,
                             campName: editingEmployee.accommodationDetails?.campName || '',
                             roomNumber: e.target.value,
                             subsidyAmount: editingEmployee.accommodationDetails?.subsidyAmount || 0,

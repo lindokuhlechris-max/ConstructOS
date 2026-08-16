@@ -38,7 +38,9 @@ const initialCleanDb: Record<string, any[]> = {
   qaInspections: [],
   documents: [],
   userProfiles: [],
-  reminders: []
+  reminders: [],
+  accommodations: [],
+  accommodationUtilities: []
 };
 
 // Disk Persistence Helper Functions
@@ -704,6 +706,28 @@ ${allPhotos.length > 0 ? `• ${allPhotos.length} site progress inspection photo
       case 'delete_site_inspection_photo':
         if (!db.siteInspectionPhotos) db.siteInspectionPhotos = [];
         db.siteInspectionPhotos = db.siteInspectionPhotos.filter((p: any) => p.id !== data.id);
+        break;
+
+      case 'add_accommodation':
+        if (!db.accommodations) db.accommodations = [];
+        db.accommodations.push(data);
+        break;
+      case 'update_accommodation':
+        if (!db.accommodations) db.accommodations = [];
+        db.accommodations = db.accommodations.map((a: any) => a.id === data.id ? data : a);
+        break;
+      case 'delete_accommodation':
+        if (!db.accommodations) db.accommodations = [];
+        db.accommodations = db.accommodations.filter((a: any) => a.id !== data.id);
+        break;
+
+      case 'add_accommodation_utility':
+        if (!db.accommodationUtilities) db.accommodationUtilities = [];
+        db.accommodationUtilities.push(data);
+        break;
+      case 'delete_accommodation_utility':
+        if (!db.accommodationUtilities) db.accommodationUtilities = [];
+        db.accommodationUtilities = db.accommodationUtilities.filter((u: any) => u.id !== data.id);
         break;
 
       case 'sync_full_state':

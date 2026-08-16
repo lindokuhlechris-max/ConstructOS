@@ -718,8 +718,11 @@ export interface Employee {
   leaveBalance?: EmployeeLeaveBalance;
   hasAccommodation?: boolean;
   accommodationDetails?: {
+    campId?: string;
     campName?: string;
     roomNumber?: string;
+    checkInDate?: string;
+    checkOutDate?: string;
     subsidyAmount?: number;
     notes?: string;
   };
@@ -854,3 +857,72 @@ export interface SyncConflict {
 
 
 export type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'ZAR' | 'AUD' | 'CAD' | 'INR';
+
+export type AccommodationOwnership = 'Owned' | 'Rented';
+
+export type AccommodationType = 
+  | 'Site Camp / Modular Cabin'
+  | 'Container Home / Unit'
+  | 'Shared House / Flat'
+  | 'Single Room / Lodge'
+  | 'Dormitory / Barracks'
+  | 'Guest House';
+
+export type AccommodationStatus = 'Available' | 'Partially Occupied' | 'Full' | 'Under Maintenance' | 'Vacated';
+
+export type UtilityType = 
+  | 'Electricity / Eskom Tokens'
+  | 'Water & Sanitation'
+  | 'Camp Generator Diesel'
+  | 'LPG Gas / Cooking'
+  | 'WiFi & Internet'
+  | 'Cleaning & Laundry'
+  | 'Waste & Septic Pump-out'
+  | 'Repairs & Maintenance';
+
+export interface AccommodationUnit {
+  id: string; // e.g. ACC-101
+  name: string; // e.g. "Main Camp Block A", "Polokwane Staff House #2"
+  type: AccommodationType;
+  ownership: AccommodationOwnership;
+  projectId?: string;
+  projectName?: string;
+  location: string;
+  address?: string;
+  totalCapacityBeds: number;
+  occupantIds: string[]; // array of Employee IDs
+  status: AccommodationStatus;
+  
+  // Rental specific fields (when ownership === 'Rented')
+  rentalVendor?: string; // Landlord or leasing agent
+  rentalAgreementNumber?: string;
+  rentalStartDate?: string;
+  rentalEndDate?: string;
+  rentalMonthlyCost?: number; // Base monthly rent in ZAR
+  rentalDepositPaid?: number;
+  rentalBillingCycle?: 'Monthly' | 'Weekly' | 'Daily';
+
+  // Amenities & specs
+  amenities?: string[]; // e.g. ['WiFi', 'Aircon / Heating', 'Generator Backup', 'Water Tank / Borehole', 'Kitchenette', 'En-suite Bathroom']
+  notes?: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  createdAt?: string;
+}
+
+export interface AccommodationUtilityLog {
+  id: string; // e.g. ACC-UTL-001
+  accommodationId: string;
+  accommodationName: string;
+  utilityType: UtilityType;
+  date: string;
+  amountZAR: number; // Cost in ZAR
+  unitsConsumed?: number; // e.g. kWh, Litres, kg
+  unitLabel?: string; // e.g. "kWh", "Litres", "Cylinders"
+  vendorOrProvider?: string; // e.g. "Eskom", "Municipality", "Engen Diesel", "Afrox Gas"
+  invoiceOrReceiptNumber?: string;
+  paidStatus: 'Paid' | 'Pending' | 'Overdue';
+  loggedBy: string;
+  notes?: string;
+}
+

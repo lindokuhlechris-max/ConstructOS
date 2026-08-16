@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from '../components/ui';
-import { Users, Truck, Package, ShieldCheck, AlertTriangle, Settings, HelpCircle, LogOut, ArrowLeft, Building2, History, Layers } from 'lucide-react';
+import { Users, Truck, Package, ShieldCheck, AlertTriangle, Settings, HelpCircle, LogOut, ArrowLeft, Building2, History, Layers, Home } from 'lucide-react';
 import { EquipmentModule } from '../components/modules/EquipmentModule';
 import { MaterialModule } from '../components/modules/MaterialModule';
 import { QualityModule } from '../components/modules/QualityModule';
@@ -10,6 +10,7 @@ import { CompanyModule } from '../components/modules/CompanyModule';
 import { ActivityLogsModule } from '../components/modules/ActivityLogsModule';
 import { ResourceAllocationModule } from '../components/modules/ResourceAllocationModule';
 import { HelpSupportModule } from '../components/modules/HelpSupportModule';
+import { AccommodationModule } from '../components/modules/AccommodationModule';
 import { LabourTracking } from '../components/LabourTracking';
 import { useAppContext } from '../context/AppContext';
 import { ProjectSectionPermissions } from '../types';
@@ -23,6 +24,7 @@ export function More() {
     { id: 'allocations', icon: Layers, label: 'Resource Allocation Tracking', color: 'text-[#0B5FFF]', section: 'activities' as keyof ProjectSectionPermissions },
     { id: 'labour', icon: Users, label: 'Labour Management', color: 'text-blue-500', section: 'labour' as keyof ProjectSectionPermissions },
     { id: 'equipment', icon: Truck, label: 'Equipment Tracking', color: 'text-orange-500', section: 'equipment' as keyof ProjectSectionPermissions },
+    { id: 'accommodation', icon: Home, label: 'Accommodation & Camp Hub', color: 'text-indigo-500', section: 'labour' as keyof ProjectSectionPermissions },
     { id: 'material', icon: Package, label: 'Material Management', color: 'text-purple-500', section: 'materials' as keyof ProjectSectionPermissions },
     { id: 'quality', icon: ShieldCheck, label: 'Quality & QA/QC', color: 'text-green-500', section: 'quality' as keyof ProjectSectionPermissions },
     { id: 'safety', icon: AlertTriangle, label: 'Safety & HSE', color: 'text-red-500', section: 'safety' as keyof ProjectSectionPermissions },
@@ -52,6 +54,14 @@ export function More() {
     return (
       <div className="p-4 md:p-8">
         <EquipmentModule onBack={() => setActiveModule(null)} />
+      </div>
+    );
+  }
+
+  if (activeModule === 'accommodation') {
+    return (
+      <div className="p-4 md:p-8">
+        <AccommodationModule onBack={() => setActiveModule(null)} />
       </div>
     );
   }

@@ -19,6 +19,7 @@ import { QualityPage } from './pages/QualityPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { Employees } from './pages/Employees';
 import { Equipment } from './pages/Equipment';
+import { Accommodation } from './pages/Accommodation';
 import { Documents } from './pages/Documents';
 import { ActivityLogsPage } from './pages/ActivityLogsPage';
 import { ResourceAllocationPage } from './pages/ResourceAllocationPage';
@@ -45,6 +46,9 @@ export default function App() {
             } />
             <Route path="equipment" element={
               <ProtectedRoute requiredSection="equipment"><Equipment /></ProtectedRoute>
+            } />
+            <Route path="accommodation" element={
+              <ProtectedRoute requiredSection="labour"><Accommodation /></ProtectedRoute>
             } />
             <Route path="projects" element={<Projects />} />
             <Route path="reports" element={

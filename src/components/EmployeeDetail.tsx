@@ -69,7 +69,22 @@ interface EmployeeDetailProps {
 }
 
 export function EmployeeDetail({ employee, onSave, onClose, onDelete }: EmployeeDetailProps) {
-  const { activities, teams, workerCheckIns, labourLogs, projects, addLabourLog, deleteLabourLog, addWorkerCheckIn, deleteWorkerCheckIn, updateActivity, currentUserProfile } = useAppContext();
+  const { 
+    activities, 
+    teams, 
+    workerCheckIns, 
+    labourLogs, 
+    projects, 
+    addLabourLog, 
+    deleteLabourLog, 
+    addWorkerCheckIn, 
+    deleteWorkerCheckIn, 
+    updateActivity, 
+    currentUserProfile,
+    accommodations,
+    assignEmployeeToAccommodation,
+    removeEmployeeFromAccommodation
+  } = useAppContext();
   const canEditLabour = canUserEditSection(currentUserProfile, 'labour');
 
   // Active Tab: 'overview' | 'certificates' | 'tasks' | 'attendance' | 'leave'
@@ -93,9 +108,21 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
 
   // Logistics Modal State
   const [isEditingLogistics, setIsEditingLogistics] = useState(false);
-  const [logisticsData, setLogisticsData] = useState({
+  const [logisticsData, setLogisticsData] = useState<{
+    hasAccommodation: boolean;
+    accommodationDetails: {
+      campId?: string;
+      campName?: string;
+      roomNumber?: string;
+      checkInDate?: string;
+      subsidyAmount?: number;
+      notes?: string;
+    };
+    hasTransport: boolean;
+    transportDetails: { route?: string; pickupPoint?: string };
+  }>({
     hasAccommodation: false,
-    accommodationDetails: { campName: '', roomNumber: '', subsidyAmount: 0, notes: '' },
+    accommodationDetails: { campId: '', campName: '', roomNumber: '', subsidyAmount: 0, notes: '' },
     hasTransport: false,
     transportDetails: { route: '', pickupPoint: '' }
   });
@@ -668,6 +695,7 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
                     setLogisticsData({
                       hasAccommodation: employee.hasAccommodation || false,
                       accommodationDetails: {
+                        campId: employee.accommodationDetails?.campId || '',
                         campName: employee.accommodationDetails?.campName || '',
                         roomNumber: employee.accommodationDetails?.roomNumber || '',
                         subsidyAmount: employee.accommodationDetails?.subsidyAmount || 0,
@@ -693,16 +721,36 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
                     <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
                       <Home className="h-4 w-4 text-indigo-600" /> Accommodation
                     </span>
-                    <Badge variant="default" className={employee.hasAccommodation ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}>
-                      {employee.hasAccommodation ? 'Provided' : 'Self Housing'}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      {employee.hasAccommodation && (() => {
+                        const matchedUnit = accommodations.find(a => a.id === employee.accommodationDetails?.campId || a.name === employee.accommodationDetails?.campName);
+                        if (matchedUnit) {
+                          return (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                              matchedUnit.ownership === 'Owned'
+                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                            }`}>
+                              {matchedUnit.ownership}
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
+                      <Badge variant="default" className={employee.hasAccommodation ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}>
+                        {employee.hasAccommodation ? 'Provided' : 'Self Housing'}
+                      </Badge>
+                    </div>
                   </div>
                   {employee.hasAccommodation ? (
                     <div className="space-y-1 text-xs text-slate-700 dark:text-slate-300 pt-1">
-                      <p className="font-bold">{employee.accommodationDetails?.campName || 'Central Site Camp'}</p>
-                      <p className="text-slate-500">Room / Unit: {employee.accommodationDetails?.roomNumber || 'N/A'}</p>
+                      <p className="font-bold text-indigo-950 dark:text-indigo-200">{employee.accommodationDetails?.campName || 'Central Site Camp'}</p>
+                      <p className="text-slate-500">Room / Unit: <strong className="text-slate-700 dark:text-slate-300 font-mono">{employee.accommodationDetails?.roomNumber || 'Room 1'}</strong></p>
+                      {employee.accommodationDetails?.checkInDate && (
+                        <p className="text-slate-500 text-[11px]">Check-in Date: {employee.accommodationDetails.checkInDate}</p>
+                      )}
                       {employee.accommodationDetails?.subsidyAmount ? (
-                        <p className="text-slate-500">Monthly Subsidy: R{employee.accommodationDetails.subsidyAmount}</p>
+                        <p className="text-slate-500">Monthly Subsidy: R {employee.accommodationDetails.subsidyAmount.toLocaleString()}</p>
                       ) : null}
                     </div>
                   ) : (
@@ -1898,11 +1946,25 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
                 const updated: Employee = {
                   ...employee,
                   hasAccommodation: logisticsData.hasAccommodation,
-                  accommodationDetails: logisticsData.accommodationDetails,
+                  accommodationDetails: logisticsData.hasAccommodation ? logisticsData.accommodationDetails : undefined,
                   hasTransport: logisticsData.hasTransport,
                   transportDetails: logisticsData.transportDetails
                 };
                 onSave(updated);
+
+                if (logisticsData.hasAccommodation && logisticsData.accommodationDetails?.campId) {
+                  assignEmployeeToAccommodation(
+                    logisticsData.accommodationDetails.campId,
+                    employee.id,
+                    logisticsData.accommodationDetails.roomNumber
+                  );
+                } else if (!logisticsData.hasAccommodation) {
+                  const existingAcc = accommodations.find(a => a.occupantIds.includes(employee.id));
+                  if (existingAcc) {
+                    removeEmployeeFromAccommodation(existingAcc.id, employee.id);
+                  }
+                }
+
                 setIsEditingLogistics(false);
               }}
               className="p-6 space-y-5"
@@ -1931,17 +1993,30 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
                 {logisticsData.hasAccommodation && (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-indigo-100/80 dark:border-indigo-900/30">
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Camp / Residence</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Central Site Camp A"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
-                        value={logisticsData.accommodationDetails.campName}
-                        onChange={e => setLogisticsData({
-                          ...logisticsData,
-                          accommodationDetails: { ...logisticsData.accommodationDetails, campName: e.target.value }
-                        })}
-                      />
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Camp / Facility</label>
+                      <select
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100"
+                        value={logisticsData.accommodationDetails.campId || ''}
+                        onChange={e => {
+                          const selectedAcc = accommodations.find(a => a.id === e.target.value);
+                          setLogisticsData({
+                            ...logisticsData,
+                            accommodationDetails: {
+                              ...logisticsData.accommodationDetails,
+                              campId: e.target.value,
+                              campName: selectedAcc ? selectedAcc.name : e.target.value,
+                              roomNumber: logisticsData.accommodationDetails.roomNumber || 'Room 1'
+                            }
+                          });
+                        }}
+                      >
+                        <option value="">-- Select Registered Facility --</option>
+                        {accommodations.map(acc => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name} ({acc.ownership} • {acc.occupantIds?.length || 0}/{acc.totalCapacityBeds} beds)
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Room / Unit #</label>
