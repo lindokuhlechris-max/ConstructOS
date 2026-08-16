@@ -83,8 +83,8 @@ export function SyncStatusIndicator() {
       }
 
       const backupData = {
-        app: 'ConstructOS',
-        version: '2.4.0',
+        app: 'Constructfield',
+        version: '1.0.0',
         timestamp: new Date().toISOString(),
         theme,
         units,
@@ -97,7 +97,7 @@ export function SyncStatusIndicator() {
 
       const { GoogleDriveService } = await import('../services/GoogleDriveService');
       const driveService = new GoogleDriveService();
-      await driveService.writeData(backupData, 'constructos_data.json', setDriveStatus);
+      await driveService.writeData(backupData, 'constructfield_data.json', setDriveStatus);
 
       setBackupMsg('Google Drive backup successful!');
       setTimeout(() => setBackupMsg(null), 3500);
@@ -123,8 +123,8 @@ export function SyncStatusIndicator() {
       }
 
       const backupData = {
-        app: 'ConstructOS',
-        version: '2.4.0',
+        app: 'Constructfield',
+        version: '1.0.0',
         timestamp: new Date().toISOString(),
         theme,
         units,
@@ -139,7 +139,7 @@ export function SyncStatusIndicator() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `constructos-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `constructfield-backup-${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
       setBackupMsg('Backup downloaded successfully!');
@@ -177,10 +177,10 @@ export function SyncStatusIndicator() {
             alert('System backup restored successfully! Reloading application...');
             window.location.reload();
           } else {
-            alert('Invalid backup format. File does not contain ConstructOS data.');
+            alert('Invalid backup format. File does not contain Constructfield data.');
           }
         } catch (err) {
-          alert('Failed to parse backup JSON file. Please ensure it is a valid ConstructOS JSON backup file.');
+          alert('Failed to parse backup JSON file. Please ensure it is a valid Constructfield JSON backup file.');
         }
       };
       reader.readAsText(file);

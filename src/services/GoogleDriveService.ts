@@ -6,7 +6,7 @@ export interface DriveBackupFile {
 }
 
 export class GoogleDriveService {
-  private readonly defaultFileName = 'constructos_data.json';
+  private readonly defaultFileName = 'constructfield_data.json';
 
   private async ensureGoogleScriptLoaded(): Promise<void> {
     if (window.google?.accounts?.oauth2) return;
@@ -59,7 +59,7 @@ export class GoogleDriveService {
         return;
       }
       
-      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem('constructos_google_client_id');
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem('constructfield_google_client_id') || localStorage.getItem('constructos_google_client_id');
       if (!clientId) {
         reject(new Error('Google Client ID is not configured. Please configure your Google Client ID in Settings or provide VITE_GOOGLE_CLIENT_ID in your environment.'));
         return;
@@ -89,7 +89,7 @@ export class GoogleDriveService {
     const token = await this.getToken();
 
     if (onStatus) onStatus('Searching Drive backups...');
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=name contains 'constructos' and trashed=false&fields=files(id, name, createdTime, size)&orderBy=createdTime desc`, {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=(name contains 'constructfield' or name contains 'constructos') and trashed=false&fields=files(id, name, createdTime, size)&orderBy=createdTime desc`, {
       headers: { Authorization: `Bearer ${token}` }
     });
 
@@ -125,7 +125,7 @@ export class GoogleDriveService {
     const metadata = {
       name: fileName,
       mimeType: 'application/json',
-      description: `ConstructOS Full System Backup (${new Date().toLocaleString()})`
+      description: `Constructfield Full System Backup (${new Date().toLocaleString()})`
     };
 
     const form = new FormData();

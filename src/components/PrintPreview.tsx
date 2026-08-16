@@ -13,7 +13,7 @@ interface PrintPreviewProps {
   brandName?: string;
 }
 
-export function PrintPreview({ isOpen, onClose, title, children, onDownloadPdf, brandName = "ConstructOS" }: PrintPreviewProps) {
+export function PrintPreview({ isOpen, onClose, title, children, onDownloadPdf, brandName = "Constructfield" }: PrintPreviewProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 

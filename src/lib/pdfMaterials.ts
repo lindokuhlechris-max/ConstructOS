@@ -20,7 +20,7 @@ export const generateRequestsPDF = (requests: any[], project: any) => {
   
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139); // slate-500
-  doc.text(`Project: ${project?.name || 'ConstructOS Project'}`, 14, 30);
+  doc.text(`Project: ${project?.name || 'Constructfield Project'}`, 14, 30);
   doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 14, 35);
   
   // Stats
@@ -67,7 +67,7 @@ export const generateCostsPDF = (materials: any[], requests: any[], project: any
   
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139); // slate-500
-  doc.text(`Project: ${project?.name || 'ConstructOS Project'}`, 14, 30);
+  doc.text(`Project: ${project?.name || 'Constructfield Project'}`, 14, 30);
   doc.text(`Date Generated: ${new Date().toLocaleDateString()} | Currency: ${currency}`, 14, 35);
   
   // Calculate Stores Financials

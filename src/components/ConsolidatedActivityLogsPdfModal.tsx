@@ -340,7 +340,7 @@ export function ConsolidatedActivityLogsPdfModal({
                 <div className="bg-[#0B5FFF] text-white p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                   <div>
                     <h3 className="text-lg font-black tracking-tight">
-                      CONSTRUCTOS | ACTIVITY LOGS SUMMARY REPORT
+                      CONSTRUCTFIELD | ACTIVITY LOGS SUMMARY REPORT
                     </h3>
                     <p className="text-xs text-blue-100 mt-0.5">
                       Official Site Daily Log & Audit Verification  •  Target Date: {selectedDate}

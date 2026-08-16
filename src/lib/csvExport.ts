@@ -91,7 +91,7 @@ export function exportMaterialsToCSV(materials: MaterialInventory[], projects?: 
 
   const csvString = csvRows.join('\r\n');
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `constructos_materials_inventory_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+  const filename = `constructfield_materials_inventory_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
   
   downloadCSVFile(filename, csvString);
 }
@@ -110,52 +110,56 @@ export function exportActivitiesToCSV(activities: Activity[], projects: Project[
     'Activity Name',
     'Project ID',
     'Project Name',
-    'Work Package',
     'Discipline',
-    'Area / Location',
-    'Priority',
     'Status',
-    'Progress (%)',
-    'Assigned To',
-    'Supervisor',
-    'Start Date',
-    'Finish Date',
-    'Created Date',
-    'Last Updated Date',
-    'Target Quantity',
-    'Actual Quantity',
+    'Progress %',
+    'Quantity',
     'Unit',
-    'Planned Hours',
-    'Actual Hours',
-    'Description',
-    'Remarks'
+    'Target Quantity',
+    'Daily Target Quantity',
+    'Start Date',
+    'End Date',
+    'Priority',
+    'Assigned Team',
+    'Total Subtasks',
+    'Completed Subtasks',
+    'Subtask Progress %',
+    'Labour Logged Hours',
+    'Total Labour Cost',
+    'Description'
   ];
 
-  const rows = activities.map(act => [
-    act.id,
-    act.name,
-    act.projectId,
-    getProjectName(act.projectId),
-    act.workPackage || '',
-    act.discipline || '',
-    act.area || act.location || '',
-    act.priority || 'Medium',
-    act.status || 'Not Started',
-    act.progress ?? 0,
-    act.assignedTo || '',
-    act.supervisor || '',
-    act.startDate || '',
-    act.finishDate || '',
-    act.createdAt || act.startDate || '',
-    act.updatedAt || act.createdAt || act.startDate || '',
-    act.targetQuantity ?? 0,
-    act.actualQuantity ?? 0,
-    act.unit || '',
-    act.plannedHours ?? 0,
-    act.actualHours ?? 0,
-    act.description || '',
-    act.remarks || ''
-  ]);
+  const rows = activities.map(a => {
+    const totalSubtasks = a.subtasks?.length || 0;
+    const completedSubtasks = a.subtasks?.filter(s => s.status === 'Completed').length || 0;
+    const subtaskPct = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+    const labourHours = a.labourTracking?.totalHours || 0;
+    const labourCost = a.labourTracking?.totalCost || 0;
+
+    return [
+      a.id,
+      a.name,
+      a.projectId || '',
+      getProjectName(a.projectId || ''),
+      a.discipline,
+      a.status,
+      `${a.progress}%`,
+      a.quantity || 0,
+      a.unit || 'units',
+      a.targetQuantity || 0,
+      a.dailyTargetQuantity || 0,
+      a.startDate || '',
+      a.endDate || '',
+      a.priority || 'Medium',
+      a.assignedTeam || 'General Operations',
+      totalSubtasks,
+      completedSubtasks,
+      `${subtaskPct}%`,
+      labourHours,
+      labourCost,
+      a.description || ''
+    ];
+  });
 
   const csvRows = [
     headers.map(escapeCSVCell).join(','),
@@ -164,7 +168,7 @@ export function exportActivitiesToCSV(activities: Activity[], projects: Project[
 
   const csvString = csvRows.join('\r\n');
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `constructos_activities_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+  const filename = `constructfield_activities_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
   
   downloadCSVFile(filename, csvString);
 }
@@ -172,7 +176,7 @@ export function exportActivitiesToCSV(activities: Activity[], projects: Project[
 /**
  * Export Daily Reports to CSV format
  */
-export function exportReportsToCSV(reports: DailyReport[], projects: Project[], filenameSuffix?: string) {
+export function exportDailyReportsToCSV(reports: DailyReport[], projects: Project[], filenameSuffix?: string) {
   const getProjectName = (projId: string) => {
     const proj = projects.find(p => p.id === projId);
     return proj ? proj.name : projId;
@@ -180,34 +184,32 @@ export function exportReportsToCSV(reports: DailyReport[], projects: Project[], 
 
   const headers = [
     'Report ID',
-    'Date',
+    'Report Date',
     'Project ID',
     'Project Name',
-    'Weather',
-    'Temperature',
-    'Site Conditions',
-    'Workers On Site',
-    'Equipment Running',
-    'Incidents',
-    'NCR Count',
-    'Significant Events',
-    'Supervisor Notes'
+    'Supervisor / Author',
+    'Weather Condition',
+    'Temperature (°C)',
+    'Safety Incidents Count',
+    'Total Workers on Site',
+    'Work Progress Summary',
+    'Delays or Blockers',
+    'QA Hold Points / Inspections'
   ];
 
-  const rows = reports.map(rpt => [
-    rpt.id,
-    rpt.date,
-    rpt.projectId,
-    getProjectName(rpt.projectId),
-    rpt.weather || '',
-    rpt.temperature || '',
-    rpt.siteConditions || '',
-    rpt.workersOnSite ?? 0,
-    rpt.equipmentRunning ?? 0,
-    rpt.incidents ?? 0,
-    rpt.ncr ?? 0,
-    rpt.significantEvents || '',
-    rpt.supervisorNotes || ''
+  const rows = reports.map(r => [
+    r.id,
+    r.date,
+    r.projectId || '',
+    getProjectName(r.projectId || ''),
+    r.supervisor || r.submittedBy || 'Site Supervisor',
+    r.weather?.condition || 'Clear',
+    r.weather?.temp || '30',
+    r.safety?.incidents || 0,
+    r.labour?.totalWorkers || 0,
+    r.workSummary || r.notes || '',
+    r.delays || r.blockers || 'None',
+    r.qaHoldPoints || 'All Hold Points Passed'
   ]);
 
   const csvRows = [
@@ -217,39 +219,38 @@ export function exportReportsToCSV(reports: DailyReport[], projects: Project[], 
 
   const csvString = csvRows.join('\r\n');
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `constructos_daily_reports_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+  const filename = `constructfield_daily_reports_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
   
   downloadCSVFile(filename, csvString);
 }
 
+export const exportReportsToCSV = exportDailyReportsToCSV;
+
 /**
- * Export full project dataset (Activities + Reports) into a multi-section CSV file
+ * Comprehensive Multi-Section Site CSV Export
  */
-export function exportFullProjectCSV(activities: Activity[], reports: DailyReport[], projects: Project[], selectedProjectId?: string) {
-  const getProjectName = (projId: string) => {
-    const proj = projects.find(p => p.id === projId);
-    return proj ? proj.name : projId;
-  };
-
-  const targetActivities = selectedProjectId 
-    ? activities.filter(a => a.projectId === selectedProjectId)
-    : activities;
-    
-  const targetReports = selectedProjectId 
-    ? reports.filter(r => r.projectId === selectedProjectId)
-    : reports;
-
+export function exportComprehensiveSiteCSV(
+  projects: Project[],
+  activities: Activity[],
+  materials: MaterialInventory[],
+  reports: DailyReport[],
+  selectedProjectId?: string
+) {
+  const filteredProjects = selectedProjectId ? projects.filter(p => p.id === selectedProjectId) : projects;
+  const filteredActivities = selectedProjectId ? activities.filter(a => a.projectId === selectedProjectId) : activities;
+  const filteredMaterials = selectedProjectId ? materials.filter(m => m.projectId === selectedProjectId) : materials;
+  const filteredReports = selectedProjectId ? reports.filter(r => r.projectId === selectedProjectId) : reports;
+  const dateStr = new Date().toISOString().split('T')[0];
   const sections: string[] = [];
 
   // Summary Metadata
-  const dateStr = new Date().toISOString().split('T')[0];
-  const projName = selectedProjectId ? getProjectName(selectedProjectId) : 'All Projects';
+  const projName = selectedProjectId ? (projects.find(p => p.id === selectedProjectId)?.name || selectedProjectId) : 'All Projects';
   
-  sections.push(['CONSTRUCTOS SITE EXPORT SUMMARY'].map(escapeCSVCell).join(','));
+  sections.push(['CONSTRUCTFIELD SITE EXPORT SUMMARY'].map(escapeCSVCell).join(','));
   sections.push(['Export Date', dateStr].map(escapeCSVCell).join(','));
   sections.push(['Project Scope', projName].map(escapeCSVCell).join(','));
-  sections.push(['Total Activities', targetActivities.length].map(escapeCSVCell).join(','));
-  sections.push(['Total Daily Reports', targetReports.length].map(escapeCSVCell).join(','));
+  sections.push(['Total Activities', filteredActivities.length].map(escapeCSVCell).join(','));
+  sections.push(['Total Daily Reports', filteredReports.length].map(escapeCSVCell).join(','));
   sections.push(''); // Blank line
 
   // Section 1: Activities
@@ -262,13 +263,13 @@ export function exportFullProjectCSV(activities: Activity[], reports: DailyRepor
   ];
   sections.push(activityHeaders.map(escapeCSVCell).join(','));
 
-  targetActivities.forEach(act => {
+  filteredActivities.forEach(act => {
     const row = [
-      act.id, act.name, act.projectId, getProjectName(act.projectId),
-      act.workPackage || '', act.discipline || '', act.area || act.location || '',
+      act.id, act.name, act.projectId || '', (projects.find(p => p.id === act.projectId)?.name || act.projectId || ''),
+      act.workPackage || '', act.discipline || '', act.location || '',
       act.priority || 'Medium', act.status || 'Not Started', act.progress ?? 0,
       act.assignedTo || '', act.supervisor || '', act.startDate || '',
-      act.finishDate || '', act.targetQuantity ?? 0, act.actualQuantity ?? 0,
+      act.endDate || '', act.targetQuantity ?? 0, act.quantity ?? 0,
       act.unit || '', act.plannedHours ?? 0, act.actualHours ?? 0,
       act.description || '', act.remarks || ''
     ];
@@ -286,9 +287,9 @@ export function exportFullProjectCSV(activities: Activity[], reports: DailyRepor
   ];
   sections.push(reportHeaders.map(escapeCSVCell).join(','));
 
-  targetReports.forEach(rpt => {
+  filteredReports.forEach(rpt => {
     const row = [
-      rpt.id, rpt.date, rpt.projectId, getProjectName(rpt.projectId),
+      rpt.id, rpt.date, rpt.projectId, (projects.find(p => p.id === rpt.projectId)?.name || rpt.projectId || ''),
       rpt.weather || '', rpt.temperature || '', rpt.siteConditions || '',
       rpt.workersOnSite ?? 0, rpt.equipmentRunning ?? 0, rpt.incidents ?? 0,
       rpt.ncr ?? 0, rpt.significantEvents || '', rpt.supervisorNotes || ''
@@ -297,9 +298,21 @@ export function exportFullProjectCSV(activities: Activity[], reports: DailyRepor
   });
 
   const fullCSVString = sections.join('\r\n');
-  const filename = `constructos_full_export_${selectedProjectId || 'all'}_${dateStr}.csv`;
+  const filename = `constructfield_full_export_${selectedProjectId || 'all'}_${dateStr}.csv`;
   
   downloadCSVFile(filename, fullCSVString);
+}
+
+/**
+ * Export full project dataset to CSV format
+ */
+export function exportFullProjectCSV(
+  activities: Activity[],
+  reports: DailyReport[],
+  projects: Project[],
+  selectedProjectId?: string
+) {
+  exportComprehensiveSiteCSV(projects, activities, [], reports, selectedProjectId);
 }
 
 /**
@@ -335,33 +348,33 @@ export function exportDocumentsToCSV(documents: DocumentItem[], projects?: Proje
       d.id,
       d.title,
       d.fileName,
-      d.fileType.toUpperCase(),
-      d.fileExtension.toUpperCase(),
-      d.fileSizeFormatted || `${d.fileSize} B`,
+      d.fileType,
+      d.extension,
+      d.fileSizeFormatted,
       d.category,
       d.version,
       d.status,
-      d.linkedActivityId || 'None',
-      d.linkedActivityName || 'Unassigned',
+      d.linkedActivityId || '',
+      d.linkedActivityName || '',
       d.uploadedBy,
       uploadDateStr,
       modifiedDateStr,
       tagsStr,
-      d.confidential ? 'Yes' : 'No',
+      d.confidential ? 'YES' : 'NO',
       d.description || ''
     ];
   });
 
-  const csvContent = [
+  const csvRows = [
     headers.map(escapeCSVCell).join(','),
     ...rows.map(row => row.map(escapeCSVCell).join(','))
-  ].join('\r\n');
+  ];
 
+  const csvString = csvRows.join('\r\n');
   const dateStr = new Date().toISOString().split('T')[0];
-  const suffix = filenameSuffix ? `_${filenameSuffix}` : '';
-  const filename = `constructos_document_register${suffix}_${dateStr}.csv`;
-
-  downloadCSVFile(filename, csvContent);
+  const filename = `constructfield_document_register_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+  
+  downloadCSVFile(filename, csvString);
 }
 
 
@@ -402,7 +415,7 @@ export function exportMaterialRequestsToCSV(requests: any[], filenameSuffix?: st
 
   const csvString = csvRows.join('\r\n');
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `constructos_material_requests_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+  const filename = `constructfield_material_requests_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
   
   downloadCSVFile(filename, csvString);
 }

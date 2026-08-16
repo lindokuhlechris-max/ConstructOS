@@ -222,7 +222,7 @@ export function TextViewer({ document: doc, onDownload }: TextViewerProps) {
 
 function generateDocumentSpecificationText(doc: DocumentItem): string {
   return `// ============================================================================
-// CONSTRUCTOS TECHNICAL SPECIFICATION & PROJECT TRANSMITTAL
+// CONSTRUCTFIELD TECHNICAL SPECIFICATION & PROJECT TRANSMITTAL
 // Document ID: ${doc.id}
 // Title: ${doc.title}
 // Category: ${doc.category}

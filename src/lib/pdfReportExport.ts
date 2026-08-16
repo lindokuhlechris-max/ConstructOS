@@ -602,7 +602,7 @@ export function exportSingleReportPDF(report: DailyReport, projectName: string) 
       doc.setFontSize(7.5);
       doc.setTextColor(...textMuted);
       doc.setFont('helvetica', 'normal');
-      doc.text(`ConstructOS • Site Daily Report (${report.id})  |  ${projectName}`, 14, 10);
+      doc.text(`Constructfield • Site Daily Report (${report.id})  |  ${projectName}`, 14, 10);
       doc.setDrawColor(...borderGray);
       doc.line(14, 12, 196, 12);
     }
@@ -614,7 +614,7 @@ export function exportSingleReportPDF(report: DailyReport, projectName: string) 
     doc.setFontSize(7.5);
     doc.setTextColor(...textMuted);
     doc.setFont('helvetica', 'normal');
-    doc.text('ConstructOS Enterprise Construction Operations  •  Official Site Record  •  Confidential', 14, 289);
+    doc.text('Constructfield Enterprise Construction Operations  •  Official Site Record  •  Confidential', 14, 289);
     doc.text(`Page ${i} of ${totalPages}   |   Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, 196, 289, { align: 'right' });
   }
 
@@ -736,7 +736,7 @@ export function exportMultipleReportsPDF(reports: DailyReport[], projects: Proje
     doc.setFontSize(7.5);
     doc.setTextColor(...textMuted);
     doc.setFont('helvetica', 'normal');
-    doc.text('ConstructOS Enterprise Operations  •  Official Export Record  •  Confidential', 14, 289);
+    doc.text('Constructfield Enterprise Operations  •  Official Export Record  •  Confidential', 14, 289);
     doc.text(`Page ${i} of ${totalPages}   |   Exported: ${new Date().toLocaleDateString()}`, 196, 289, { align: 'right' });
   }
 
@@ -790,7 +790,7 @@ export function exportConsolidatedActivityLogsPDF({
   doc.setFontSize(14);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.text('CONSTRUCTOS  |  CONSOLIDATED ACTIVITY LOGS', 14, 13);
+  doc.text('CONSTRUCTFIELD  |  CONSOLIDATED ACTIVITY LOGS', 14, 13);
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
@@ -974,7 +974,7 @@ export function exportConsolidatedActivityLogsPDF({
     doc.setPage(i);
     doc.setFontSize(7.5);
     doc.setTextColor(150);
-    doc.text(`ConstructOS  |  Consolidated Daily Activity Logs Report  •  Page ${i} of ${totalPages}`, 14, 288);
+    doc.text(`Constructfield  |  Consolidated Daily Activity Logs Report  •  Page ${i} of ${totalPages}`, 14, 288);
     doc.text(`Confidential • Project Audit Trail`, 145, 288);
   }
 

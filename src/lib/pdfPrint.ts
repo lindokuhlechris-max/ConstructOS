@@ -223,7 +223,7 @@ export function printActivitiesSummary({
   <div class="header-container">
     <div class="title-area">
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="background: #0b5fff; color: white; padding: 3px 6px; border-radius: 4px; font-weight: 900; font-size: 10px; letter-spacing: 0.05em;">CONSTRUCTOS</span>
+        <span style="background: #0b5fff; color: white; padding: 3px 6px; border-radius: 4px; font-weight: 900; font-size: 10px; letter-spacing: 0.05em;">CONSTRUCTFIELD</span>
         <h1>Construction Activities Summary Report</h1>
       </div>
       <p>Project: <strong>${project?.name || 'Main Project'}</strong> • Location: <strong>${project?.location || 'Jobsite'}</strong> • View: <strong>${filterLabel}</strong></p>
@@ -280,7 +280,7 @@ export function printActivitiesSummary({
   </table>
 
   <div class="footer">
-    <div>ConstructOS Enterprise Field Management • Official Site Record</div>
+    <div>Constructfield Enterprise Field Management • Official Site Record</div>
     <div>Page 1 of 1 • Signed by Site Supervisor: __________________________</div>
   </div>
 </body>
@@ -455,7 +455,7 @@ export function printMaterialsSummary({
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Material Inventory & Reorder Summary - ${project?.name || 'ConstructOS Site'}</title>
+  <title>Material Inventory & Reorder Summary - ${project?.name || 'Constructfield Site'}</title>
   <style>
     @page {
       size: A4 landscape;
@@ -556,7 +556,7 @@ export function printMaterialsSummary({
   <div class="header-container">
     <div class="title-area">
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="background: #0b5fff; color: white; padding: 3px 6px; border-radius: 4px; font-weight: 900; font-size: 10px; letter-spacing: 0.05em;">CONSTRUCTOS</span>
+        <span style="background: #0b5fff; color: white; padding: 3px 6px; border-radius: 4px; font-weight: 900; font-size: 10px; letter-spacing: 0.05em;">CONSTRUCTFIELD</span>
         <h1>Material Inventory & Reorder Report</h1>
       </div>
       <p>Project: <strong>${project?.name || 'Main Construction Site'}</strong> • Scope: <strong>${filterLabel}</strong></p>
@@ -615,7 +615,7 @@ export function printMaterialsSummary({
   </table>
 
   <div class="footer">
-    <div>ConstructOS Materials Management • Official Warehouse & Jobsite Log</div>
+    <div>Constructfield Materials Management • Official Warehouse & Jobsite Log</div>
     <div>Verified & Signed by Storekeeper / Engineer: __________________________</div>
   </div>
 </body>
@@ -765,7 +765,7 @@ export function printDocumentsSummary({
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Document Register & Technical Drawings - ${project?.name || 'ConstructOS Project'}</title>
+  <title>Document Register & Technical Drawings - ${project?.name || 'Constructfield Project'}</title>
   <style>
     @page {
       size: A4 landscape;
@@ -866,7 +866,7 @@ export function printDocumentsSummary({
   <div class="header-container">
     <div class="title-area">
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="background: #0b5fff; color: white; padding: 3px 6px; border-radius: 4px; font-weight: 900; font-size: 10px; letter-spacing: 0.05em;">CONSTRUCTOS</span>
+        <span style="background: #0b5fff; color: white; padding: 3px 6px; border-radius: 4px; font-weight: 900; font-size: 10px; letter-spacing: 0.05em;">CONSTRUCTFIELD</span>
         <h1>Project Document Register & Drawing Transmittal</h1>
       </div>
       <p>Project: <strong>${project?.name || 'Main Construction Site'}</strong> • Scope: <strong>${filterLabel}</strong></p>
@@ -922,7 +922,7 @@ export function printDocumentsSummary({
   </table>
 
   <div class="footer">
-    <div>ConstructOS Document Control & Field Quality System • Confidential Transmittal Register</div>
+    <div>Constructfield Document Control & Field Quality System • Confidential Transmittal Register</div>
     <div>Document Controller Signature: __________________________ Date: _____________</div>
   </div>
 </body>
@@ -936,10 +936,11 @@ export function printDocumentsSummary({
   iframe.style.bottom = '0';
   iframe.style.width = '0';
   iframe.style.height = '0';
-  iframe.style.border = '0';
+  iframe.style.border = 'none';
+  iframe.style.visibility = 'hidden';
   document.body.appendChild(iframe);
 
-  const doc = iframe.contentWindow?.document;
+  const doc = iframe.contentWindow?.document || iframe.contentDocument;
   if (!doc) {
     window.print();
     return;
@@ -1192,10 +1193,10 @@ export function printActivityAuditSummary({
   <div class="header-container">
     <div class="title-area">
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="background: #0b5fff; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 900; font-size: 9.5px; letter-spacing: 0.05em;">CONSTRUCTOS</span>
+        <span style="background: #0b5fff; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 900; font-size: 9.5px; letter-spacing: 0.05em;">CONSTRUCTFIELD</span>
         <h1>Activity & Subtasks Audit Ledger Report</h1>
       </div>
-      <p>Project: <strong>${project?.name || 'ConstructOS Project'}</strong> • Filter: <strong>${filterLabel}</strong> ${activityName ? `• Activity: <strong>${activityName}</strong>` : ''}</p>
+      <p>Project: <strong>${project?.name || 'Constructfield Project'}</strong> • Filter: <strong>${filterLabel}</strong> ${activityName ? `• Activity: <strong>${activityName}</strong>` : ''}</p>
     </div>
     <div class="meta-box">
       <div>Generated: <strong>${currentDate} at ${currentTime}</strong></div>
@@ -1250,7 +1251,7 @@ export function printActivityAuditSummary({
   </table>
 
   <div class="footer">
-    <div>ConstructOS Enterprise Field Governance & Audit Trail • Official Project Record</div>
+    <div>Constructfield Enterprise Field Governance & Audit Trail • Official Project Record</div>
     <div>QA / Site Manager Sign-Off Signature: _________________________________ Date: _________________</div>
   </div>
 </body>

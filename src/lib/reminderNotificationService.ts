@@ -1,11 +1,11 @@
 import { Reminder } from '../types';
 
 let swRegistration: ServiceWorkerRegistration | null = null;
-const NOTIFIED_CACHE_KEY = 'constructos_notified_reminders_v1';
+const NOTIFIED_CACHE_KEY = 'constructfield_notified_reminders_v1';
 
 function getNotifiedSet(): Set<string> {
   try {
-    const raw = localStorage.getItem(NOTIFIED_CACHE_KEY);
+    const raw = localStorage.getItem(NOTIFIED_CACHE_KEY) || localStorage.getItem('constructos_notified_reminders_v1');
     return raw ? new Set(JSON.parse(raw)) : new Set();
   } catch {
     return new Set();
@@ -31,7 +31,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
   try {
     const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
     swRegistration = registration;
-    console.log('ConstructOS Reminder Service Worker registered successfully:', registration.scope);
+    console.log('Constructfield Reminder Service Worker registered successfully:', registration.scope);
     return registration;
   } catch (error) {
     console.error('Service Worker registration failed:', error);
@@ -51,32 +51,31 @@ export async function requestNotificationPermission(): Promise<boolean> {
     return false;
   }
 
-  try {
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      await registerServiceWorker();
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.error('Error requesting notification permission:', err);
-    return false;
+  if (Notification.permission === 'granted') {
+    return true;
   }
+
+  if (Notification.permission !== 'denied') {
+    const permission = await Notification.requestPermission();
+    return permission === 'granted';
+  }
+
+  return false;
 }
 
-export async function triggerNotification(payload: {
+export interface NotificationPayload {
   title: string;
   description?: string;
-  priority?: string;
+  priority?: 'High' | 'Medium' | 'Low';
   reminderId?: string;
   link?: string;
-}): Promise<boolean> {
-  const permission = getNotificationPermission();
-  if (permission !== 'granted') {
-    return false;
-  }
+}
 
-  // Ensure SW is registered
+export async function triggerNotification(payload: NotificationPayload): Promise<boolean> {
+  const granted = await requestNotificationPermission();
+  if (!granted) return false;
+
+  // Use service worker notification if available
   if (!swRegistration && 'serviceWorker' in navigator) {
     swRegistration = await navigator.serviceWorker.getRegistration();
   }
@@ -89,7 +88,7 @@ export async function triggerNotification(payload: {
     return true;
   } else if ('Notification' in window) {
     // Fallback to standard web notification
-    new Notification(`🔔 ConstructOS Reminder: ${payload.title}`, {
+    new Notification(`🔔 Constructfield Reminder: ${payload.title}`, {
       body: payload.description || 'A site task activity reminder requires your attention.',
       icon: '/favicon.ico',
       tag: payload.reminderId ? `reminder-${payload.reminderId}` : undefined
@@ -114,7 +113,7 @@ export async function triggerTestNotification(): Promise<boolean> {
   } else {
     return triggerNotification({
       title: 'Service Worker Active',
-      description: 'Test notification from ConstructOS reminder listener.'
+      description: 'Test notification from Constructfield reminder listener.'
     });
   }
 }
@@ -134,27 +133,17 @@ export function checkDueReminders(reminders: Reminder[]): Reminder[] {
 
   const dueReminders: Reminder[] = [];
 
-  reminders.forEach(reminder => {
-    if (reminder.status !== 'Pending') return;
+  reminders.forEach((reminder) => {
+    if (reminder.completed) return;
     if (notifiedSet.has(reminder.id)) return;
 
-    // Determine if reminder is due
-    let isDue = false;
-    
-    if (reminder.dueDate < todayStr) {
-      // Overdue item
-      isDue = true;
-    } else if (reminder.dueDate === todayStr) {
-      if (!reminder.dueTime) {
-        // Due today (no specific time set)
-        isDue = true;
-      } else if (reminder.dueTime <= currentTimeStr) {
-        // Due time has arrived or passed today
-        isDue = true;
-      }
-    }
+    const reminderDate = reminder.dueDate ? reminder.dueDate.split('T')[0] : '';
+    const reminderTime = reminder.dueTime || '09:00';
 
-    if (isDue) {
+    const isDateDue = !reminderDate || reminderDate <= todayStr;
+    const isTimeDue = reminderDate < todayStr || (reminderDate === todayStr && reminderTime <= currentTimeStr);
+
+    if (isDateDue && isTimeDue) {
       dueReminders.push(reminder);
       markReminderNotified(reminder.id);
 
@@ -162,14 +151,14 @@ export function checkDueReminders(reminders: Reminder[]): Reminder[] {
       triggerNotification({
         title: reminder.title,
         description: `${reminder.description ? reminder.description + ' — ' : ''}Priority: ${reminder.priority}`,
-        priority: reminder.priority,
+        priority: reminder.priority as 'High' | 'Medium' | 'Low',
         reminderId: reminder.id,
         link: '/reminders'
       });
 
       // Dispatch custom browser event for in-app toast
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('constructos-reminder-due', {
+        window.dispatchEvent(new CustomEvent('constructfield-reminder-due', {
           detail: reminder
         }));
       }

@@ -1,4 +1,4 @@
-// ConstructOS Service Worker - Reminder Notification Listener
+// Constructfield Service Worker - Reminder Notification Listener
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -16,7 +16,7 @@ self.addEventListener('message', (event) => {
   if (type === 'TRIGGER_NOTIFICATION' || type === 'REMINDER_DUE') {
     const { title, description, priority, reminderId, link } = payload || {};
 
-    const notificationTitle = `🔔 ConstructOS Reminder: ${title || 'Task Due'}`;
+    const notificationTitle = `🔔 Constructfield Reminder: ${title || 'Task Due'}`;
     const options = {
       body: description || 'A site task activity reminder requires your attention.',
       icon: '/favicon.ico',
@@ -40,7 +40,7 @@ self.addEventListener('message', (event) => {
     );
   } else if (type === 'TEST_NOTIFICATION') {
     event.waitUntil(
-      self.registration.showNotification('🔔 ConstructOS Test Alert', {
+      self.registration.showNotification('🔔 Constructfield Test Alert', {
         body: 'Service worker notification listener is active and working properly!',
         tag: 'test-notification',
         data: { url: '/reminders' },

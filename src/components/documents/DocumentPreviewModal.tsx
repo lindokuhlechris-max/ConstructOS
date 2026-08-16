@@ -428,7 +428,7 @@ export function DocumentPreviewModal({
                 </div>
                 <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
                   <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  <span>Verified conforming to ConstructOS Document Management Standard ISO 19650 / ISO 9001</span>
+                  <span>Verified conforming to Constructfield Document Management Standard ISO 19650 / ISO 9001</span>
                 </div>
               </div>
             </div>

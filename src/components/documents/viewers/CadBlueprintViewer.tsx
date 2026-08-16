@@ -333,7 +333,7 @@ export function CadBlueprintViewer({ document: doc, onDownload }: CadBlueprintVi
               <line x1="0" y1="90" x2="260" y2="90" stroke="#1E3A8A" strokeWidth="1" />
               <line x1="130" y1="60" x2="130" y2="115" stroke="#1E3A8A" strokeWidth="1" />
 
-              <text x="10" y="20" fill="#93C5FD" fontSize="11" fontWeight="bold" fontFamily="sans-serif">CONSTRUCTOS PROJECT CAD</text>
+              <text x="10" y="20" fill="#93C5FD" fontSize="11" fontWeight="bold" fontFamily="sans-serif">CONSTRUCTFIELD PROJECT CAD</text>
               <text x="10" y="48" fill="#FFFFFF" fontSize="10" fontWeight="bold">{doc.title.slice(0, 30)}</text>
               <text x="10" y="78" fill="#94A3B8" fontSize="8" fontFamily="monospace">SCALE: 1:50 @ A1</text>
               <text x="140" y="78" fill="#94A3B8" fontSize="8" fontFamily="monospace">REV: {doc.version}</text>

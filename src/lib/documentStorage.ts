@@ -199,7 +199,7 @@ export async function downloadDocument(doc: DocumentItem): Promise<void> {
     }
 
     // 3. Fallback to clean engineering transmittal text file
-    const content = `=== CONSTRUCTOS PROJECT TRANSMITTAL ===\r\n` +
+    const content = `=== CONSTRUCTFIELD PROJECT TRANSMITTAL ===\r\n` +
       `Document ID: ${doc.id}\r\n` +
       `Project ID: ${doc.projectId}\r\n` +
       `Title: ${doc.title}\r\n` +

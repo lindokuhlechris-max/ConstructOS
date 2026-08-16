@@ -1,6 +1,6 @@
 {
-  "name": "ConstructOS",
-  "description": "Enterprise-grade Construction Activity Tracking application for managing projects, activities, labour, and daily reports.",
+  "name": "Constructfield",
+  "description": "Enterprise-grade Construction Activity & Field Operations Tracking application for managing projects, activities, subtasks, labour, and daily reports.",
   "requestFramePermissions": ["camera", "microphone", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

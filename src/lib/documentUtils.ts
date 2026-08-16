@@ -36,7 +36,7 @@ export function downloadDocumentFile(fileUrl?: string, fileName?: string, textCo
   }
 
   // If we only have textContent or plain data
-  const content = textContent || `ConstructOS Project Transmittal Document: ${fileName || 'Document'}\nGenerated at ${new Date().toISOString()}`;
+  const content = textContent || `Constructfield Project Transmittal Document: ${fileName || 'Document'}\nGenerated at ${new Date().toISOString()}`;
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

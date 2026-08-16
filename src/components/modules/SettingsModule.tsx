@@ -95,7 +95,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
     title: '',
     email: '',
     phone: '',
-    company: 'ConstructOS Engineering',
+    company: 'Constructfield Engineering',
     department: 'Operations',
     initials: '',
     accessAllowed: true,
@@ -186,7 +186,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
         title: 'Project Staff',
         email: '',
         phone: '+1 (555) 000-0000',
-        company: 'ConstructOS Engineering',
+        company: 'Constructfield Engineering',
         department: 'Site Operations',
         initials: '',
         accessAllowed: true,
@@ -241,13 +241,14 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
   const [driveStatus, setDriveStatus] = useState<string | null>(null);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<string | null>(null);
-  const [customGoogleClientId, setCustomGoogleClientId] = useState(() => localStorage.getItem('constructos_google_client_id') || '');
+  const [customGoogleClientId, setCustomGoogleClientId] = useState(() => localStorage.getItem('constructfield_google_client_id') || localStorage.getItem('constructos_google_client_id') || '');
   const [clientIdSavedMsg, setClientIdSavedMsg] = useState(false);
 
   const handleSaveClientId = () => {
     if (customGoogleClientId.trim()) {
-      localStorage.setItem('constructos_google_client_id', customGoogleClientId.trim());
+      localStorage.setItem('constructfield_google_client_id', customGoogleClientId.trim());
     } else {
+      localStorage.removeItem('constructfield_google_client_id');
       localStorage.removeItem('constructos_google_client_id');
     }
     setClientIdSavedMsg(true);
@@ -277,8 +278,8 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
       const allData = await getAllIDBData();
       
       const backupData = {
-        app: 'ConstructOS',
-        version: '2.4.0',
+        app: 'Constructfield',
+        version: '1.0.0',
         timestamp: new Date().toISOString(),
         theme,
         units,
@@ -291,7 +292,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
       
       const { GoogleDriveService } = await import('../../services/GoogleDriveService');
       const driveService = new GoogleDriveService();
-      await driveService.writeData(backupData, 'constructos_data.json', setDriveStatus);
+      await driveService.writeData(backupData, 'constructfield_data.json', setDriveStatus);
       
       setDriveStatus('Google Drive backup successful!');
       setTimeout(() => setDriveStatus(null), 4000);
@@ -313,7 +314,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
       
       const { GoogleDriveService } = await import('../../services/GoogleDriveService');
       const driveService = new GoogleDriveService();
-      const imported = await driveService.readData('constructos_data.json', setDriveStatus);
+      const imported = await driveService.readData('constructfield_data.json', setDriveStatus) || await driveService.readData('constructos_data.json', setDriveStatus);
       
       if (imported) {
         if (imported.storage) {
@@ -325,7 +326,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
           const { saveFullFirestoreState } = await import('../../lib/firestoreService');
           await saveFullFirestoreState(imported.idbData);
         }
-        setDriveStatus('Restore complete. Reloading ConstructOS...');
+        setDriveStatus('Restore complete. Reloading Constructfield...');
         setTimeout(() => window.location.reload(), 1500);
       } else {
         throw new Error('Invalid backup format.');
@@ -346,8 +347,8 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
       const allData = await getAllIDBData();
 
       const backupData = {
-        app: 'ConstructOS',
-        version: '2.4.0',
+        app: 'Constructfield',
+        version: '1.0.0',
         timestamp: new Date().toISOString(),
         theme,
         units,
@@ -361,7 +362,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `constructos-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `constructfield-backup-${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
@@ -390,7 +391,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
             alert('System backup restored successfully! Reloading application...');
             window.location.reload();
           } else {
-            alert('Invalid backup format. File does not contain ConstructOS data.');
+            alert('Invalid backup format. File does not contain Constructfield data.');
           }
         } catch (err) {
           alert('Failed to parse backup JSON file.');
@@ -433,7 +434,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
       name: newProfile.name,
       role: newProfile.role,
       title: newProfile.title || newProfile.role,
-      email: newProfile.email || `${newProfile.name.toLowerCase().replace(/\s+/g, '.')}@constructos.io`,
+      email: newProfile.email || `${newProfile.name.toLowerCase().replace(/\s+/g, '.')}@constructfield.io`,
       phone: newProfile.phone || '+61 400 000 000',
       company: newProfile.company,
       department: newProfile.department,
@@ -1149,7 +1150,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
                   <CloudUpload className="h-5 w-5 text-indigo-600" /> Sync to Google Drive
                 </h3>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 pr-6 leading-relaxed">
-                  Securely backup all ConstructOS project database models (including activities, subtasks, QA hold points, daily reports, and audit trail logs) directly to your Google Drive account.
+                  Securely backup all Constructfield project database models (including activities, subtasks, QA hold points, daily reports, and audit trail logs) directly to your Google Drive account.
                 </p>
               </div>
 
@@ -1179,7 +1180,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
                   <CloudDownload className="h-5 w-5 text-teal-600" /> Restore from Google Drive
                 </h3>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 pr-6 leading-relaxed">
-                  Retrieve and restore your most recent ConstructOS backup snapshot from your Google Drive account. This will restore all activities, reports, and system settings.
+                  Retrieve and restore your most recent Constructfield backup snapshot from your Google Drive account. This will restore all activities, reports, and system settings.
                 </p>
               </div>
 
@@ -1247,7 +1248,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
                   <Download className="h-5 w-5 text-[#0B5FFF]" /> Export Local JSON Snapshot
                 </h3>
                 <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                  Download a complete, offline JSON file containing your entire ConstructOS database, activities, and QA audit logs.
+                  Download a complete, offline JSON file containing your entire Constructfield database, activities, and QA audit logs.
                 </p>
               </div>
               <Button onClick={handleExportBackup} className="gap-2 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-xs font-bold h-9 self-start">
@@ -1261,7 +1262,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
                   <Upload className="h-5 w-5 text-emerald-600" /> Restore Local JSON Snapshot
                 </h3>
                 <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                  Restore your entire ConstructOS database from a saved offline JSON backup file.
+                  Restore your entire Constructfield database from a saved offline JSON backup file.
                 </p>
               </div>
               <label className="cursor-pointer inline-flex items-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold self-start">
@@ -1531,7 +1532,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
                     <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                       <Lock className="h-3.5 w-3.5 text-[#0B5FFF]" /> Whitelisted App Access
                     </div>
-                    <p className="text-[11px] text-slate-500">Allow this email address to log in and view project details on ConstructOS.</p>
+                    <p className="text-[11px] text-slate-500">Allow this email address to log in and view project details on Constructfield.</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input

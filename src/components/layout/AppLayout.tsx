@@ -85,6 +85,7 @@ export function AppLayout() {
       }
     };
 
+    window.addEventListener('constructfield-reminder-due', handleDueReminder);
     window.addEventListener('constructos-reminder-due', handleDueReminder);
 
     // Initial check & 15s interval check loop
@@ -94,6 +95,7 @@ export function AppLayout() {
     }, 15000);
 
     return () => {
+      window.removeEventListener('constructfield-reminder-due', handleDueReminder);
       window.removeEventListener('constructos-reminder-due', handleDueReminder);
       clearInterval(interval);
     };
@@ -151,7 +153,7 @@ export function AppLayout() {
       name: newProfileForm.name,
       role: newProfileForm.role,
       title: newProfileForm.title || newProfileForm.role,
-      email: newProfileForm.email || `${newProfileForm.name.toLowerCase().replace(/\s+/g, '.')}@constructos.io`,
+      email: newProfileForm.email || `${newProfileForm.name.toLowerCase().replace(/\s+/g, '.')}@constructfield.io`,
       phone: newProfileForm.phone || '+61 400 000 000',
       company: newProfileForm.company,
       department: newProfileForm.department,
@@ -272,7 +274,7 @@ export function AppLayout() {
               <div className="space-y-3">
                 <div>
                   <h3 className="text-base font-extrabold text-slate-900 dark:text-white leading-snug">
-                    {currentProject?.name || 'ConstructOS Project'}
+                    {currentProject?.name || 'Constructfield Project'}
                   </h3>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
@@ -653,7 +655,7 @@ export function AppLayout() {
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Email Address</label>
                   <input
                     type="email"
-                    placeholder="marcus.vance@constructos.io"
+                    placeholder="marcus.vance@constructfield.io"
                     value={newProfileForm.email}
                     onChange={e => setNewProfileForm({ ...newProfileForm, email: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"

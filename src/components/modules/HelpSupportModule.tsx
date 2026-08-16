@@ -34,12 +34,12 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
 
   const faqs = [
     {
-      q: 'How does Offline Sync work in ConstructOS?',
-      a: 'ConstructOS is built with a local-first offline architecture using IndexedDB and Service Workers. You can record labour check-ins, log activity progress, upload photos, and draft daily reports even with zero internet connectivity. When your device reconnects, all pending changes sync automatically to the cloud.'
+      q: 'How does Offline Sync work in Constructfield?',
+      a: 'Constructfield is built with a local-first offline architecture using IndexedDB and Service Workers. You can record labour check-ins, log activity progress, upload photos, and draft daily reports even with zero internet connectivity. When your device reconnects, all pending changes sync automatically to the cloud.'
     },
     {
       q: 'Why is a parent activity or subtask locked from completion?',
-      a: 'ConstructOS enforces strict hierarchical integrity. A parent activity or parent subtask cannot be marked as "Completed" while any child subtask remains incomplete. In addition, subtasks designated as Milestone Checkpoints require 100% target fulfillment before they can be closed.'
+      a: 'Constructfield enforces strict hierarchical integrity. A parent activity or parent subtask cannot be marked as "Completed" while any child subtask remains incomplete. In addition, subtasks designated as Milestone Checkpoints require 100% target fulfillment before they can be closed.'
     },
     {
       q: 'How do I backup and restore project data?',
@@ -50,8 +50,8 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
       a: 'Navigate to the Reports page, select your active project and date, and review aggregated weather, labour attendance, equipment logs, and progress. Click "Export PDF Report" or "Share WhatsApp Summary" to distribute daily logs to stakeholders.'
     },
     {
-      q: 'Can I install ConstructOS as a mobile or desktop app?',
-      a: 'Yes! ConstructOS is a Progressive Web App (PWA). In Chrome/Edge/Safari, tap "Install App" or "Add to Home Screen" to run ConstructOS in full-screen offline mode on iOS, Android, macOS, and Windows.'
+      q: 'Can I install Constructfield as a mobile or desktop app?',
+      a: 'Yes! Constructfield is a Progressive Web App (PWA). In Chrome/Edge/Safari, tap "Install App" or "Add to Home Screen" to run Constructfield in full-screen offline mode on iOS, Android, macOS, and Windows.'
     }
   ];
 
@@ -143,19 +143,19 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
           </p>
         </Card>
 
-        <Card className="p-5 border-slate-200 dark:border-slate-800 hover:border-[#0B5FFF] transition-all">
+        <Card className="p-5 border-slate-200 dark:border-slate-800 flex flex-col justify-between">
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
-              <FileText className="h-5 w-5" />
+              <ShieldCheck className="h-5 w-5" />
             </div>
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white">Daily Site Reporting</h3>
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white">QA Hold Points</h3>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            Log weather conditions, track workforce allocations, manage equipment run-hours, and generate instant PDF summaries with compliance photos.
+            Ensure site quality compliance by gating critical activity milestones with digital supervisor sign-offs.
           </p>
         </Card>
 
-        <Card className="p-5 border-slate-200 dark:border-slate-800 hover:border-[#0B5FFF] transition-all">
+        <Card className="p-5 border-slate-200 dark:border-slate-800 flex flex-col justify-between">
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600">
               <Smartphone className="h-5 w-5" />
@@ -163,7 +163,7 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
             <h3 className="font-bold text-sm text-slate-900 dark:text-white">PWA & Offline First</h3>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            Install ConstructOS directly on smartphones, tablets, or rugged field laptops for full offline performance without network drops.
+            Install Constructfield directly on smartphones, tablets, or rugged field laptops for full offline performance without network drops.
           </p>
         </Card>
       </div>
@@ -185,7 +185,6 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
                   className="w-full flex items-center justify-between text-left font-semibold text-sm text-slate-800 dark:text-slate-200 gap-4"
                 >
                   <span>{faq.q}</span>
-                  {isOpen ? <ChevronUp className="h-4 w-4 text-slate-400 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />}
                 </button>
                 {isOpen && (
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-2.5 leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
@@ -214,7 +213,7 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
           ) : (
             <form onSubmit={handleSendFeedback} className="space-y-4">
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Experiencing an issue or have a feature request? Submit your feedback directly to the ConstructOS engineering team:
+                Experiencing an issue or have a feature request? Submit your feedback directly to the Constructfield engineering team:
               </p>
               <textarea
                 rows={3}
@@ -226,7 +225,7 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
               />
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-slate-400">
-                  ConstructOS v2.4.0 • Enterprise Edition
+                  Constructfield v1.0 • Enterprise Edition
                 </span>
                 <Button type="submit" className="bg-[#0B5FFF] rounded-xl text-xs font-bold gap-2">
                   <Mail className="h-3.5 w-3.5" /> Submit Support Request

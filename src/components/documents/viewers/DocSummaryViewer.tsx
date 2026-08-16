@@ -180,7 +180,7 @@ export function DocSummaryViewer({ document: doc, onDownload }: DocSummaryViewer
         <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 flex items-start gap-3">
           <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
           <div className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed">
-            <strong>Verified Construction Specification</strong> — This transmittal has been verified and registered in the ConstructOS document repository. You can review all sections without downloading or request revision updates.
+            <strong>Verified Construction Specification</strong> — This transmittal has been verified and registered in the Constructfield document repository. You can review all sections without downloading or request revision updates.
           </div>
         </div>
 

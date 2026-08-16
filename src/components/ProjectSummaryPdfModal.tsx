@@ -48,7 +48,7 @@ export function ProjectSummaryPdfModal({
   const selectedProject: Project = useMemo(() => {
     return projects.find(p => p.id === selectedProjectId) || projects[0] || {
       id: 'PRJ-DEFAULT',
-      name: 'ConstructOS Main Site',
+      name: 'Constructfield Main Site',
       client: 'Infrastructure Dev Corp',
       contractNumber: 'CN-001',
       contractValue: 1000000,
@@ -92,7 +92,7 @@ export function ProjectSummaryPdfModal({
     doc.setFontSize(8);
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.text('CONSTRUCTOS - OFFICIAL EXECUTIVE PROJECT SUMMARY REPORT', 14, 8);
+    doc.text('CONSTRUCTFIELD - OFFICIAL EXECUTIVE PROJECT SUMMARY REPORT', 14, 8);
 
     doc.setFontSize(16);
     doc.setTextColor(15, 23, 42); // slate-900
@@ -233,7 +233,7 @@ export function ProjectSummaryPdfModal({
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(15, 23, 42);
     doc.text(`Project Manager: ${selectedProject.engineer || currentUserProfile?.name || 'Lead Admin'}`, 18, yPos + 20);
-    doc.text(`Digital Seal: [VERIFIED CONSTRUCTOS SEAL]`, 120, yPos + 20);
+    doc.text(`Digital Seal: [VERIFIED CONSTRUCTFIELD SEAL]`, 120, yPos + 20);
 
     doc.save(`${selectedProject.name.replace(/\s+/g, '_')}_Summary_Report.pdf`);
 
@@ -327,7 +327,7 @@ export function ProjectSummaryPdfModal({
             <div className="flex items-start justify-between border-b pb-4 border-slate-200">
               <div>
                 <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0B5FFF] uppercase tracking-wider mb-1">
-                  <Building className="h-4 w-4" /> ConstructOS Enterprise Report
+                  <Building className="h-4 w-4" /> Constructfield Enterprise Report
                 </div>
                 <h2 className="text-2xl font-black text-slate-900">{selectedProject.name}</h2>
                 <p className="text-xs text-slate-500">Project Code: {selectedProject.id} | Location: {selectedProject.location || 'Site Alpha'}</p>
@@ -431,7 +431,7 @@ export function ProjectSummaryPdfModal({
                 <p>{currentUserProfile?.name || 'Lead Administrator'}</p>
               </div>
               <div className="text-right font-mono text-[11px] text-slate-400">
-                ConstructOS Certified Digital Report
+                Constructfield Certified Digital Report
               </div>
             </div>
 

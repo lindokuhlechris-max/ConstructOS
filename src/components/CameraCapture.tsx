@@ -21,7 +21,7 @@ export function CameraCapture({ onCapture, onCancel, activityTag }: CameraCaptur
     const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     const timeStampLine = `SITE PHOTO • ${dateStr} ${timeStr}`;
-    const subLine = activityTag ? `ACTIVITY: ${activityTag}` : `CONSTRUCTOS FIELD REPORT`;
+    const subLine = activityTag ? `ACTIVITY: ${activityTag}` : `CONSTRUCTFIELD FIELD REPORT`;
 
     const bannerHeight = Math.max(38, Math.round(height * 0.085));
 

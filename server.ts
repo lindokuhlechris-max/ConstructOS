@@ -766,7 +766,7 @@ ${allPhotos.length > 0 ? `• ${allPhotos.length} site progress inspection photo
   }
 
   app.listen(portNumber, "0.0.0.0", () => {
-    console.log(`ConstructOS Server running at http://0.0.0.0:${portNumber}`);
+    console.log(`Constructfield Server running at http://0.0.0.0:${portNumber}`);
   });
 }
 
