@@ -544,11 +544,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (getLocal('labourLogs')) setLabourLogs(getLocal('labourLogs'));
       if (getLocal('labourAllocations')) setLabourAllocations(getLocal('labourAllocations'));
       if (getLocal('workerCheckIns')) setWorkerCheckIns(getLocal('workerCheckIns'));
-      const localAudit = getLocal('auditLogs');
-      const cleanAudit = Array.isArray(localAudit) ? localAudit.filter((a: any) => !['AL-1001', 'AL-1002', 'AL-1003', 'AL-1004', 'AL-1005', 'AL-1006'].includes(a.id)) : [];
-      setAuditLogs(cleanAudit);
-      localStorage.setItem('auditLogs', JSON.stringify(cleanAudit));
-
+      if (getLocal('auditLogs')) setAuditLogs(getLocal('auditLogs'));
       if (getLocal('safetyIncidents')) setSafetyIncidents(getLocal('safetyIncidents'));
       if (getLocal('allocations')) setAllocations(getLocal('allocations'));
       if (getLocal('materials')) setMaterials(getLocal('materials'));
@@ -557,31 +553,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (getLocal('customFieldDefinitions')) setCustomFieldDefinitions(getLocal('customFieldDefinitions'));
       if (getLocal('employees')) setEmployees(getLocal('employees'));
       if (getLocal('teams')) setTeams(getLocal('teams'));
-
-      const localEq = getLocal('equipment');
-      const cleanEq = Array.isArray(localEq) ? localEq.filter((e: any) => !['EQ-101', 'EQ-102', 'EQ-103', 'EQ-104', 'EQ-105', 'EQ-106'].includes(e.id)) : [];
-      setEquipment(cleanEq);
-      localStorage.setItem('equipment', JSON.stringify(cleanEq));
-
-      const localEqLogs = getLocal('equipmentLogs');
-      const cleanEqLogs = Array.isArray(localEqLogs) ? localEqLogs.filter((l: any) => !['EQL-001', 'EQL-002', 'EQL-003', 'EQL-004', 'EQL-005'].includes(l.id)) : [];
-      setEquipmentLogs(cleanEqLogs);
-      localStorage.setItem('equipmentLogs', JSON.stringify(cleanEqLogs));
-
+      if (getLocal('equipment')) setEquipment(getLocal('equipment'));
+      if (getLocal('equipmentLogs')) setEquipmentLogs(getLocal('equipmentLogs'));
       if (getLocal('safetyRequirements')) setSafetyRequirements(getLocal('safetyRequirements'));
       if (getLocal('safetyPolicies')) setSafetyPolicies(getLocal('safetyPolicies'));
       if (getLocal('activityInspections')) setActivityInspections(getLocal('activityInspections'));
-
-      const localPhotos = getLocal('siteInspectionPhotos');
-      const cleanPhotos = Array.isArray(localPhotos) ? localPhotos.filter((p: any) => !['INSP-IMG-001', 'INSP-IMG-002', 'INSP-IMG-003'].includes(p.id)) : [];
-      setSiteInspectionPhotos(cleanPhotos);
-      localStorage.setItem('siteInspectionPhotos', JSON.stringify(cleanPhotos));
+      if (getLocal('siteInspectionPhotos')) setSiteInspectionPhotos(getLocal('siteInspectionPhotos'));
       if (getLocal('ppeItems')) setPPEItems(getLocal('ppeItems'));
       if (getLocal('qaInspections')) setQAInspections(getLocal('qaInspections'));
-      const localDocs = getLocal('documents');
-      const cleanDocs = Array.isArray(localDocs) ? localDocs.filter((d: any) => !['DOC-101', 'DOC-102', 'DOC-103', 'DOC-104', 'DOC-105', 'DOC-106', 'DOC-107', 'DOC-108', 'DOC-109', 'DOC-110'].includes(d.id)) : [];
-      setDocuments(cleanDocs);
-      localStorage.setItem('documents', JSON.stringify(cleanDocs));
+      if (getLocal('documents')) setDocuments(getLocal('documents'));
       const localProfiles = getLocal('userProfiles');
       if (localProfiles && Array.isArray(localProfiles) && localProfiles.length > 0) {
         setUserProfiles(localProfiles);
