@@ -890,6 +890,8 @@ export interface AccommodationUnit {
   location: string;
   address?: string;
   totalCapacityBeds: number;
+  totalRooms?: number; // Total number of rooms available or leased
+  bedsPerRoom?: number; // Configured beds per room
   occupantIds: string[]; // array of Employee IDs
   status: AccommodationStatus;
   

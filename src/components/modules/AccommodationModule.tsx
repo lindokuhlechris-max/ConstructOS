@@ -4,7 +4,7 @@ import {
   Building2, Plus, Bed, Users, Zap, Droplets, Flame, Wifi, 
   Trash2, Edit3, ArrowLeft, Download, Search, CheckCircle2, 
   Shield, Home, Fuel, UserPlus, Receipt, DollarSign,
-  Briefcase, X, Sparkles, MapPin
+  Briefcase, X, Sparkles, MapPin, Copy, DoorClosed
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { 
@@ -44,7 +44,6 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
   const [assignTargetUnit, setAssignTargetUnit] = useState<AccommodationUnit | null>(null);
   const [isUtilityModalOpen, setIsUtilityModalOpen] = useState(false);
   const [utilityTargetUnit, setUtilityTargetUnit] = useState<AccommodationUnit | null>(null);
-  const [deletingUnitId, setDeletingUnitId] = useState<string | null>(null);
 
   // Unit Form state
   const [formName, setFormName] = useState('');
@@ -52,7 +51,9 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
   const [formOwnership, setFormOwnership] = useState<AccommodationOwnership>('Owned');
   const [formLocation, setFormLocation] = useState('');
   const [formAddress, setFormAddress] = useState('');
-  const [formCapacity, setFormCapacity] = useState<number>(4);
+  const [formTotalRooms, setFormTotalRooms] = useState<number | ''>('');
+  const [formBedsPerRoom, setFormBedsPerRoom] = useState<number | ''>('');
+  const [formCapacity, setFormCapacity] = useState<number>(1);
   const [formProjectId, setFormProjectId] = useState<string>('');
   const [formStatus, setFormStatus] = useState<AccommodationStatus>('Available');
   const [formRentalVendor, setFormRentalVendor] = useState('');
@@ -97,6 +98,23 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     'Parking Bay'
   ];
 
+  // Auto-calculate capacity when rooms or bedsPerRoom change
+  const handleRoomsChange = (roomsVal: number | '') => {
+    setFormTotalRooms(roomsVal);
+    if (typeof roomsVal === 'number' && roomsVal > 0) {
+      const beds = typeof formBedsPerRoom === 'number' && formBedsPerRoom > 0 ? formBedsPerRoom : 1;
+      setFormCapacity(roomsVal * beds);
+    }
+  };
+
+  const handleBedsPerRoomChange = (bedsVal: number | '') => {
+    setFormBedsPerRoom(bedsVal);
+    if (typeof bedsVal === 'number' && bedsVal > 0) {
+      const rooms = typeof formTotalRooms === 'number' && formTotalRooms > 0 ? formTotalRooms : 1;
+      setFormCapacity(rooms * bedsVal);
+    }
+  };
+
   // Helper safe employee display functions
   const getEmpDisplayName = (emp?: Employee | null): string => {
     if (!emp) return 'Staff Member';
@@ -134,6 +152,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     const rentedUnits = accommodations.filter(a => a.ownership === 'Rented').length;
     
     const totalBeds = accommodations.reduce((sum, a) => sum + (a.totalCapacityBeds || 0), 0);
+    const totalRooms = accommodations.reduce((sum, a) => sum + (a.totalRooms || 0), 0);
     const occupiedBeds = accommodations.reduce((sum, a) => sum + (a.occupantIds?.length || 0), 0);
     const availableBeds = Math.max(0, totalBeds - occupiedBeds);
     const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
@@ -150,6 +169,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
       ownedUnits,
       rentedUnits,
       totalBeds,
+      totalRooms,
       occupiedBeds,
       availableBeds,
       occupancyRate,
@@ -191,6 +211,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     setFormOwnership('Owned');
     setFormLocation('');
     setFormAddress('');
+    setFormTotalRooms('');
+    setFormBedsPerRoom('');
     setFormCapacity(1);
     setFormProjectId('');
     setFormStatus('Available');
@@ -216,6 +238,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     setFormOwnership(unit.ownership);
     setFormLocation(unit.location);
     setFormAddress(unit.address || '');
+    setFormTotalRooms(unit.totalRooms !== undefined ? unit.totalRooms : '');
+    setFormBedsPerRoom(unit.bedsPerRoom !== undefined ? unit.bedsPerRoom : '');
     setFormCapacity(unit.totalCapacityBeds);
     setFormProjectId(unit.projectId || '');
     setFormStatus(unit.status);
@@ -227,6 +251,33 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     setFormRentalDepositPaid(unit.rentalDepositPaid !== undefined ? unit.rentalDepositPaid : '');
     setFormRentalBillingCycle(unit.rentalBillingCycle || 'Monthly');
     setFormAmenities(unit.amenities || []);
+    setFormContactPerson(unit.contactPerson || '');
+    setFormContactPhone(unit.contactPhone || '');
+    setFormNotes(unit.notes || '');
+    setIsUnitModalOpen(true);
+  };
+
+  // Duplicate / Copy Accommodation Unit
+  const handleDuplicateUnit = (unit: AccommodationUnit) => {
+    setEditingUnit(null); // Set to null so it creates a fresh duplicate record
+    setFormName(`${unit.name} (Copy)`);
+    setFormType(unit.type);
+    setFormOwnership(unit.ownership);
+    setFormLocation(unit.location);
+    setFormAddress(unit.address || '');
+    setFormTotalRooms(unit.totalRooms !== undefined ? unit.totalRooms : '');
+    setFormBedsPerRoom(unit.bedsPerRoom !== undefined ? unit.bedsPerRoom : '');
+    setFormCapacity(unit.totalCapacityBeds);
+    setFormProjectId(unit.projectId || '');
+    setFormStatus('Available');
+    setFormRentalVendor(unit.rentalVendor || '');
+    setFormRentalAgreementNumber(unit.rentalAgreementNumber || '');
+    setFormRentalStartDate(unit.rentalStartDate || '');
+    setFormRentalEndDate(unit.rentalEndDate || '');
+    setFormRentalMonthlyCost(unit.rentalMonthlyCost !== undefined ? unit.rentalMonthlyCost : '');
+    setFormRentalDepositPaid(unit.rentalDepositPaid !== undefined ? unit.rentalDepositPaid : '');
+    setFormRentalBillingCycle(unit.rentalBillingCycle || 'Monthly');
+    setFormAmenities(unit.amenities ? [...unit.amenities] : []);
     setFormContactPerson(unit.contactPerson || '');
     setFormContactPhone(unit.contactPhone || '');
     setFormNotes(unit.notes || '');
@@ -245,6 +296,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
       ownership: formOwnership,
       location: formLocation.trim(),
       address: formAddress.trim() || undefined,
+      totalRooms: formTotalRooms !== '' ? Number(formTotalRooms) : undefined,
+      bedsPerRoom: formBedsPerRoom !== '' ? Number(formBedsPerRoom) : undefined,
       totalCapacityBeds: Number(formCapacity) || 1,
       occupantIds: editingUnit ? editingUnit.occupantIds : [],
       status: formStatus,
@@ -494,8 +547,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
             />
           </div>
           <div className="mt-2 flex justify-between text-xs text-slate-500">
-            <span>{stats.availableBeds} beds available</span>
-            <span>{stats.occupiedBeds} staff housed</span>
+            <span>{stats.availableBeds} beds vacant</span>
+            <span>{stats.totalRooms > 0 ? `${stats.totalRooms} rooms total` : `${stats.occupiedBeds} housed`}</span>
           </div>
         </Card>
 
@@ -695,6 +748,13 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                               {unit.type}
                             </span>
 
+                            {unit.totalRooms !== undefined && unit.totalRooms > 0 && (
+                              <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <DoorClosed className="w-3 h-3 text-slate-400" />
+                                {unit.totalRooms} Room{unit.totalRooms > 1 ? 's' : ''}
+                              </span>
+                            )}
+
                             {isFull ? (
                               <span className="text-xs px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/50 font-bold">
                                 Fully Occupied
@@ -716,8 +776,15 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                           </p>
                         </div>
 
-                        {/* Quick Actions (Edit / Delete) */}
+                        {/* Quick Actions (Copy / Edit / Delete) */}
                         <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleDuplicateUnit(unit)}
+                            className="p-1.5 text-slate-400 hover:text-[#0B5FFF] dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                            title="Duplicate / Copy Unit"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => handleOpenEdit(unit)}
                             className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
@@ -762,8 +829,14 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                       {/* Capacity Bar & Occupant Avatars */}
                       <div className="mt-4 p-3.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                            <Bed className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Capacity: {occupants.length} / {unit.totalCapacityBeds} Beds Occupied
+                          <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
+                            <Bed className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                            <span>Capacity: {occupants.length} / {unit.totalCapacityBeds} Beds Occupied</span>
+                            {unit.totalRooms !== undefined && unit.totalRooms > 0 && (
+                              <span className="text-slate-500 text-[11px] font-normal">
+                                ({unit.totalRooms} Room{unit.totalRooms > 1 ? 's' : ''}{unit.bedsPerRoom ? ` • ${unit.bedsPerRoom} beds/rm` : ''})
+                              </span>
+                            )}
                           </span>
                           <span className="text-slate-500 font-semibold">
                             {Math.round((occupants.length / (unit.totalCapacityBeds || 1)) * 100)}% Full
@@ -1089,7 +1162,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 1: ADD / EDIT ACCOMMODATION UNIT                                    */}
+      {/* MODAL 1: ADD / EDIT / DUPLICATE ACCOMMODATION UNIT                        */}
       {/* ========================================================================= */}
       {isUnitModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
@@ -1101,7 +1174,11 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    {editingUnit ? 'Edit Accommodation Unit' : 'Register New Accommodation Facility'}
+                    {editingUnit 
+                      ? 'Edit Accommodation Unit' 
+                      : formName.includes('(Copy)') 
+                      ? 'Duplicate Accommodation Facility' 
+                      : 'Register New Accommodation Facility'}
                   </h3>
                   <p className="text-slate-500 text-xs">Configure site camps, modular units, or rented staff houses.</p>
                 </div>
@@ -1228,18 +1305,77 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">
-                    Bed Capacity *
+                    Property Status
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    required
-                    value={formCapacity}
-                    onChange={(e) => setFormCapacity(Number(e.target.value))}
+                  <select
+                    value={formStatus}
+                    onChange={(e) => setFormStatus(e.target.value as AccommodationStatus)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
-                  />
+                  >
+                    <option value="Available">Available</option>
+                    <option value="Partially Occupied">Partially Occupied</option>
+                    <option value="Full">Full</option>
+                    <option value="Under Maintenance">Under Maintenance</option>
+                  </select>
                 </div>
+              </div>
+
+              {/* Room & Bed Capacity Configuration */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 font-bold text-xs uppercase tracking-wider">
+                  <Bed className="w-4 h-4" /> Room & Bed Capacity Configuration
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Rooms Available / Rented
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="e.g. 5"
+                      value={formTotalRooms}
+                      onChange={(e) => handleRoomsChange(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Beds per Room
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="e.g. 2"
+                      value={formBedsPerRoom}
+                      onChange={(e) => handleBedsPerRoomChange(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Total Bed Capacity *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="500"
+                      required
+                      value={formCapacity}
+                      onChange={(e) => setFormCapacity(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                    />
+                  </div>
+                </div>
+
+                {formTotalRooms !== '' && formBedsPerRoom !== '' && Number(formTotalRooms) > 0 && Number(formBedsPerRoom) > 0 && (
+                  <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium flex items-center gap-1.5 pt-0.5">
+                    ✨ Auto-calculated: {formTotalRooms} room{Number(formTotalRooms) > 1 ? 's' : ''} × {formBedsPerRoom} bed{Number(formBedsPerRoom) > 1 ? 's' : ''}/room = <strong>{formCapacity} total beds</strong>
+                  </p>
+                )}
               </div>
 
               {/* Rented Lease Details Section (Only if Rented) */}
@@ -1384,7 +1520,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                   type="submit"
                   className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#0B5FFF] hover:bg-blue-700 text-white shadow-sm"
                 >
-                  {editingUnit ? 'Save Changes' : 'Register Facility'}
+                  {editingUnit ? 'Save Changes' : formName.includes('(Copy)') ? 'Create Duplicate' : 'Register Facility'}
                 </button>
               </div>
             </form>

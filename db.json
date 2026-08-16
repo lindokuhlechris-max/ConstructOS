@@ -620,6 +620,18 @@
       "action": "Equipment Log (Maintenance)",
       "details": "Maintenance logged for equipment EQ-101: Wash / Jet Cleaning completed (Cost: R 150)",
       "timestamp": "2026-08-16T18:37:48.254Z"
+    },
+    {
+      "id": "AL-msw8e94s-yvbr",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Accommodation Facility Registered",
+      "details": "Added Rented accommodation: \"kraft lodge\" (Single Room / Lodge, Capacity: 1 beds)",
+      "timestamp": "2026-08-16T20:02:15.100Z",
+      "entityType": "Employee",
+      "entityId": "ACC-285",
+      "actionType": "create"
     }
   ],
   "allocations": [],
@@ -642,7 +654,7 @@
       "id": "EMP-2735",
       "firstName": "Lindokuhle",
       "lastName": "Mnisi",
-      "position": "CM",
+      "position": "Construction Manager",
       "department": "Engineering",
       "email": "Imnipanda@gmail.com",
       "phone": "0792896223",
@@ -656,6 +668,20 @@
         "sickUsed": 0,
         "casualTotal": 5,
         "casualUsed": 0
+      },
+      "hasAccommodation": true,
+      "accommodationDetails": {
+        "campName": "kraft lodge",
+        "roomNumber": "6",
+        "subsidyAmount": 0,
+        "notes": "",
+        "campId": "ACC-285",
+        "checkInDate": "2026-08-16"
+      },
+      "hasTransport": true,
+      "transportDetails": {
+        "route": "Isuzu",
+        "pickupPoint": "Kraft lodge"
       }
     }
   ],
