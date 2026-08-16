@@ -67,6 +67,8 @@ export interface Comment {
 
 export type SubTaskCategory = 
   | 'Site Establishment'
+  | 'Surveying & Set-out'
+  | 'Surveying'
   | 'Excavation & Earthworks'
   | 'Cable & Underground Installation'
   | 'Structure & Foundations'
@@ -110,6 +112,46 @@ export interface SubTask {
   predecessorId?: string;
   requiresPhotoEvidence?: boolean;
   requiresSupervisorSignOff?: boolean;
+
+  // Link & Survey Discipline Metadata
+  linkedActivityId?: string;
+  linkedSubtaskId?: string;
+  isLinkedDiscipline?: boolean;
+  sourceActivityId?: string;
+  sectionSpan?: string;
+  chainage?: string;
+  surveyRecordId?: string;
+  surveyData?: {
+    peggingNotes?: string;
+    coordinates?: string;
+    benchMarkRef?: string;
+    surveyorName?: string;
+    surveyDate?: string;
+    elevation?: string;
+  };
+}
+
+export interface SurveySectionRecord {
+  id: string;
+  projectId?: string;
+  spanName: string; // e.g. "PTS 1 - PTS 2", "PTS 20 - PTS 21"
+  startPoint: string; // e.g. "PTS 1"
+  endPoint: string; // e.g. "PTS 2"
+  chainageStart?: string; // e.g. "CH 0+000"
+  chainageEnd?: string; // e.g. "CH 0+433"
+  distanceMeters: number; // e.g. 433
+  completedMeters: number; // e.g. 433
+  status: 'Not Started' | 'In Progress' | 'Completed';
+  surveyDate?: string;
+  surveyors?: string[]; // e.g. ["Dimi Maphanga", "Refumuni Malungane"]
+  peggingNotes?: string;
+  benchmarkRef?: string;
+  coordinates?: string;
+  elevation?: string;
+  linkedActivityId?: string; // ID of the construction activity this is bound to (e.g. "ACT-001")
+  linkedActivityName?: string; // e.g. "PTS 1 - PTS 2 Trenching"
+  linkedSubtaskId?: string; // ID of the subtask in the construction activity
+  updatedAt?: string;
 }
 
 export interface ActivityExplainerItem {

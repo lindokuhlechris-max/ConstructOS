@@ -9,6 +9,7 @@ import { RecordActivityModal } from '../components/RecordActivityModal';
 import { ActivitySlideOver } from '../components/ActivitySlideOver';
 import { ActivityTimeline } from '../components/ActivityTimeline';
 import { ActivityAuditScreen } from '../components/ActivityAuditScreen';
+import { SurveyTrackerView } from '../components/SurveyTrackerView';
 import { 
   Search, 
   Filter, 
@@ -50,7 +51,8 @@ import {
   Eye,
   ShieldCheck,
   Lock,
-  CheckCircle2
+  CheckCircle2,
+  Compass
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { exportActivitiesToCSV } from '../lib/csvExport';
@@ -68,7 +70,7 @@ export function Activities() {
   const [duplicateInitialValues, setDuplicateInitialValues] = useState<Partial<Activity> | null>(null);
   const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'timeline'>('list');
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'timeline' | 'survey'>('list');
   const [timeframe, setTimeframe] = useState<'all' | 'day' | 'week' | 'month'>('all');
 
   // Quick Log Progress Modal State
@@ -535,7 +537,15 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
           <Button variant="outline" size="icon" className="shrink-0 rounded-xl">
             <Filter className="h-4 w-4" />
           </Button>
-          <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1">
+            <button
+              onClick={() => setViewMode('survey')}
+              className={`px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold ${viewMode === 'survey' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              title="Survey Activity Tracker & Advance Work"
+            >
+              <Compass className="h-4 w-4" />
+              <span>Survey Hub</span>
+            </button>
             <button
               onClick={() => setViewMode('timeline')}
               className={`p-1.5 rounded-lg transition-colors ${viewMode === 'timeline' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
@@ -581,8 +591,15 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
         </div>
       </div>
 
-      {/* Activity List or Timeline */}
-      {viewMode === 'timeline' ? (
+      {/* Activity List, Timeline, or Survey View */}
+      {viewMode === 'survey' ? (
+        <SurveyTrackerView 
+          onOpenActivity={(actId) => {
+            const found = activities.find(a => a.id === actId);
+            if (found) setSelectedActivity(found);
+          }} 
+        />
+      ) : viewMode === 'timeline' ? (
         <ActivityTimeline activities={filtered} onSelectActivity={(id) => setExpandedActivityId(expandedActivityId === id ? null : id)} />
       ) : (
         <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start" : "flex flex-col gap-4"}>

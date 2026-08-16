@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -37,6 +37,13 @@ interface AppContextType {
   accommodations: AccommodationUnit[];
   accommodationUtilities: AccommodationUtilityLog[];
   accommodationPayments: AccommodationPaymentLog[];
+  surveyRecords: SurveySectionRecord[];
+  addSurveyRecord: (record: SurveySectionRecord) => void;
+  updateSurveyRecord: (record: SurveySectionRecord) => void;
+  deleteSurveyRecord: (id: string) => void;
+  batchGenerateSurveySections: (records: SurveySectionRecord[]) => void;
+  linkSurveyRecordToActivity: (surveyRecordId: string, activityId: string, subtaskId?: string) => void;
+  unlinkSurveyRecordFromActivity: (surveyRecordId: string) => void;
   theme: 'light' | 'dark';
   units: 'metric' | 'imperial';
   currency: import('../types').CurrencyCode;
@@ -288,6 +295,40 @@ const DEFAULT_INITIAL_ACCOMMODATIONS: AccommodationUnit[] = [];
 
 const DEFAULT_INITIAL_UTILITIES: AccommodationUtilityLog[] = [];
 
+const DEFAULT_INITIAL_SURVEY_RECORDS: SurveySectionRecord[] = Array.from({ length: 20 }, (_, i) => {
+  const startNum = i + 1;
+  const endNum = i + 2;
+  const dist = 433;
+  const chainStart = `CH ${(i * 0.433).toFixed(3).replace('.', '+')}`;
+  const chainEnd = `CH ${((i + 1) * 0.433).toFixed(3).replace('.', '+')}`;
+  const isDone = i < 4; // PTS 1-2, 2-3, 3-4, 4-5 are completed
+  const isProg = i === 4; // PTS 5-6 in progress
+  const status: SurveySectionRecord['status'] = isDone ? 'Completed' : isProg ? 'In Progress' : 'Not Started';
+  const completedMeters = isDone ? dist : isProg ? 250 : 0;
+  
+  return {
+    id: `SRV-${String(startNum).padStart(3, '0')}-${String(endNum).padStart(3, '0')}`,
+    projectId: 'PRJ-001',
+    spanName: `PTS ${startNum} - PTS ${endNum}`,
+    startPoint: `PTS ${startNum}`,
+    endPoint: `PTS ${endNum}`,
+    chainageStart: chainStart,
+    chainageEnd: chainEnd,
+    distanceMeters: dist,
+    completedMeters: completedMeters,
+    status: status,
+    surveyDate: isDone ? '2026-08-15' : isProg ? '2026-08-16' : undefined,
+    surveyors: ['Dimi Maphanga', 'Refumuni Malungane', 'Matume Mathebula', 'Phineas Ngomane'],
+    peggingNotes: isDone ? 'Centerline pegs established at 20m intervals. Offset pegs placed left and right.' : undefined,
+    benchmarkRef: `BM-PTS-${startNum}`,
+    coordinates: `-25.746${startNum}, 28.188${endNum}`,
+    elevation: `${1420 + i * 2}m AMSL`,
+    linkedActivityId: startNum === 1 ? 'ACT-PTS-1-2' : undefined,
+    linkedActivityName: startNum === 1 ? 'PTS 1 - PTS 2 Trench Excavation & Laying' : undefined,
+    updatedAt: '2026-08-16'
+  };
+});
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -334,6 +375,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [accommodations, setAccommodations] = useState<AccommodationUnit[]>([]);
   const [accommodationUtilities, setAccommodationUtilities] = useState<AccommodationUtilityLog[]>([]);
   const [accommodationPayments, setAccommodationPayments] = useState<AccommodationPaymentLog[]>([]);
+  const [surveyRecords, setSurveyRecords] = useState<SurveySectionRecord[]>(DEFAULT_INITIAL_SURVEY_RECORDS);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [currentUserProfile, setCurrentUserProfileState] = useState<UserProfile>({
     id: 'USR-001',
@@ -507,7 +549,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         qaInspections,
         documents,
         userProfiles,
-        reminders
+        reminders,
+        surveyRecords
       };
       await saveFullFirestoreState(fullState);
       syncToServer('sync_full_state', fullState);
@@ -608,6 +651,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setAccommodationPayments(localPays);
       } else {
         setAccommodationPayments([]);
+      }
+
+      const localSurveys = getLocal('surveyRecords');
+      if (localSurveys && Array.isArray(localSurveys)) {
+        setSurveyRecords(localSurveys);
+      } else {
+        setSurveyRecords(DEFAULT_INITIAL_SURVEY_RECORDS);
+        localStorage.setItem('surveyRecords', JSON.stringify(DEFAULT_INITIAL_SURVEY_RECORDS));
       }
 
       const localProfiles = getLocal('userProfiles');
@@ -2166,6 +2217,164 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncToServer('delete_accommodation_payment', { id });
   };
 
+  const addSurveyRecord = (record: SurveySectionRecord) => {
+    setSurveyRecords(prev => {
+      const updated = [record, ...prev];
+      localStorage.setItem('surveyRecords', JSON.stringify(updated));
+      return updated;
+    });
+    syncToServer('add_survey_record', record);
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: record.projectId || projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: 'Survey Section Added',
+      details: `Added survey section "${record.spanName}" (${record.distanceMeters}m)`,
+      timestamp: new Date().toISOString(),
+      entityType: 'Activity',
+      entityId: record.id,
+      actionType: 'create'
+    });
+  };
+
+  const updateSurveyRecord = (record: SurveySectionRecord) => {
+    setSurveyRecords(prev => {
+      const updated = prev.map(r => r.id === record.id ? record : r);
+      localStorage.setItem('surveyRecords', JSON.stringify(updated));
+      return updated;
+    });
+    syncToServer('update_survey_record', record);
+
+    // If this survey record is linked to an activity, also keep the counterpart subtask in sync
+    if (record.linkedActivityId) {
+      setActivities(prev => prev.map(act => {
+        if (act.id !== record.linkedActivityId) return act;
+        const subtasks = act.subtasks || [];
+        const hasLinkedSubtask = subtasks.some(s => s.surveyRecordId === record.id || s.id === record.linkedSubtaskId);
+        
+        let updatedSubtasks: SubTask[];
+        if (hasLinkedSubtask) {
+          updatedSubtasks = subtasks.map(s => {
+            if (s.surveyRecordId === record.id || s.id === record.linkedSubtaskId) {
+              return {
+                ...s,
+                status: record.status,
+                completedQuantity: record.completedMeters,
+                targetQuantity: record.distanceMeters,
+                assignedWorkers: record.surveyors && record.surveyors.length > 0 ? record.surveyors : s.assignedWorkers,
+                surveyData: {
+                  peggingNotes: record.peggingNotes,
+                  coordinates: record.coordinates,
+                  benchMarkRef: record.benchmarkRef,
+                  surveyorName: (record.surveyors || []).join(', '),
+                  surveyDate: record.surveyDate,
+                  elevation: record.elevation
+                }
+              };
+            }
+            return s;
+          });
+        } else {
+          // If the activity doesn't have the subtask yet, add it
+          const newLinkedSubtask: SubTask = {
+            id: `ST-SURV-${Date.now().toString(36)}`,
+            title: `Trench set-out (${record.spanName})`,
+            category: 'Surveying & Set-out',
+            status: record.status,
+            targetQuantity: record.distanceMeters,
+            completedQuantity: record.completedMeters,
+            unit: 'm',
+            assignedWorkers: record.surveyors || [],
+            isMilestone: true,
+            milestoneCriteria: 'Ground benchmark and trench centerline pegs established & QA verified',
+            isLinkedDiscipline: true,
+            linkedActivityId: act.id,
+            surveyRecordId: record.id,
+            sectionSpan: record.spanName,
+            chainage: record.chainageStart && record.chainageEnd ? `${record.chainageStart} - ${record.chainageEnd}` : undefined,
+            surveyData: {
+              peggingNotes: record.peggingNotes,
+              coordinates: record.coordinates,
+              benchMarkRef: record.benchmarkRef,
+              surveyorName: (record.surveyors || []).join(', '),
+              surveyDate: record.surveyDate,
+              elevation: record.elevation
+            }
+          };
+          updatedSubtasks = [newLinkedSubtask, ...subtasks];
+        }
+
+        const totalSubtasks = updatedSubtasks.length;
+        const completedCount = updatedSubtasks.filter(s => s.status === 'Completed').length;
+        const autoProgress = totalSubtasks > 0 ? Math.round((completedCount / totalSubtasks) * 100) : act.progress;
+
+        return {
+          ...act,
+          subtasks: updatedSubtasks,
+          progress: autoProgress,
+          updatedAt: new Date().toISOString().split('T')[0]
+        };
+      }));
+    }
+  };
+
+  const deleteSurveyRecord = (id: string) => {
+    setSurveyRecords(prev => {
+      const updated = prev.filter(r => r.id !== id);
+      localStorage.setItem('surveyRecords', JSON.stringify(updated));
+      return updated;
+    });
+    syncToServer('delete_survey_record', { id });
+  };
+
+  const batchGenerateSurveySections = (records: SurveySectionRecord[]) => {
+    setSurveyRecords(prev => {
+      const existingIds = new Set(prev.map(r => r.id));
+      const newOnly = records.filter(r => !existingIds.has(r.id));
+      const updated = [...newOnly, ...prev];
+      localStorage.setItem('surveyRecords', JSON.stringify(updated));
+      return updated;
+    });
+    syncToServer('batch_add_survey_records', records);
+  };
+
+  const linkSurveyRecordToActivity = (surveyRecordId: string, activityId: string, subtaskId?: string) => {
+    const surveyRec = surveyRecords.find(r => r.id === surveyRecordId);
+    const targetAct = activities.find(a => a.id === activityId);
+    if (!surveyRec || !targetAct) return;
+
+    const updatedSurveyRec: SurveySectionRecord = {
+      ...surveyRec,
+      linkedActivityId: targetAct.id,
+      linkedActivityName: targetAct.name,
+      linkedSubtaskId: subtaskId,
+      updatedAt: new Date().toISOString().split('T')[0]
+    };
+
+    updateSurveyRecord(updatedSurveyRec);
+    triggerSyncToast(`Linked Survey "${surveyRec.spanName}" to Activity "${targetAct.name}"`, 'success');
+  };
+
+  const unlinkSurveyRecordFromActivity = (surveyRecordId: string) => {
+    const surveyRec = surveyRecords.find(r => r.id === surveyRecordId);
+    if (!surveyRec) return;
+
+    const updatedSurveyRec: SurveySectionRecord = {
+      ...surveyRec,
+      linkedActivityId: undefined,
+      linkedActivityName: undefined,
+      linkedSubtaskId: undefined,
+      updatedAt: new Date().toISOString().split('T')[0]
+    };
+
+    updateSurveyRecord(updatedSurveyRec);
+    triggerSyncToast(`Unlinked Survey "${surveyRec.spanName}"`, 'info');
+  };
+
   const setTheme = (newTheme: 'light' | 'dark') => {
     setThemeState(newTheme);
     localStorage.setItem('theme', newTheme);
@@ -2427,7 +2636,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addAccommodation, updateAccommodation, deleteAccommodation,
       assignEmployeeToAccommodation, removeEmployeeFromAccommodation,
       addAccommodationUtility, deleteAccommodationUtility,
-      addAccommodationPayment, updateAccommodationPayment, deleteAccommodationPayment
+      addAccommodationPayment, updateAccommodationPayment, deleteAccommodationPayment,
+      surveyRecords, addSurveyRecord, updateSurveyRecord, deleteSurveyRecord,
+      batchGenerateSurveySections, linkSurveyRecordToActivity, unlinkSurveyRecordFromActivity
     }}>
       {children}
       <SyncNotificationToast />

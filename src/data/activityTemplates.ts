@@ -79,5 +79,61 @@ export const WORKFLOW_TEMPLATES: ActivityTemplate[] = [
       { title: 'Asphalt Hot Mix Laydown & Rolling', category: 'Paving & Surfacing', status: 'Not Started', targetQuantity: 40, unit: 'Tons', isMilestone: true, milestoneCriteria: 'Density and compaction test > 98% Mod AASHTO verified' },
       { title: 'Kerb Laying & Channel Drainage', category: 'Paving & Surfacing', status: 'Not Started', targetQuantity: 100, unit: 'm' }
     ]
+  },
+  {
+    id: 'tmpl-linear-pipeline',
+    name: 'Linear Pipeline & Trenching Corridor (PTS Sections)',
+    discipline: 'Civil & Earthworks',
+    category: 'Surveying & Set-out',
+    description: 'Linear trench corridor construction with advance survey set-out, benchmark verification, excavation, bedding, pipe jointing, and backfilling.',
+    subtasks: [
+      { 
+        title: 'Trench set-out (Surveying & Pegging)', 
+        category: 'Surveying & Set-out', 
+        status: 'Not Started', 
+        targetQuantity: 433, 
+        unit: 'm', 
+        isMilestone: true, 
+        milestoneCriteria: 'Ground benchmark and trench centerline pegs established & QA verified',
+        notes: 'Centerline stakes and 20m offset pegs verified with surveyor benchmark'
+      },
+      { 
+        title: 'Trench marking & boundary alignment checks', 
+        category: 'Excavation & Earthworks', 
+        status: 'Not Started', 
+        targetQuantity: 433, 
+        unit: 'm' 
+      },
+      { 
+        title: 'Trench excavation to invert grade', 
+        category: 'Excavation & Earthworks', 
+        status: 'Not Started', 
+        targetQuantity: 520, 
+        unit: 'm³' 
+      },
+      { 
+        title: 'Sand bedding layer placement (100mm)', 
+        category: 'Excavation & Earthworks', 
+        status: 'Not Started', 
+        targetQuantity: 175, 
+        unit: 'm³' 
+      },
+      { 
+        title: 'Pipe laying, laser joint alignment & coupling', 
+        category: 'Cable & Underground Installation', 
+        status: 'Not Started', 
+        targetQuantity: 433, 
+        unit: 'm',
+        isMilestone: true,
+        milestoneCriteria: 'Joint pressure integrity and visual laser alignment signed off'
+      },
+      { 
+        title: 'Selected fill surround & final backfill compaction', 
+        category: 'Excavation & Earthworks', 
+        status: 'Not Started', 
+        targetQuantity: 520, 
+        unit: 'm³' 
+      }
+    ]
   }
 ];
