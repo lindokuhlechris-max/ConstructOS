@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Button, Badge } from '../ui';
+import { Card, Button, Badge, CustomSelect } from '../ui';
 import { Truck, Plus, Wrench, Fuel, Clock, CheckCircle2, ArrowLeft, Edit3, Trash2, ClipboardList, X, Building2, Handshake, CircleDollarSign } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Equipment as EquipmentType, EquipmentLog, EquipmentStatus, EquipmentLogType, EquipmentOwnership } from '../../types';
@@ -658,7 +658,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
       {/* Log Modal */}
       {logModalEq && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-xl space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl p-6 shadow-xl space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">Log Activity ({logModalEq.id})</h3>
               <Button variant="ghost" size="icon" onClick={() => setLogModalEq(null)}><X className="h-4 w-4" /></Button>
@@ -666,7 +666,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
             <div className="flex border-b border-slate-200 dark:border-slate-800 text-xs font-semibold gap-2">
               <button onClick={() => setLogTab('Hours')} className={`pb-2 px-2 border-b-2 ${logTab === 'Hours' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>Hours & Cost</button>
               <button onClick={() => setLogTab('Refuel')} className={`pb-2 px-2 border-b-2 ${logTab === 'Refuel' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400'}`}>Refueling</button>
-              <button onClick={() => setLogTab('Maintenance')} className={`pb-2 px-2 border-b-2 ${logTab === 'Maintenance' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-400'}`}>Maintenance</button>
+              <button onClick={() => setLogTab('Maintenance')} className={`pb-2 px-2 border-b-2 ${logTab === 'Maintenance' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-400'}`}>Maintenance & Wash</button>
             </div>
             <form onSubmit={handleLogSubmit} className="space-y-3 text-xs">
               {logTab === 'Hours' && (
@@ -737,12 +737,28 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
               {logTab === 'Maintenance' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-slate-500">Service Type</label>
-                    <input type="text" value={logMaintType} onChange={e => setLogMaintType(e.target.value)} required className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm" />
+                    <label className="text-slate-500 font-semibold block mb-1">Service Type</label>
+                    <CustomSelect 
+                      value={logMaintType} 
+                      onChange={val => setLogMaintType(val)} 
+                      options={[
+                        'Wash / Jet Cleaning',
+                        'Routine Service',
+                        'Oil & Filter Change',
+                        'Hydraulic System Repair',
+                        'Tire / Track Maintenance',
+                        'Engine Overhaul',
+                        'Safety Inspection',
+                        'Battery & Electrical Check',
+                        'Greasing & Lubrication'
+                      ]}
+                      className="w-full h-9 bg-transparent rounded-lg border border-slate-200 dark:border-slate-800 text-sm" 
+                      customPlaceholder="Enter custom service type..."
+                    />
                   </div>
                   <div>
-                    <label className="text-slate-500">Cost (Rands - ZAR)</label>
-                    <input type="number" value={logCost} onChange={e => setLogCost(e.target.value ? Number(e.target.value) : '')} placeholder="e.g. 3500" className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm" />
+                    <label className="text-slate-500 font-semibold block mb-1">Cost (Rands - ZAR)</label>
+                    <input type="number" value={logCost} onChange={e => setLogCost(e.target.value ? Number(e.target.value) : '')} placeholder="e.g. 3500" className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm font-bold text-emerald-600" />
                   </div>
                 </div>
               )}

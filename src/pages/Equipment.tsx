@@ -2074,7 +2074,7 @@ export function Equipment() {
       {/* Equipment Activity Logging Modal */}
       {logModalEq && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95">
+          <div className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95">
             <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700/50">
               <div>
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -2163,7 +2163,7 @@ export function Equipment() {
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border-transparent'
                 }`}
               >
-                <Wrench className="h-3.5 w-3.5" /> Maintenance
+                <Wrench className="h-3.5 w-3.5" /> Maintenance & Wash
               </button>
             </div>
 
@@ -2471,18 +2471,25 @@ export function Equipment() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Service Type</label>
-                      <select 
+                      <CustomSelect 
                         value={logMaintenanceType} 
-                        onChange={e => setLogMaintenanceType(e.target.value)} 
+                        onChange={val => setLogMaintenanceType(val)} 
+                        options={[
+                          'Wash / Jet Cleaning',
+                          'Routine Service',
+                          'Oil & Filter Change',
+                          'Hydraulic System Repair',
+                          'Tire / Track Maintenance',
+                          'Engine Overhaul',
+                          'Safety Inspection',
+                          'Battery & Electrical Check',
+                          'Greasing & Lubrication',
+                          'Brake System Check',
+                          'Transmission Servicing'
+                        ]}
                         className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
-                      >
-                        <option value="Routine Service">Routine Service</option>
-                        <option value="Oil & Filter Change">Oil & Filter Change</option>
-                        <option value="Hydraulic System Repair">Hydraulic System Repair</option>
-                        <option value="Tire / Track Maintenance">Tire / Track Maintenance</option>
-                        <option value="Engine Overhaul">Engine Overhaul</option>
-                        <option value="Safety Inspection">Safety Inspection</option>
-                      </select>
+                        customPlaceholder="Enter custom service type (e.g. Chemical Wash, Engine Flush)..."
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Service Cost (Rands - ZAR)</label>
