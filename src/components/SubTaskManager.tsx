@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { SubTask, SubTaskCategory, SurveySectionRecord } from '../types';
+import { SubTask, SubTaskCategory, SubTaskMeasurementType, SubTaskChecklistItem, SurveySectionRecord } from '../types';
 import { WORKFLOW_TEMPLATES } from '../data/activityTemplates';
 import { Button, Badge } from './ui';
 import { 
@@ -8,9 +8,120 @@ import {
   Layers, HardHat, Truck, Sparkles, ChevronDown, ChevronUp, AlertCircle,
   Save, X, Minus, Check, Calendar, Flag, AlertTriangle, Lock, ShieldCheck,
   CornerDownRight, CheckSquare, Sparkle, Info, Search, Users, UserCheck,
-  Compass, Link2, Unlink, ExternalLink
+  Compass, Link2, Unlink, ExternalLink, Scale, Ruler, Square, Box, Hash,
+  Percent, ToggleLeft, ToggleRight, ListChecks, ListTodo
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+
+export const MEASUREMENT_TYPES: {
+  type: SubTaskMeasurementType;
+  label: string;
+  emoji: string;
+  defaultUnit: string;
+  presetUnits: string[];
+  placeholder: string;
+  description: string;
+}[] = [
+  {
+    type: 'Quantity',
+    label: 'Quantity',
+    emoji: '📊',
+    defaultUnit: 'units',
+    presetUnits: ['units', 'items', 'batches', 'sets', 'loads'],
+    placeholder: 'e.g. 100',
+    description: 'General quantified or numerical deliverables'
+  },
+  {
+    type: 'Length',
+    label: 'Length',
+    emoji: '📏',
+    defaultUnit: 'm',
+    presetUnits: ['m', 'km', 'cm', 'mm', 'ft', 'yd'],
+    placeholder: 'e.g. 433',
+    description: 'Linear trenching, conduit, piping, or corridor distance'
+  },
+  {
+    type: 'Area',
+    label: 'Area',
+    emoji: '📐',
+    defaultUnit: 'm²',
+    presetUnits: ['m²', 'ha', 'sq ft', 'sq yd', 'acres'],
+    placeholder: 'e.g. 250',
+    description: 'Surface paving, clearing, excavation footprint or painting'
+  },
+  {
+    type: 'Volume',
+    label: 'Volume',
+    emoji: '🧊',
+    defaultUnit: 'm³',
+    presetUnits: ['m³', 'L', 'cu yd', 'cu ft', 'gallons'],
+    placeholder: 'e.g. 500',
+    description: 'Bedding sand, concrete pour, aggregate, or bulk earthworks'
+  },
+  {
+    type: 'Weight',
+    label: 'Weight',
+    emoji: '⚖️',
+    defaultUnit: 'tons',
+    presetUnits: ['tons', 't', 'kg', 'lbs'],
+    placeholder: 'e.g. 25',
+    description: 'Steel rebar, asphalt, gravel, or structural tonnage'
+  },
+  {
+    type: 'Count',
+    label: 'Count',
+    emoji: '🔢',
+    defaultUnit: 'items',
+    presetUnits: ['poles', 'panels', 'fixtures', 'joints', 'pipes', 'items', 'units'],
+    placeholder: 'e.g. 16',
+    description: 'Number of individual component installations'
+  },
+  {
+    type: 'Percentage',
+    label: 'Percentage',
+    emoji: '📈',
+    defaultUnit: '%',
+    presetUnits: ['%'],
+    placeholder: '0 - 100%',
+    description: 'Track progress as an overall percentage from 0% to 100%'
+  },
+  {
+    type: 'Checklist',
+    label: 'Checklist',
+    emoji: '☑️',
+    defaultUnit: 'items',
+    presetUnits: ['items'],
+    placeholder: 'Add steps...',
+    description: 'Break down subtask into interactive multi-step quality items'
+  },
+  {
+    type: 'Sign-off',
+    label: 'Sign-off',
+    emoji: '✍️',
+    defaultUnit: 'sign-off',
+    presetUnits: ['sign-off'],
+    placeholder: 'QA Gate',
+    description: 'Mandatory QA Inspection Hold Point requiring formal authorization'
+  },
+  {
+    type: 'Milestone',
+    label: 'Milestone',
+    emoji: '🚩',
+    defaultUnit: 'checkpoint',
+    presetUnits: ['checkpoint'],
+    placeholder: 'Target date',
+    description: 'Key contractual delivery milestone or stage gate date'
+  },
+  {
+    type: 'Yes/No',
+    label: 'Yes/No',
+    emoji: '🔘',
+    defaultUnit: 'done',
+    presetUnits: ['done'],
+    placeholder: 'Completed / Pending',
+    description: 'Fast binary Done or Pending state'
+  },
+];
 
 interface ChecklistItem {
   id: string;
@@ -340,8 +451,11 @@ export function SubTaskManager({
   // New subtask state
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<SubTaskCategory>('Excavation & Earthworks');
+  const [measurementType, setMeasurementType] = useState<SubTaskMeasurementType>('Quantity');
+  const [checklist, setChecklist] = useState<SubTaskChecklistItem[]>([]);
+  const [newChecklistItemText, setNewChecklistItemText] = useState('');
   const [targetQuantity, setTargetQuantity] = useState<number | ''>('');
-  const [unit, setUnit] = useState('m³');
+  const [unit, setUnit] = useState('units');
   const [assignedWorkers, setAssignedWorkers] = useState<string[]>([]);
   const [assignedEquipmentList, setAssignedEquipmentList] = useState<string[]>([]);
   const [assignedTeams, setAssignedTeams] = useState<string[]>([]);
@@ -360,9 +474,12 @@ export function SubTaskManager({
   // Editing subtask form state
   const [editTitle, setEditTitle] = useState('');
   const [editCategory, setEditCategory] = useState<SubTaskCategory>('Excavation & Earthworks');
+  const [editMeasurementType, setEditMeasurementType] = useState<SubTaskMeasurementType>('Quantity');
+  const [editChecklist, setEditChecklist] = useState<SubTaskChecklistItem[]>([]);
+  const [editNewChecklistItemText, setEditNewChecklistItemText] = useState('');
   const [editTargetQty, setEditTargetQty] = useState<number | ''>('');
   const [editCompletedQty, setEditCompletedQty] = useState<number | ''>('');
-  const [editUnit, setEditUnit] = useState('m³');
+  const [editUnit, setEditUnit] = useState('units');
   const [editAssignedWorkers, setEditAssignedWorkers] = useState<string[]>([]);
   const [editAssignedEquipmentList, setEditAssignedEquipmentList] = useState<string[]>([]);
   const [editAssignedTeams, setEditAssignedTeams] = useState<string[]>([]);
@@ -378,6 +495,131 @@ export function SubTaskManager({
   const [editRequiresPhotoEvidence, setEditRequiresPhotoEvidence] = useState(false);
   const [editRequiresSupervisorSignOff, setEditRequiresSupervisorSignOff] = useState(false);
   const [editLinkedActivityId, setEditLinkedActivityId] = useState<string>('');
+
+  // Measurement Type change helper
+  const handleMeasurementTypeChange = (newType: SubTaskMeasurementType, isEdit = false) => {
+    const config = MEASUREMENT_TYPES.find(m => m.type === newType);
+    if (!config) return;
+
+    if (isEdit) {
+      setEditMeasurementType(newType);
+      if (newType === 'Percentage') {
+        setEditUnit('%');
+        setEditTargetQty(100);
+      } else if (newType === 'Checklist') {
+        setEditUnit('items');
+      } else if (newType === 'Sign-off') {
+        setEditUnit('sign-off');
+        setEditIsHoldPoint(true);
+      } else if (newType === 'Milestone') {
+        setEditUnit('checkpoint');
+        setEditIsMilestone(true);
+      } else if (newType === 'Yes/No') {
+        setEditUnit('done');
+        setEditTargetQty(1);
+      } else {
+        setEditUnit(config.defaultUnit);
+      }
+    } else {
+      setMeasurementType(newType);
+      if (newType === 'Percentage') {
+        setUnit('%');
+        setTargetQuantity(100);
+      } else if (newType === 'Checklist') {
+        setUnit('items');
+      } else if (newType === 'Sign-off') {
+        setUnit('sign-off');
+        setIsHoldPoint(true);
+      } else if (newType === 'Milestone') {
+        setUnit('checkpoint');
+        setIsMilestone(true);
+      } else if (newType === 'Yes/No') {
+        setUnit('done');
+        setTargetQuantity(1);
+      } else {
+        setUnit(config.defaultUnit);
+      }
+    }
+  };
+
+  // Checklist item management helpers
+  const handleAddChecklistItem = (text: string, isEdit = false) => {
+    if (!text.trim()) return;
+    const newItem: SubTaskChecklistItem = {
+      id: `CHK-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 4)}`,
+      text: text.trim(),
+      completed: false
+    };
+
+    if (isEdit) {
+      const updated = [...editChecklist, newItem];
+      setEditChecklist(updated);
+      setEditNewChecklistItemText('');
+      setEditTargetQty(updated.length);
+      setEditCompletedQty(updated.filter(c => c.completed).length);
+    } else {
+      const updated = [...checklist, newItem];
+      setChecklist(updated);
+      setNewChecklistItemText('');
+      setTargetQuantity(updated.length);
+    }
+  };
+
+  const handleRemoveChecklistItem = (id: string, isEdit = false) => {
+    if (isEdit) {
+      const updated = editChecklist.filter(c => c.id !== id);
+      setEditChecklist(updated);
+      setEditTargetQty(updated.length);
+      setEditCompletedQty(updated.filter(c => c.completed).length);
+    } else {
+      const updated = checklist.filter(c => c.id !== id);
+      setChecklist(updated);
+      setTargetQuantity(updated.length);
+    }
+  };
+
+  const handleToggleEditChecklistItem = (id: string) => {
+    const updated = editChecklist.map(c => c.id === id ? { ...c, completed: !c.completed } : c);
+    setEditChecklist(updated);
+    const done = updated.filter(c => c.completed).length;
+    setEditCompletedQty(done);
+    setEditTargetQty(updated.length);
+    if (done === updated.length && updated.length > 0) {
+      setEditStatus('Completed');
+    } else if (done > 0) {
+      setEditStatus('In Progress');
+    } else {
+      setEditStatus('Not Started');
+    }
+  };
+
+  const handleToggleSubtaskChecklistItem = (subtaskId: string, itemId: string) => {
+    if (readOnly) return;
+    const target = subtasks.find(s => s.id === subtaskId);
+    if (!target || !target.checklist) return;
+
+    const updatedChecklist = target.checklist.map(c => 
+      c.id === itemId ? { ...c, completed: !c.completed } : c
+    );
+    const doneCount = updatedChecklist.filter(c => c.completed).length;
+    const totalCount = updatedChecklist.length;
+    const newStatus: SubTask['status'] = doneCount === totalCount ? 'Completed' : doneCount > 0 ? 'In Progress' : 'Not Started';
+
+    const updatedSubtask: SubTask = {
+      ...target,
+      checklist: updatedChecklist,
+      targetQuantity: totalCount,
+      completedQuantity: doneCount,
+      status: newStatus
+    };
+
+    if (updatedSubtask.linkedActivityId) {
+      syncSubtaskToLinkedActivity(updatedSubtask, 'update');
+    }
+
+    const updated = subtasks.map(st => st.id === subtaskId ? updatedSubtask : st);
+    handleSubtasksChange(updated);
+  };
 
   // QA Hold Point Sign-Off Modal State
   const [signOffSubtask, setSignOffSubtask] = useState<SubTask | null>(null);
@@ -562,7 +804,7 @@ export function SubTaskManager({
     // 4. Milestone Enforcement: Milestone stage gate requires 100% target progress
     if (st.isMilestone) {
       const currentQty = newCompletedQty !== undefined ? newCompletedQty : (st.completedQuantity || 0);
-      if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity) {
+if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity) {
         return {
           allowed: false,
           reason: `Milestone Checkpoint "${st.title}" requires full target fulfillment (${currentQty}/${st.targetQuantity} ${st.unit || 'units'})${st.milestoneCriteria ? ` and verification of: "${st.milestoneCriteria}"` : ''}. Log full progress before completing this milestone.`
@@ -583,6 +825,13 @@ export function SubTaskManager({
         // If parent has children, calculate average of its children
         const childDone = children.filter(c => c.status === 'Completed').length;
         totalPercent += Math.round((childDone / children.length) * 100);
+      } else if (s.measurementType === 'Checklist' && s.checklist && s.checklist.length > 0) {
+        const doneCount = s.checklist.filter(c => c.completed).length;
+        totalPercent += Math.round((doneCount / s.checklist.length) * 100);
+      } else if (s.measurementType === 'Percentage') {
+        totalPercent += Math.min(100, Math.max(0, s.completedQuantity ?? (s.status === 'Completed' ? 100 : 0)));
+      } else if (s.measurementType === 'Yes/No' || s.measurementType === 'Milestone' || s.measurementType === 'Sign-off') {
+        totalPercent += s.status === 'Completed' ? 100 : s.status === 'In Progress' ? 50 : 0;
       } else if (s.targetQuantity && s.targetQuantity > 0) {
         const itemPercent = Math.min(100, Math.round(((s.completedQuantity || 0) / s.targetQuantity) * 100));
         totalPercent += itemPercent;
@@ -816,7 +1065,7 @@ export function SubTaskManager({
     handleSubtasksChange(updated);
   };
 
-  // Quick complete button handler
+  // Quick complete helper
   const handleQuickComplete = (st: SubTask) => {
     if (readOnly) return;
     const val = validateSubtaskCompletion(st, st.targetQuantity || 1);
@@ -828,17 +1077,16 @@ export function SubTaskManager({
         setSignOffPhotoUrl('');
         return;
       }
-      showValidationWarning('Completion Blocked', val.reason!);
+      showValidationWarning('Quick Complete Blocked', val.reason!);
       return;
     }
 
-    const targetQty = st.targetQuantity || st.completedQuantity || 1;
     const updated = subtasks.map(s => {
       if (s.id === st.id) {
         const updatedItem: SubTask = {
           ...s,
-          status: 'Completed' as const,
-          completedQuantity: targetQty
+          status: 'Completed',
+          completedQuantity: s.targetQuantity || (s.measurementType === 'Percentage' ? 100 : 1)
         };
         if (updatedItem.linkedActivityId) {
           syncSubtaskToLinkedActivity(updatedItem, 'update');
@@ -849,49 +1097,27 @@ export function SubTaskManager({
     });
 
     handleSubtasksChange(updated);
-
-    if (addAuditLog) {
-      addAuditLog({
-        id: `AL-${Math.random().toString(36).substr(2, 9)}`,
-        projectId: projectId || 'PROJ-001',
-        userId: 'Current User',
-        action: 'Subtask Completed',
-        details: `Subtask "${st.title}" in Activity "${activityName || activityId || 'Activity'}" completed (${targetQty} ${st.unit || 'units'})`,
-        entityType: 'Activity',
-        entityId: activityId,
-        actionType: 'status_change',
-        subtaskId: st.id,
-        subtaskTitle: st.title,
-        activityName: activityName,
-        previousValue: st.status,
-        newValue: 'Completed',
-        timestamp: new Date().toISOString()
-      });
-    }
   };
 
-  // QA Hold Point Sign-Off Handlers
+  // QA Hold Point Formal Sign-Off Confirmation
   const handleConfirmHoldPointSignOff = () => {
     if (!signOffSubtask) return;
-    if (!signOffInspectorName.trim()) {
-      alert('Please enter the authorized inspector / supervisor name.');
-      return;
-    }
 
-    const targetQty = signOffSubtask.targetQuantity || signOffSubtask.completedQuantity || 1;
+    const signOffRecord: SubTaskHoldPointSignOff = {
+      signedBy: signOffInspectorName.trim() || 'Site QA/QC Engineer',
+      signedAt: new Date().toISOString(),
+      signatureNote: signOffNotes.trim() || 'Verified compliant with project technical specs.',
+      photoUrl: signOffPhotoUrl.trim() || undefined,
+      approved: true
+    };
+
     const updated = subtasks.map(st => {
       if (st.id === signOffSubtask.id) {
         const updatedItem: SubTask = {
           ...st,
-          status: 'Completed' as const,
-          completedQuantity: targetQty,
-          holdPointSignOff: {
-            signedBy: signOffInspectorName.trim(),
-            signedAt: new Date().toISOString(),
-            signatureNote: signOffNotes.trim() || 'QA Inspection verified and passed in full compliance.',
-            photoUrl: signOffPhotoUrl.trim() || undefined,
-            approved: true
-          }
+          status: 'Completed',
+          completedQuantity: st.targetQuantity || 1,
+          holdPointSignOff: signOffRecord
         };
         if (updatedItem.linkedActivityId) {
           syncSubtaskToLinkedActivity(updatedItem, 'update');
@@ -907,18 +1133,15 @@ export function SubTaskManager({
       addAuditLog({
         id: `AL-${Math.random().toString(36).substr(2, 9)}`,
         projectId: projectId || 'PROJ-001',
-        userId: signOffInspectorName.trim(),
-        action: 'QA Hold Point Approved',
-        details: `QA Hold Point for subtask "${signOffSubtask.title}" in Activity "${activityName || activityId || 'Activity'}" was inspected and approved by ${signOffInspectorName.trim()}. Notes: "${signOffNotes.trim() || 'Passed in full compliance.'}"`,
+        userId: signOffInspectorName || 'QA Inspector',
+        action: 'QA Hold Point Sign-Off Approved',
+        details: `QA Hold Point "${signOffSubtask.title}" signed off and approved by ${signOffRecord.signedBy}`,
         entityType: 'Activity',
         entityId: activityId,
-        actionType: 'update',
+        actionType: 'sign_off',
         subtaskId: signOffSubtask.id,
         subtaskTitle: signOffSubtask.title,
         activityName: activityName,
-        inspectorName: signOffInspectorName.trim(),
-        photoUrl: signOffPhotoUrl.trim() || undefined,
-        metadata: { signatureNote: signOffNotes.trim() },
         timestamp: new Date().toISOString()
       });
     }
@@ -926,13 +1149,16 @@ export function SubTaskManager({
     setSignOffSubtask(null);
   };
 
-  const handleRevokeHoldPointSignOff = (id: string) => {
-    const targetSub = subtasks.find(s => s.id === id);
+  // Revoke QA Hold Point Sign-Off
+  const handleRevokeHoldPointSignOff = (subtaskId: string) => {
+    const targetSub = subtasks.find(s => s.id === subtaskId);
+    if (!targetSub) return;
+
     const updated = subtasks.map(st => {
-      if (st.id === id) {
+      if (st.id === subtaskId) {
         const updatedItem: SubTask = {
           ...st,
-          status: 'In Progress' as const,
+          status: 'In Progress',
           holdPointSignOff: undefined
         };
         if (updatedItem.linkedActivityId) {
@@ -945,16 +1171,16 @@ export function SubTaskManager({
 
     handleSubtasksChange(updated);
 
-    if (addAuditLog && targetSub) {
+    if (addAuditLog) {
       addAuditLog({
         id: `AL-${Math.random().toString(36).substr(2, 9)}`,
         projectId: projectId || 'PROJ-001',
-        userId: 'Current User',
-        action: 'QA Hold Point Revoked',
-        details: `QA Sign-off revoked for subtask "${targetSub.title}" in Activity "${activityName || activityId || 'Activity'}"`,
+        userId: 'QA Inspector',
+        action: 'QA Hold Point Sign-Off Revoked',
+        details: `QA Hold Point sign-off revoked for "${targetSub.title}"`,
         entityType: 'Activity',
         entityId: activityId,
-        actionType: 'update',
+        actionType: 'sign_off_revoked',
         subtaskId: targetSub.id,
         subtaskTitle: targetSub.title,
         activityName: activityName,
@@ -974,14 +1200,24 @@ export function SubTaskManager({
 
     const targetActivity = activities.find(a => a.id === linkedActivityId);
 
+    const targetQ = measurementType === 'Checklist' 
+      ? checklist.length 
+      : measurementType === 'Percentage' 
+      ? 100 
+      : (measurementType === 'Yes/No' || measurementType === 'Sign-off' || measurementType === 'Milestone')
+      ? 1
+      : targetQuantity ? Number(targetQuantity) : undefined;
+
     const newSub: SubTask = {
       id: `SUB-${Math.floor(1000 + Math.random() * 9000)}`,
       title: title.trim(),
       category,
+      measurementType,
+      checklist: measurementType === 'Checklist' ? checklist : undefined,
       status: 'Not Started',
-      targetQuantity: targetQuantity ? Number(targetQuantity) : undefined,
+      targetQuantity: targetQ,
       completedQuantity: 0,
-      unit: unit || 'units',
+      unit: measurementType === 'Percentage' ? '%' : (unit || 'units'),
       assignedWorkers: assignedWorkers.length > 0 ? assignedWorkers : undefined,
       assignedPerson: assignedWorkers.length > 0 ? assignedWorkers.join(', ') : undefined,
       assignedEquipmentList: assignedEquipmentList.length > 0 ? assignedEquipmentList : undefined,
@@ -992,9 +1228,9 @@ export function SubTaskManager({
       endDate: endDate || undefined,
       notes: notes || undefined,
       parentId: parentId || undefined,
-      isMilestone: isMilestone || undefined,
-      milestoneCriteria: isMilestone ? (milestoneCriteria.trim() || undefined) : undefined,
-      isHoldPoint: isHoldPoint || undefined,
+      isMilestone: measurementType === 'Milestone' ? true : (isMilestone || undefined),
+      milestoneCriteria: (measurementType === 'Milestone' || isMilestone) ? (milestoneCriteria.trim() || undefined) : undefined,
+      isHoldPoint: measurementType === 'Sign-off' ? true : (isHoldPoint || undefined),
       predecessorId: predecessorId || undefined,
       requiresPhotoEvidence: requiresPhotoEvidence || undefined,
       requiresSupervisorSignOff: requiresSupervisorSignOff || undefined,
@@ -1016,7 +1252,7 @@ export function SubTaskManager({
         projectId: projectId || 'PROJ-001',
         userId: 'Current User',
         action: 'Subtask Created',
-        details: `Subtask "${newSub.title}" (${newSub.category}) added to Activity "${activityName || activityId || 'Activity'}"${newSub.linkedActivityName ? ` (Linked to ${newSub.linkedActivityName})` : ''}`,
+        details: `Subtask "${newSub.title}" (${newSub.category} - ${newSub.measurementType || 'Quantity'}) added to Activity "${activityName || activityId || 'Activity'}"${newSub.linkedActivityName ? ` (Linked to ${newSub.linkedActivityName})` : ''}`,
         entityType: 'Activity',
         entityId: activityId,
         actionType: 'create',
@@ -1029,7 +1265,12 @@ export function SubTaskManager({
     
     // Reset form
     setTitle('');
+    setCategory('Excavation & Earthworks');
+    setMeasurementType('Quantity');
+    setChecklist([]);
+    setNewChecklistItemText('');
     setTargetQuantity('');
+    setUnit('units');
     setAssignedWorkers([]);
     setAssignedEquipmentList([]);
     setAssignedTeams([]);
@@ -1052,6 +1293,17 @@ export function SubTaskManager({
     setEditingSubtaskId(st.id);
     setEditTitle(st.title);
     setEditCategory(st.category);
+    
+    const parsedMeasurementType: SubTaskMeasurementType = st.measurementType || (
+      st.isMilestone ? 'Milestone' :
+      st.isHoldPoint ? 'Sign-off' :
+      st.unit === '%' ? 'Percentage' :
+      (st.checklist && st.checklist.length > 0) ? 'Checklist' :
+      'Quantity'
+    );
+    setEditMeasurementType(parsedMeasurementType);
+    setEditChecklist(st.checklist ? [...st.checklist] : []);
+    setEditNewChecklistItemText('');
     setEditTargetQty(st.targetQuantity ?? '');
     setEditCompletedQty(st.completedQuantity ?? 0);
     setEditUnit(st.unit || 'units');
@@ -1084,15 +1336,33 @@ export function SubTaskManager({
     }
     if (!editTitle.trim()) return;
 
-    const targetQ = editTargetQty !== '' ? Number(editTargetQty) : undefined;
-    const compQ = editCompletedQty !== '' ? Number(editCompletedQty) : 0;
+    let targetQ = editTargetQty !== '' ? Number(editTargetQty) : undefined;
+    let compQ = editCompletedQty !== '' ? Number(editCompletedQty) : 0;
     let stat = editStatus;
 
-    if (targetQ && targetQ > 0) {
-      if (compQ >= targetQ && stat !== 'Completed') {
-        stat = 'Completed';
-      } else if (compQ > 0 && stat === 'Not Started') {
-        stat = 'In Progress';
+    if (editMeasurementType === 'Checklist') {
+      targetQ = editChecklist.length;
+      compQ = editChecklist.filter(c => c.completed).length;
+      stat = targetQ > 0 && compQ === targetQ ? 'Completed' : compQ > 0 ? 'In Progress' : 'Not Started';
+    } else if (editMeasurementType === 'Percentage') {
+      targetQ = 100;
+      stat = compQ >= 100 ? 'Completed' : compQ > 0 ? 'In Progress' : 'Not Started';
+    } else if (editMeasurementType === 'Yes/No') {
+      targetQ = 1;
+      compQ = stat === 'Completed' ? 1 : 0;
+    } else if (editMeasurementType === 'Sign-off') {
+      targetQ = 1;
+      compQ = editIsHoldPoint && stat === 'Completed' ? 1 : 0;
+    } else if (editMeasurementType === 'Milestone') {
+      targetQ = 1;
+      compQ = stat === 'Completed' ? 1 : 0;
+    } else {
+      if (targetQ && targetQ > 0) {
+        if (compQ >= targetQ && stat !== 'Completed') {
+          stat = 'Completed';
+        } else if (compQ > 0 && stat === 'Not Started') {
+          stat = 'In Progress';
+        }
       }
     }
 
@@ -1101,9 +1371,9 @@ export function SubTaskManager({
       const val = validateSubtaskCompletion(
         { 
           ...currentSub, 
-          isMilestone: editIsMilestone, 
+          isMilestone: editMeasurementType === 'Milestone' ? true : editIsMilestone, 
           parentId: editParentId || undefined,
-          isHoldPoint: editIsHoldPoint || undefined,
+          isHoldPoint: editMeasurementType === 'Sign-off' ? true : editIsHoldPoint || undefined,
           predecessorId: editPredecessorId || undefined
         },
         compQ
@@ -1122,9 +1392,11 @@ export function SubTaskManager({
       id,
       title: editTitle.trim(),
       category: editCategory,
+      measurementType: editMeasurementType,
+      checklist: editMeasurementType === 'Checklist' ? editChecklist : undefined,
       targetQuantity: targetQ,
       completedQuantity: compQ,
-      unit: editUnit || 'units',
+      unit: editMeasurementType === 'Percentage' ? '%' : (editUnit || 'units'),
       assignedWorkers: editAssignedWorkers.length > 0 ? editAssignedWorkers : undefined,
       assignedPerson: editAssignedWorkers.length > 0 ? editAssignedWorkers.join(', ') : undefined,
       assignedEquipmentList: editAssignedEquipmentList.length > 0 ? editAssignedEquipmentList : undefined,
@@ -1136,9 +1408,9 @@ export function SubTaskManager({
       status: stat,
       notes: editNotes || undefined,
       parentId: editParentId || undefined,
-      isMilestone: editIsMilestone || undefined,
-      milestoneCriteria: editIsMilestone ? (editMilestoneCriteria.trim() || undefined) : undefined,
-      isHoldPoint: editIsHoldPoint || undefined,
+      isMilestone: editMeasurementType === 'Milestone' ? true : (editIsMilestone || undefined),
+      milestoneCriteria: (editMeasurementType === 'Milestone' || editIsMilestone) ? (editMilestoneCriteria.trim() || undefined) : undefined,
+      isHoldPoint: editMeasurementType === 'Sign-off' ? true : (editIsHoldPoint || undefined),
       predecessorId: editPredecessorId || undefined,
       requiresPhotoEvidence: editRequiresPhotoEvidence || undefined,
       requiresSupervisorSignOff: editRequiresSupervisorSignOff || undefined,
@@ -1163,7 +1435,7 @@ export function SubTaskManager({
         projectId: projectId || 'PROJ-001',
         userId: 'Current User',
         action: 'Subtask Updated',
-        details: `Subtask "${editTitle.trim()}" in Activity "${activityName || activityId || 'Activity'}" parameters updated${updatedSubtask.linkedActivityName ? ` (Linked to ${updatedSubtask.linkedActivityName})` : ''}`,
+        details: `Subtask "${editTitle.trim()}" in Activity "${activityName || activityId || 'Activity'}" parameters updated (${editMeasurementType})${updatedSubtask.linkedActivityName ? ` (Linked to ${updatedSubtask.linkedActivityName})` : ''}`,
         entityType: 'Activity',
         entityId: activityId,
         actionType: 'update',
@@ -1356,7 +1628,7 @@ export function SubTaskManager({
             <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3.5 animate-in fade-in">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                  <Plus className="h-3.5 w-3.5 text-[#0B5FFF]" /> Create New Subtask / Milestone
+                  <Plus className="h-3.5 w-3.5 text-[#0B5FFF]" /> Add Task / Subtask
                 </h4>
                 <button 
                   type="button" 
@@ -1368,11 +1640,11 @@ export function SubTaskManager({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="md:col-span-2 space-y-1">
-                  <label className="text-xs font-medium text-slate-500">Subtask Title *</label>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Task Name *</label>
                   <input
                     type="text"
-                    placeholder="e.g. Trench set-out, Pipe laying, Cable pulling"
+                    placeholder="e.g. Installation of Bedding Sand"
                     value={title}
                     onChange={e => setTitle(e.target.value)}
                     onKeyDown={e => {
@@ -1383,11 +1655,11 @@ export function SubTaskManager({
                       }
                     }}
                     required
-                    className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
+                    className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none font-medium"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-500">Category</label>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Task Category</label>
                   <select
                     value={category}
                     onChange={e => setCategory(e.target.value as SubTaskCategory)}
@@ -1404,30 +1676,273 @@ export function SubTaskManager({
                     <option value="Custom">Custom</option>
                   </select>
                 </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                    <Sparkles className="h-3.5 w-3.5 text-[#0B5FFF]" />
+                    Measurement Type
+                  </label>
+                  <select
+                    value={measurementType}
+                    onChange={e => handleMeasurementTypeChange(e.target.value as SubTaskMeasurementType, false)}
+                    className="w-full h-9 px-3 rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-white dark:bg-slate-900 text-xs font-bold text-[#0B5FFF] dark:text-blue-400 focus:ring-2 focus:ring-[#0B5FFF] outline-none"
+                  >
+                    {MEASUREMENT_TYPES.map(m => (
+                      <option key={m.type} value={m.type}>
+                        {m.emoji} {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-500">Target Qty (Optional)</label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 433"
-                    value={targetQuantity}
-                    onChange={e => setTargetQuantity(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-500">Unit</label>
-                  <input
-                    type="text"
-                    placeholder="m, m³, tons, units"
-                    value={unit}
-                    onChange={e => setUnit(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
-                  />
-                </div>
-              </div>
+              {/* Dynamic Measurement Configuration Area */}
+              {(() => {
+                const config = MEASUREMENT_TYPES.find(m => m.type === measurementType);
+                if (['Quantity', 'Length', 'Area', 'Volume', 'Weight', 'Count'].includes(measurementType)) {
+                  return (
+                    <div className="p-3.5 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                          <span>{config?.emoji}</span> {config?.label} Measurement Settings
+                        </span>
+                        <span className="text-[11px] text-blue-700 dark:text-blue-300 font-medium">
+                          {config?.description}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                            Target {config?.label}
+                          </label>
+                          <input
+                            type="number"
+                            placeholder={config?.placeholder || 'e.g. 100'}
+                            value={targetQuantity}
+                            onChange={e => setTargetQuantity(e.target.value ? Number(e.target.value) : '')}
+                            className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none font-semibold text-slate-900 dark:text-white"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Unit</label>
+                          <input
+                            type="text"
+                            placeholder={config?.defaultUnit || 'units'}
+                            value={unit}
+                            onChange={e => setUnit(e.target.value)}
+                            className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none font-semibold text-[#0B5FFF]"
+                          />
+                          {config?.presetUnits && config.presetUnits.length > 0 && (
+                            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                              <span className="text-[10px] text-slate-400">Presets:</span>
+                              {config.presetUnits.map(preset => (
+                                <button
+                                  type="button"
+                                  key={preset}
+                                  onClick={() => setUnit(preset)}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                    unit === preset 
+                                      ? 'bg-[#0B5FFF] text-white shadow-xs' 
+                                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-[#0B5FFF]'
+                                  }`}
+                                >
+                                  {preset}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (measurementType === 'Percentage') {
+                  return (
+                    <div className="p-3.5 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/50 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                          <Percent className="h-4 w-4 text-indigo-600" /> Percentage Scale Delivery
+                        </span>
+                        <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-medium">
+                          0% to 100% Progress Tracking
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                        📈 Task delivery is tracked on a percentage scale from 0% to 100%. Target is set to 100%.
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (measurementType === 'Checklist') {
+                  return (
+                    <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                          <ListChecks className="h-4 w-4 text-emerald-600" /> Interactive Checklist ({checklist.length} Steps Defined)
+                        </span>
+                        <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
+                          Progress updates automatically as steps are completed
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Add step (e.g. Place 100mm sand bedding, Check laser grade, Compaction test)..."
+                          value={newChecklistItemText}
+                          onChange={e => setNewChecklistItemText(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddChecklistItem(newChecklistItemText, false);
+                            }
+                          }}
+                          className="flex-1 h-9 px-3 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => handleAddChecklistItem(newChecklistItemText, false)}
+                          className="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add Step
+                        </Button>
+                      </div>
+
+                      {/* Quick checklist presets */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] text-slate-400">Quick Suggestions:</span>
+                        {[
+                          'Check trench bottom level & grade',
+                          'Place 100mm bedding sand cushion',
+                          'Verify compaction & density',
+                          'Record photographic evidence'
+                        ].map(suggestion => (
+                          <button
+                            type="button"
+                            key={suggestion}
+                            onClick={() => handleAddChecklistItem(suggestion, false)}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-100/70 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-emerald-900 dark:text-emerald-300 transition-colors"
+                          >
+                            + {suggestion}
+                          </button>
+                        ))}
+                      </div>
+
+                      {checklist.length > 0 && (
+                        <div className="space-y-1.5 pt-1">
+                          {checklist.map((item, idx) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900 text-xs text-slate-800 dark:text-slate-200"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                                  Step {idx + 1}:
+                                </span>
+                                <span className="truncate font-medium">{item.text}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveChecklistItem(item.id, false)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                                title="Remove Step"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                if (measurementType === 'Sign-off') {
+                  return (
+                    <div className="p-3.5 bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-rose-900 dark:text-rose-200 flex items-center gap-1.5">
+                          <ShieldCheck className="h-4 w-4 text-rose-600" /> Mandatory QA Hold Point & Inspection Sign-off
+                        </span>
+                        <span className="text-[11px] text-rose-700 dark:text-rose-300 font-medium">
+                          Quality Gate / Inspection Required
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-rose-800 dark:text-rose-300 leading-relaxed">
+                        🔒 Quality Gate: Marking complete requires formal QA inspector sign-off and approval before proceeding.
+                      </p>
+                      <div className="flex flex-wrap gap-4 pt-1">
+                        <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-medium text-rose-900 dark:text-rose-200">
+                          <input 
+                            type="checkbox"
+                            checked={requiresPhotoEvidence}
+                            onChange={e => setRequiresPhotoEvidence(e.target.checked)}
+                            className="rounded border-rose-300 text-rose-600 focus:ring-rose-500 h-3.5 w-3.5"
+                          />
+                          📸 Require Inspection Photo Evidence
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-medium text-rose-900 dark:text-rose-200">
+                          <input 
+                            type="checkbox"
+                            checked={requiresSupervisorSignOff}
+                            onChange={e => setRequiresSupervisorSignOff(e.target.checked)}
+                            className="rounded border-rose-300 text-rose-600 focus:ring-rose-500 h-3.5 w-3.5"
+                          />
+                          ✍️ Require Supervisor QC Stamp & Certificate
+                        </label>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (measurementType === 'Milestone') {
+                  return (
+                    <div className="p-3.5 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/50 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                          <Flag className="h-4 w-4 text-purple-600" /> Key Milestone Checkpoint
+                        </span>
+                        <span className="text-[11px] text-purple-700 dark:text-purple-300 font-medium">
+                          Stage Gate Checkpoint
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-purple-800 dark:text-purple-300 block">
+                          Milestone Sign-Off / Verification Criteria
+                        </label>
+                        <input 
+                          type="text"
+                          placeholder="e.g. Bedding sand inspection passed, density > 98%, laser depth certified"
+                          value={milestoneCriteria}
+                          onChange={e => setMilestoneCriteria(e.target.value)}
+                          className="w-full h-8 px-3 rounded-lg border border-purple-300 dark:border-purple-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-purple-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (measurementType === 'Yes/No') {
+                  return (
+                    <div className="p-3.5 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <ToggleLeft className="h-4 w-4 text-blue-500" /> Binary State (Done / Pending)
+                        </span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                          Simple Yes/No toggle
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Fast binary toggle between 0% (Pending) and 100% (Done) for one-off tasks.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
 
               {/* Assignment Checklist Popovers: Workers, Machinery, Teams */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1567,7 +2082,7 @@ export function SubTaskManager({
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input 
                     type="checkbox"
-                    checked={isMilestone}
+                    checked={isMilestone || measurementType === 'Milestone'}
                     onChange={e => setIsMilestone(e.target.checked)}
                     className="rounded border-purple-300 text-purple-600 focus:ring-purple-500 h-4 w-4"
                   />
@@ -1576,7 +2091,7 @@ export function SubTaskManager({
                     Designate as Key Milestone Checkpoint
                   </span>
                 </label>
-                {isMilestone && (
+                {(isMilestone || measurementType === 'Milestone') && (
                   <div className="pl-6 animate-in fade-in">
                     <label className="text-[11px] font-medium text-purple-800 dark:text-purple-300 block mb-1">
                       Milestone Sign-Off / Verification Criteria
@@ -1597,7 +2112,7 @@ export function SubTaskManager({
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input 
                     type="checkbox"
-                    checked={isHoldPoint}
+                    checked={isHoldPoint || measurementType === 'Sign-off'}
                     onChange={e => setIsHoldPoint(e.target.checked)}
                     className="rounded border-rose-300 text-rose-600 focus:ring-rose-500 h-4 w-4"
                   />
@@ -1606,7 +2121,7 @@ export function SubTaskManager({
                     Designate as QA Inspection Hold Point (Quality Gate)
                   </span>
                 </label>
-                {isHoldPoint && (
+                {(isHoldPoint || measurementType === 'Sign-off') && (
                   <div className="pl-6 pt-1 space-y-2 text-xs text-rose-800 dark:text-rose-300 animate-in fade-in">
                     <p className="text-[11px] text-rose-700 dark:text-rose-400">
                       🔒 Marking this deliverable complete will require formal QA inspector sign-off and approval before proceeding.
@@ -1678,6 +2193,13 @@ export function SubTaskManager({
                       let itemPercent = 0;
                       if (hasChildren) {
                         itemPercent = Math.round((completedChildrenCount / childTasks.length) * 100);
+                      } else if (st.measurementType === 'Checklist' && st.checklist && st.checklist.length > 0) {
+                        const doneCount = st.checklist.filter(c => c.completed).length;
+                        itemPercent = Math.round((doneCount / st.checklist.length) * 100);
+                      } else if (st.measurementType === 'Percentage') {
+                        itemPercent = Math.min(100, Math.max(0, st.completedQuantity ?? (st.status === 'Completed' ? 100 : 0)));
+                      } else if (st.measurementType === 'Yes/No' || st.measurementType === 'Milestone' || st.measurementType === 'Sign-off') {
+                        itemPercent = st.status === 'Completed' ? 100 : st.status === 'In Progress' ? 50 : 0;
                       } else if (st.targetQuantity && st.targetQuantity > 0) {
                         itemPercent = Math.min(100, Math.round(((st.completedQuantity || 0) / st.targetQuantity) * 100));
                       } else {
@@ -1708,18 +2230,18 @@ export function SubTaskManager({
                                   </div>
 
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    <div className="md:col-span-2 space-y-1">
-                                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Subtask Title</label>
+                                    <div className="space-y-1">
+                                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Subtask Title *</label>
                                       <input
                                         type="text"
                                         value={editTitle}
                                         onChange={e => setEditTitle(e.target.value)}
                                         required
-                                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
+                                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none font-medium"
                                       />
                                     </div>
                                     <div className="space-y-1">
-                                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Category</label>
+                                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Category</label>
                                       <select
                                         value={editCategory}
                                         onChange={e => setEditCategory(e.target.value as SubTaskCategory)}
@@ -1736,51 +2258,363 @@ export function SubTaskManager({
                                         <option value="Custom">Custom</option>
                                       </select>
                                     </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                     <div className="space-y-1">
-                                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Completed Qty</label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        value={editCompletedQty}
-                                        onChange={e => setEditCompletedQty(e.target.value ? Number(e.target.value) : '')}
-                                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-[#0B5FFF] focus:ring-2 focus:ring-[#0B5FFF] outline-none"
-                                      />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Target Qty</label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        value={editTargetQty}
-                                        onChange={e => setEditTargetQty(e.target.value ? Number(e.target.value) : '')}
-                                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
-                                      />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Unit</label>
-                                      <input
-                                        type="text"
-                                        value={editUnit}
-                                        onChange={e => setEditUnit(e.target.value)}
-                                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
-                                      />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Status</label>
+                                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                        <Sparkles className="h-3.5 w-3.5 text-[#0B5FFF]" />
+                                        Measurement Type
+                                      </label>
                                       <select
-                                        value={editStatus}
-                                        onChange={e => setEditStatus(e.target.value as SubTask['status'])}
-                                        className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
+                                        value={editMeasurementType}
+                                        onChange={e => handleMeasurementTypeChange(e.target.value as SubTaskMeasurementType, true)}
+                                        className="w-full h-9 px-3 rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-white dark:bg-slate-900 text-xs font-bold text-[#0B5FFF] dark:text-blue-400 focus:ring-2 focus:ring-[#0B5FFF] outline-none"
                                       >
-                                        <option value="Not Started">Not Started</option>
-                                        <option value="In Progress">In Progress</option>
-                                        <option value="Completed">Completed</option>
+                                        {MEASUREMENT_TYPES.map(m => (
+                                          <option key={m.type} value={m.type}>
+                                            {m.emoji} {m.label}
+                                          </option>
+                                        ))}
                                       </select>
                                     </div>
                                   </div>
+
+                                  {/* Dynamic Measurement Configuration Area for Edit Mode */}
+                                  {(() => {
+                                    const config = MEASUREMENT_TYPES.find(m => m.type === editMeasurementType);
+                                    if (['Quantity', 'Length', 'Area', 'Volume', 'Weight', 'Count'].includes(editMeasurementType)) {
+                                      return (
+                                        <div className="p-3 bg-white/70 dark:bg-slate-900/60 border border-blue-200 dark:border-blue-900/60 rounded-xl space-y-2.5">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                                              <span>{config?.emoji}</span> {config?.label} Progress & Targets
+                                            </span>
+                                            <span className="text-[11px] text-slate-500 font-medium">
+                                              {config?.description}
+                                            </span>
+                                          </div>
+                                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                            <div className="space-y-1">
+                                              <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Completed Qty</label>
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                value={editCompletedQty}
+                                                onChange={e => setEditCompletedQty(e.target.value ? Number(e.target.value) : '')}
+                                                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-[#0B5FFF] focus:ring-2 focus:ring-[#0B5FFF] outline-none"
+                                              />
+                                            </div>
+                                            <div className="space-y-1">
+                                              <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Target Qty</label>
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                value={editTargetQty}
+                                                onChange={e => setEditTargetQty(e.target.value ? Number(e.target.value) : '')}
+                                                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none"
+                                              />
+                                            </div>
+                                            <div className="space-y-1">
+                                              <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Unit</label>
+                                              <input
+                                                type="text"
+                                                value={editUnit}
+                                                onChange={e => setEditUnit(e.target.value)}
+                                                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none font-semibold text-[#0B5FFF]"
+                                              />
+                                            </div>
+                                            <div className="space-y-1">
+                                              <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Status</label>
+                                              <select
+                                                value={editStatus}
+                                                onChange={e => setEditStatus(e.target.value as SubTask['status'])}
+                                                className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-[#0B5FFF] outline-none font-semibold"
+                                              >
+                                                <option value="Not Started">Not Started</option>
+                                                <option value="In Progress">In Progress</option>
+                                                <option value="Completed">Completed</option>
+                                              </select>
+                                            </div>
+                                          </div>
+                                          {config?.presetUnits && (
+                                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                              <span className="text-[10px] text-slate-400">Unit Presets:</span>
+                                              {config.presetUnits.map(preset => (
+                                                <button
+                                                  type="button"
+                                                  key={preset}
+                                                  onClick={() => setEditUnit(preset)}
+                                                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                                    editUnit === preset 
+                                                      ? 'bg-[#0B5FFF] text-white shadow-xs' 
+                                                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-[#0B5FFF]'
+                                                  }`}
+                                                >
+                                                  {preset}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+
+                                    if (editMeasurementType === 'Percentage') {
+                                      const currentPct = typeof editCompletedQty === 'number' ? editCompletedQty : 0;
+                                      return (
+                                        <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/50 rounded-xl space-y-3">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                                              <Percent className="h-4 w-4 text-indigo-600" /> Percentage Progress Tracker
+                                            </span>
+                                            <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                                              {currentPct}%
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-3">
+                                            <input 
+                                              type="range"
+                                              min="0"
+                                              max="100"
+                                              value={currentPct}
+                                              onChange={e => {
+                                                const val = Number(e.target.value);
+                                                setEditCompletedQty(val);
+                                                setEditTargetQty(100);
+                                                setEditStatus(val >= 100 ? 'Completed' : val > 0 ? 'In Progress' : 'Not Started');
+                                              }}
+                                              className="flex-1 accent-[#0B5FFF] cursor-pointer"
+                                            />
+                                            <div className="flex items-center gap-1">
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                value={currentPct}
+                                                onChange={e => {
+                                                  const val = Math.min(100, Math.max(0, Number(e.target.value)));
+                                                  setEditCompletedQty(val);
+                                                  setEditTargetQty(100);
+                                                  setEditStatus(val >= 100 ? 'Completed' : val > 0 ? 'In Progress' : 'Not Started');
+                                                }}
+                                                className="w-16 h-8 text-center font-bold text-xs border border-indigo-300 dark:border-indigo-700 rounded-lg bg-white dark:bg-slate-900 text-indigo-600"
+                                              />
+                                              <span className="text-xs font-bold text-slate-500">%</span>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="text-[10px] text-slate-400">Quick Jump:</span>
+                                            {[0, 25, 50, 75, 100].map(val => (
+                                              <button
+                                                type="button"
+                                                key={val}
+                                                onClick={() => {
+                                                  setEditCompletedQty(val);
+                                                  setEditTargetQty(100);
+                                                  setEditStatus(val >= 100 ? 'Completed' : val > 0 ? 'In Progress' : 'Not Started');
+                                                }}
+                                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                  currentPct === val 
+                                                    ? 'bg-indigo-600 text-white' 
+                                                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-indigo-200 dark:border-indigo-800'
+                                                }`}
+                                              >
+                                                {val}%
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+
+                                    if (editMeasurementType === 'Checklist') {
+                                      const checkedCount = editChecklist.filter(c => c.completed).length;
+                                      const totalCount = editChecklist.length;
+                                      const pct = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
+                                      return (
+                                        <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-xl space-y-3">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                                              <ListChecks className="h-4 w-4 text-emerald-600" /> Interactive Checklist ({checkedCount}/{totalCount} Completed - {pct}%)
+                                            </span>
+                                            <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                                              Status: {editStatus}
+                                            </span>
+                                          </div>
+                                          <div className="flex gap-2">
+                                            <input
+                                              type="text"
+                                              placeholder="Add new step..."
+                                              value={editNewChecklistItemText}
+                                              onChange={e => setEditNewChecklistItemText(e.target.value)}
+                                              onKeyDown={e => {
+                                                if (e.key === 'Enter') {
+                                                  e.preventDefault();
+                                                  handleAddChecklistItem(editNewChecklistItemText, true);
+                                                }
+                                              }}
+                                              className="flex-1 h-9 px-3 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                                            />
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              onClick={() => handleAddChecklistItem(editNewChecklistItemText, true)}
+                                              className="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
+                                            >
+                                              <Plus className="h-3.5 w-3.5" /> Add Step
+                                            </Button>
+                                          </div>
+                                          {editChecklist.length > 0 && (
+                                            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                              {editChecklist.map((item, idx) => (
+                                                <div
+                                                  key={item.id}
+                                                  className={`flex items-center justify-between gap-2 p-2 rounded-lg border text-xs transition-colors ${
+                                                    item.completed 
+                                                      ? 'bg-emerald-100/50 dark:bg-emerald-950/40 border-emerald-300 text-slate-500' 
+                                                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                                                  }`}
+                                                >
+                                                  <label className="flex items-center gap-2 min-w-0 cursor-pointer flex-1">
+                                                    <input 
+                                                      type="checkbox"
+                                                      checked={item.completed}
+                                                      onChange={() => handleToggleEditChecklistItem(item.id)}
+                                                      className="rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                                                    />
+                                                    <span className={`text-xs font-medium truncate ${item.completed ? 'line-through text-slate-400' : ''}`}>
+                                                      Step #{idx + 1}: {item.text}
+                                                    </span>
+                                                  </label>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveChecklistItem(item.id, true)}
+                                                    className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                                                    title="Remove Step"
+                                                  >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                  </button>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+
+                                    if (editMeasurementType === 'Sign-off') {
+                                      return (
+                                        <div className="p-3 bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 rounded-xl space-y-2.5">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-rose-900 dark:text-rose-200 flex items-center gap-1.5">
+                                              <ShieldCheck className="h-4 w-4 text-rose-600" /> Mandatory QA Hold Point Quality Gate
+                                            </span>
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                              st.holdPointSignOff?.approved 
+                                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                                                : 'bg-rose-100 text-rose-800 border-rose-300'
+                                            }`}>
+                                              {st.holdPointSignOff?.approved ? 'QA Approved' : 'Pending QA Inspection'}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-wrap gap-4 pt-1">
+                                            <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-medium text-rose-900 dark:text-rose-200">
+                                              <input 
+                                                type="checkbox"
+                                                checked={editRequiresPhotoEvidence}
+                                                onChange={e => setEditRequiresPhotoEvidence(e.target.checked)}
+                                                className="rounded border-rose-300 text-rose-600 focus:ring-rose-500 h-3.5 w-3.5"
+                                              />
+                                              📸 Require Inspection Photo Evidence
+                                            </label>
+                                            <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-medium text-rose-900 dark:text-rose-200">
+                                              <input 
+                                                type="checkbox"
+                                                checked={editRequiresSupervisorSignOff}
+                                                onChange={e => setEditRequiresSupervisorSignOff(e.target.checked)}
+                                                className="rounded border-rose-300 text-rose-600 focus:ring-rose-500 h-3.5 w-3.5"
+                                              />
+                                              ✍️ Require Supervisor QC Stamp
+                                            </label>
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+
+                                    if (editMeasurementType === 'Milestone') {
+                                      return (
+                                        <div className="p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/50 rounded-xl space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                                              <Flag className="h-4 w-4 text-purple-600" /> Milestone Checkpoint Settings
+                                            </span>
+                                            <select
+                                              value={editStatus}
+                                              onChange={e => setEditStatus(e.target.value as SubTask['status'])}
+                                              className="h-7 px-2 rounded border border-purple-300 bg-white dark:bg-slate-900 text-[11px] font-bold text-purple-900 dark:text-purple-200"
+                                            >
+                                              <option value="Not Started">Pending Checkpoint</option>
+                                              <option value="In Progress">In Verification</option>
+                                              <option value="Completed">Milestone Reached (100%)</option>
+                                            </select>
+                                          </div>
+                                          <div className="space-y-1">
+                                            <label className="text-[11px] font-medium text-purple-800 dark:text-purple-300 block">
+                                              Milestone Verification Criteria
+                                            </label>
+                                            <input 
+                                              type="text"
+                                              value={editMilestoneCriteria}
+                                              onChange={e => setEditMilestoneCriteria(e.target.value)}
+                                              className="w-full h-8 px-3 rounded-lg border border-purple-300 dark:border-purple-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-purple-500 outline-none"
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+
+                                    if (editMeasurementType === 'Yes/No') {
+                                      return (
+                                        <div className="p-3 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                              <ToggleLeft className="h-4 w-4 text-blue-500" /> Binary State (Done / Pending)
+                                            </span>
+                                            <div className="flex gap-2">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setEditStatus('Not Started');
+                                                  setEditCompletedQty(0);
+                                                }}
+                                                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                                  editStatus !== 'Completed'
+                                                    ? 'bg-slate-700 text-white'
+                                                    : 'bg-white dark:bg-slate-900 text-slate-600 border border-slate-300'
+                                                }`}
+                                              >
+                                                ✕ Pending (0%)
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setEditStatus('Completed');
+                                                  setEditCompletedQty(1);
+                                                }}
+                                                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                                  editStatus === 'Completed'
+                                                    ? 'bg-emerald-600 text-white'
+                                                    : 'bg-white dark:bg-slate-900 text-slate-600 border border-slate-300'
+                                                }`}
+                                              >
+                                                ✓ Yes (Done - 100%)
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+
+                                    return null;
+                                  })()}
 
                                   {/* Edit Form Assignment Checklists: Workers, Machinery, Teams */}
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1920,7 +2754,7 @@ export function SubTaskManager({
                                     <label className="flex items-center gap-2 cursor-pointer">
                                       <input 
                                         type="checkbox"
-                                        checked={editIsMilestone}
+                                        checked={editIsMilestone || editMeasurementType === 'Milestone'}
                                         onChange={e => setEditIsMilestone(e.target.checked)}
                                         className="rounded border-purple-300 text-purple-600 focus:ring-purple-500 h-4 w-4"
                                       />
@@ -1929,7 +2763,7 @@ export function SubTaskManager({
                                         Designate as Key Milestone Checkpoint
                                       </span>
                                     </label>
-                                    {editIsMilestone && (
+                                    {(editIsMilestone || editMeasurementType === 'Milestone') && (
                                       <div className="pl-6">
                                         <label className="text-[11px] font-medium text-purple-800 dark:text-purple-300 block mb-1">
                                           Milestone Criteria / Sign-off Requirement
@@ -1949,7 +2783,7 @@ export function SubTaskManager({
                                     <label className="flex items-center gap-2 cursor-pointer">
                                       <input 
                                         type="checkbox"
-                                        checked={editIsHoldPoint}
+                                        checked={editIsHoldPoint || editMeasurementType === 'Sign-off'}
                                         onChange={e => setEditIsHoldPoint(e.target.checked)}
                                         className="rounded border-rose-300 text-rose-600 focus:ring-rose-500 h-4 w-4"
                                       />
@@ -1958,7 +2792,7 @@ export function SubTaskManager({
                                         Designate as QA Inspection Hold Point (Quality Gate)
                                       </span>
                                     </label>
-                                    {editIsHoldPoint && (
+                                    {(editIsHoldPoint || editMeasurementType === 'Sign-off') && (
                                       <div className="pl-6 pt-1 space-y-2 text-xs text-rose-800 dark:text-rose-300">
                                         <p className="text-[11px] text-rose-700 dark:text-rose-400">
                                           🔒 Quality Gate: Requires formal QA supervisor inspection sign-off before completion.
@@ -2193,6 +3027,41 @@ export function SubTaskManager({
                                               </p>
                                             )}
 
+                                            {/* Checklist inline steps viewer if measurementType is Checklist */}
+                                            {st.measurementType === 'Checklist' && st.checklist && st.checklist.length > 0 && (
+                                              <div className="space-y-1.5 p-2.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 mt-1">
+                                                <div className="flex items-center justify-between text-[11px] font-bold text-emerald-900 dark:text-emerald-200">
+                                                  <span className="flex items-center gap-1">
+                                                    <ListChecks className="h-3.5 w-3.5 text-emerald-600" />
+                                                    Checklist Steps ({st.checklist.filter(c => c.completed).length}/{st.checklist.length} Complete):
+                                                  </span>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+                                                  {st.checklist.map((item, idx) => (
+                                                    <label 
+                                                      key={item.id} 
+                                                      className={`flex items-center gap-2 p-1.5 rounded-md border text-xs cursor-pointer transition-all ${
+                                                        item.completed 
+                                                          ? 'bg-emerald-100/70 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-slate-500 dark:text-slate-400' 
+                                                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-emerald-400'
+                                                      }`}
+                                                    >
+                                                      <input 
+                                                        type="checkbox"
+                                                        disabled={readOnly}
+                                                        checked={item.completed}
+                                                        onChange={() => handleToggleSubtaskChecklistItem(st.id, item.id)}
+                                                        className="rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                                                      />
+                                                      <span className={`text-[11px] font-medium truncate ${item.completed ? 'line-through text-slate-400' : ''}`}>
+                                                        #{idx + 1}: {item.text}
+                                                      </span>
+                                                    </label>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+
                                             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                                               {/* Assigned Workers */}
                                               {((st.assignedWorkers && st.assignedWorkers.length > 0) || st.assignedPerson) && (
@@ -2280,7 +3149,7 @@ export function SubTaskManager({
 
                                       {/* Progress & Quantity Logging Bar */}
                                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 bg-white/60 dark:bg-slate-900/40 p-2.5 rounded-lg">
-                                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                                        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                                           <span className="text-xs font-bold text-slate-600 dark:text-slate-300 shrink-0">
                                             Progress:
                                           </span>
@@ -2288,6 +3157,38 @@ export function SubTaskManager({
                                             <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                                               {completedChildrenCount} / {childTasks.length} child tasks completed
                                             </span>
+                                          ) : st.measurementType === 'Checklist' && st.checklist ? (
+                                            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                                              <ListChecks className="h-3.5 w-3.5 text-emerald-600" />
+                                              {st.checklist.filter(c => c.completed).length} / {st.checklist.length} steps checked
+                                            </span>
+                                          ) : st.measurementType === 'Percentage' ? (
+                                            <div className="flex items-center gap-1.5">
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                disabled={readOnly}
+                                                value={st.completedQuantity ?? (st.status === 'Completed' ? 100 : 0)}
+                                                onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
+                                                className="w-14 h-7 text-center font-bold text-xs border border-indigo-300 dark:border-indigo-700 rounded bg-white dark:bg-slate-900 text-indigo-600"
+                                              />
+                                              <span className="text-xs font-bold text-indigo-600">%</span>
+                                            </div>
+                                          ) : st.measurementType === 'Yes/No' ? (
+                                            <button
+                                              type="button"
+                                              disabled={readOnly}
+                                              onClick={() => handleToggleStatus(st.id)}
+                                              className={`px-2.5 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all ${
+                                                st.status === 'Completed'
+                                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300'
+                                              }`}
+                                            >
+                                              {st.status === 'Completed' ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                                              {st.status === 'Completed' ? 'Yes (Done)' : 'No (Pending)'}
+                                            </button>
                                           ) : st.targetQuantity ? (
                                             <div className="flex items-center gap-1">
                                               {!readOnly && (

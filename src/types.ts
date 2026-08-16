@@ -77,6 +77,25 @@ export type SubTaskCategory =
   | 'Quality & Inspection'
   | 'Custom';
 
+export type SubTaskMeasurementType = 
+  | 'Quantity'
+  | 'Length'
+  | 'Area'
+  | 'Volume'
+  | 'Weight'
+  | 'Count'
+  | 'Percentage'
+  | 'Checklist'
+  | 'Sign-off'
+  | 'Milestone'
+  | 'Yes/No';
+
+export interface SubTaskChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
 export interface SubTaskHoldPointSignOff {
   signedBy: string;
   signedAt: string;
@@ -90,6 +109,8 @@ export interface SubTask {
   title: string;
   category: SubTaskCategory;
   status: 'Not Started' | 'In Progress' | 'Completed';
+  measurementType?: SubTaskMeasurementType;
+  checklist?: SubTaskChecklistItem[];
   targetQuantity?: number;
   completedQuantity?: number;
   unit?: string;
@@ -115,9 +136,11 @@ export interface SubTask {
 
   // Link & Survey Discipline Metadata
   linkedActivityId?: string;
+  linkedActivityName?: string;
   linkedSubtaskId?: string;
   isLinkedDiscipline?: boolean;
   sourceActivityId?: string;
+  sourceActivityName?: string;
   sectionSpan?: string;
   chainage?: string;
   surveyRecordId?: string;
