@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, Button, Badge, CustomSelect } from '../ui';
-import { Truck, Plus, Wrench, Fuel, Clock, CheckCircle2, ArrowLeft, Edit3, Trash2, ClipboardList, X, Building2, Handshake, CircleDollarSign } from 'lucide-react';
+import { Truck, Plus, Wrench, Fuel, Clock, CheckCircle2, ArrowLeft, Edit3, Trash2, ClipboardList, X, Building2, Handshake, CircleDollarSign, Calendar } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Equipment as EquipmentType, EquipmentLog, EquipmentStatus, EquipmentLogType, EquipmentOwnership } from '../../types';
 import { RemindersWidget } from '../RemindersWidget';
@@ -35,6 +35,8 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
   const [newHourlyRate, setNewHourlyRate] = useState<number | ''>('');
 
   // Log states
+  const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
+  const [logTime, setLogTime] = useState(new Date().toTimeString().slice(0, 5));
   const [logHours, setLogHours] = useState(8);
   const [logStartTime, setLogStartTime] = useState('07:00');
   const [logEndTime, setLogEndTime] = useState('15:00');
@@ -144,6 +146,8 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
   const openLog = (item: EquipmentType) => {
     setLogModalEq(item);
     setLogTab('Hours');
+    setLogDate(new Date().toISOString().split('T')[0]);
+    setLogTime(new Date().toTimeString().slice(0, 5));
     setLogStartTime('07:00');
     setLogEndTime('15:00');
     setLogHours(8);
@@ -161,8 +165,11 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
     e.preventDefault();
     if (!logModalEq) return;
 
-    const now = new Date();
-    const formattedDate = `${now.toISOString().split('T')[0]} ${now.toTimeString().slice(0, 5)}`;
+    const selectedDate = logDate || new Date().toISOString().split('T')[0];
+    const selectedTime = (logTab === 'Hours' && logStartTime) 
+      ? logStartTime 
+      : (logTime || new Date().toTimeString().slice(0, 5));
+    const formattedDate = `${selectedDate} ${selectedTime}`;
     const appliedRate = logHourlyRateApplied !== '' ? Number(logHourlyRateApplied) : ((logModalEq.trackOperationalCost !== false && logModalEq.hourlyRate) ? logModalEq.hourlyRate : 0);
 
     const newLog: EquipmentLog = {
@@ -701,7 +708,19 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
             <form onSubmit={handleLogSubmit} className="space-y-3 text-xs">
               {logTab === 'Hours' && (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-slate-500 font-semibold block mb-1 flex items-center gap-1">
+                        <Calendar className="h-3 w-3 text-blue-500" /> Log Date
+                      </label>
+                      <input 
+                        type="date" 
+                        required 
+                        value={logDate} 
+                        onChange={e => setLogDate(e.target.value)} 
+                        className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm font-semibold" 
+                      />
+                    </div>
                     <div>
                       <label className="text-slate-500 font-semibold block mb-1">Start Time</label>
                       <input 
@@ -753,42 +772,70 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
                 </div>
               )}
               {logTab === 'Refuel' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-slate-500">Litres Added</label>
-                    <input type="number" value={logFuelLitres} onChange={e => setLogFuelLitres(Number(e.target.value))} required className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm" />
-                  </div>
-                  <div>
-                    <label className="text-slate-500">New Fuel Level %</label>
-                    <input type="number" min="0" max="100" value={logFuelLevel} onChange={e => setLogFuelLevel(Number(e.target.value))} required className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm" />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-slate-500 font-semibold block mb-1 flex items-center gap-1">
+                        <Calendar className="h-3 w-3 text-emerald-500" /> Log Date
+                      </label>
+                      <input 
+                        type="date" 
+                        required 
+                        value={logDate} 
+                        onChange={e => setLogDate(e.target.value)} 
+                        className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm font-semibold" 
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-500 font-semibold block mb-1">Litres Added</label>
+                      <input type="number" value={logFuelLitres} onChange={e => setLogFuelLitres(Number(e.target.value))} required className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-slate-500 font-semibold block mb-1">New Fuel Level %</label>
+                      <input type="number" min="0" max="100" value={logFuelLevel} onChange={e => setLogFuelLevel(Number(e.target.value))} required className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm" />
+                    </div>
                   </div>
                 </div>
               )}
               {logTab === 'Maintenance' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-slate-500 font-semibold block mb-1">Service Type</label>
-                    <CustomSelect 
-                      value={logMaintType} 
-                      onChange={val => setLogMaintType(val)} 
-                      options={[
-                        'Wash / Jet Cleaning',
-                        'Routine Service',
-                        'Oil & Filter Change',
-                        'Hydraulic System Repair',
-                        'Tire / Track Maintenance',
-                        'Engine Overhaul',
-                        'Safety Inspection',
-                        'Battery & Electrical Check',
-                        'Greasing & Lubrication'
-                      ]}
-                      className="w-full h-9 bg-transparent rounded-lg border border-slate-200 dark:border-slate-800 text-sm" 
-                      customPlaceholder="Enter custom service type..."
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-500 font-semibold block mb-1">Cost (Rands - ZAR)</label>
-                    <input type="number" value={logCost} onChange={e => setLogCost(e.target.value ? Number(e.target.value) : '')} placeholder="e.g. 3500" className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm font-bold text-emerald-600" />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-slate-500 font-semibold block mb-1 flex items-center gap-1">
+                        <Calendar className="h-3 w-3 text-rose-500" /> Log Date
+                      </label>
+                      <input 
+                        type="date" 
+                        required 
+                        value={logDate} 
+                        onChange={e => setLogDate(e.target.value)} 
+                        className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm font-semibold" 
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-500 font-semibold block mb-1">Service Type</label>
+                      <CustomSelect 
+                        value={logMaintType} 
+                        onChange={val => setLogMaintType(val)} 
+                        options={[
+                          'Wash / Jet Cleaning',
+                          'Routine Service',
+                          'Oil & Filter Change',
+                          'Hydraulic System Repair',
+                          'Tire / Track Maintenance',
+                          'Engine Overhaul',
+                          'Safety Inspection',
+                          'Battery & Electrical Check',
+                          'Greasing & Lubrication'
+                        ]}
+                        className="w-full h-9 bg-transparent rounded-lg border border-slate-200 dark:border-slate-800 text-sm" 
+                        customPlaceholder="Enter custom service type..."
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-500 font-semibold block mb-1">Cost (Rands - ZAR)</label>
+                      <input type="number" value={logCost} onChange={e => setLogCost(e.target.value ? Number(e.target.value) : '')} placeholder="e.g. 3500" className="w-full h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-sm font-bold text-emerald-600" />
+                    </div>
                   </div>
                 </div>
               )}

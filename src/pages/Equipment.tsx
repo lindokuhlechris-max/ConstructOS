@@ -154,6 +154,8 @@ export function Equipment() {
   const [formRentalDeposit, setFormRentalDeposit] = useState<number | ''>('');
 
   // Log Form State
+  const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
+  const [logTime, setLogTime] = useState(new Date().toTimeString().slice(0, 5));
   const [logStartTime, setLogStartTime] = useState('07:00');
   const [logEndTime, setLogEndTime] = useState('15:00');
   const [logHoursAdded, setLogHoursAdded] = useState(8);
@@ -323,6 +325,8 @@ export function Equipment() {
       setLogTab(defaultTab);
     }
 
+    setLogDate(new Date().toISOString().split('T')[0]);
+    setLogTime(new Date().toTimeString().slice(0, 5));
     setLogStartTime('07:00');
     setLogEndTime('15:00');
     setLogHoursAdded(8);
@@ -458,8 +462,11 @@ export function Equipment() {
     e.preventDefault();
     if (!logModalEq) return;
 
-    const now = new Date();
-    const formattedDate = `${now.toISOString().split('T')[0]} ${now.toTimeString().slice(0, 5)}`;
+    const selectedDate = logDate || new Date().toISOString().split('T')[0];
+    const selectedTime = (logTab === 'Hours' && logStartTime) 
+      ? logStartTime 
+      : (logTime || new Date().toTimeString().slice(0, 5));
+    const formattedDate = `${selectedDate} ${selectedTime}`;
 
     const appliedRate = logHourlyRateApplied !== '' 
       ? Number(logHourlyRateApplied) 
@@ -2170,9 +2177,23 @@ export function Equipment() {
             <form onSubmit={handleLogSubmit} className="p-6 overflow-y-auto space-y-4">
               {logTab === 'Hours' && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Start Time</label>
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-blue-500" /> Log Date (Work Date)
+                      </label>
+                      <input 
+                        type="date" 
+                        required 
+                        value={logDate} 
+                        onChange={e => setLogDate(e.target.value)} 
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-blue-500" /> Start Time
+                      </label>
                       <input 
                         type="time" 
                         value={logStartTime} 
@@ -2181,7 +2202,9 @@ export function Equipment() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">End Time</label>
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-blue-500" /> End Time
+                      </label>
                       <input 
                         type="time" 
                         value={logEndTime} 
@@ -2255,7 +2278,19 @@ export function Equipment() {
 
               {logTab === 'Mileage' && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-purple-500" /> Log Date (Trip Date)
+                      </label>
+                      <input 
+                        type="date" 
+                        required 
+                        value={logDate} 
+                        onChange={e => setLogDate(e.target.value)} 
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-purple-500" 
+                      />
+                    </div>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Distance Travelled Today (km)</label>
                       <input 
@@ -2311,7 +2346,19 @@ export function Equipment() {
 
               {logTab === 'Loads & Trips' && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-indigo-500" /> Log Date (Haul Date)
+                      </label>
+                      <input 
+                        type="date" 
+                        required 
+                        value={logDate} 
+                        onChange={e => setLogDate(e.target.value)} 
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500" 
+                      />
+                    </div>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Number of Loads / Trips</label>
                       <input 
@@ -2364,7 +2411,19 @@ export function Equipment() {
 
               {logTab === 'Power Output' && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-amber-500" /> Log Date (Generation Date)
+                      </label>
+                      <input 
+                        type="date" 
+                        required 
+                        value={logDate} 
+                        onChange={e => setLogDate(e.target.value)} 
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-amber-500" 
+                      />
+                    </div>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Power Generated (kWh)</label>
                       <input 
@@ -2417,7 +2476,19 @@ export function Equipment() {
 
               {logTab === 'Refuel' && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-emerald-500" /> Log Date (Refueling Date)
+                      </label>
+                      <input 
+                        type="date" 
+                        required 
+                        value={logDate} 
+                        onChange={e => setLogDate(e.target.value)} 
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
+                      />
+                    </div>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Fuel Added (Litres)</label>
                       <input 
@@ -2425,7 +2496,7 @@ export function Equipment() {
                         value={logFuelLitres} 
                         onChange={e => setLogFuelLitres(Number(e.target.value))} 
                         required
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500" 
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-emerald-500" 
                       />
                     </div>
                     <div className="space-y-2">
@@ -2468,7 +2539,19 @@ export function Equipment() {
 
               {logTab === 'Maintenance' && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-rose-500" /> Log Date (Service Date)
+                      </label>
+                      <input 
+                        type="date" 
+                        required 
+                        value={logDate} 
+                        onChange={e => setLogDate(e.target.value)} 
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-rose-500" 
+                      />
+                    </div>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Service Type</label>
                       <CustomSelect 
