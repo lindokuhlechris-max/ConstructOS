@@ -26,9 +26,15 @@ import {
   Sliders,
   ChevronDown,
   Printer,
-  Copy
+  Copy,
+  Compass,
+  ShieldCheck,
+  Package,
+  Zap,
+  Building2,
+  Link2
 } from 'lucide-react';
-import { Activity, ActivityStatus, Priority } from '../types';
+import { Activity, ActivityStatus, Priority, WORKSTREAMS } from '../types';
 import { Badge, Button, ProgressBar } from './ui';
 import { useAppContext } from '../context/AppContext';
 import { printActivitiesSummary } from '../lib/pdfPrint';
@@ -131,10 +137,21 @@ export function ActivitySlideOver({
                 <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                   {activity.id}
                 </span>
+                {activity.workstream && WORKSTREAMS[activity.workstream] && (
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${WORKSTREAMS[activity.workstream].badgeClass}`}>
+                    {WORKSTREAMS[activity.workstream].shortName}
+                  </span>
+                )}
                 <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/60 text-[#0B5FFF] dark:text-blue-400">
                   {activity.workPackage || 'General Work'}
                 </span>
                 {getPriorityBadge(activity.priority)}
+                {(activity.linkedPTSActivityName || activity.sectionSpan) && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                    <Link2 className="h-3 w-3" />
+                    {activity.sectionSpan ? activity.sectionSpan : `Linked: ${activity.linkedPTSActivityName}`}
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5">

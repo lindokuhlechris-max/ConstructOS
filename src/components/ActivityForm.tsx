@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, CustomSelect } from './ui';
-import { Activity, ActivityStatus, Priority, SubTask } from '../types';
-import { Save, X, RotateCcw, Copy } from 'lucide-react';
+import { Activity, ActivityStatus, Priority, SubTask, WorkstreamType, WORKSTREAMS } from '../types';
+import { Save, X, RotateCcw, Copy, Link2, Compass, ShieldCheck, Package, ShieldAlert, Zap, Building2 } from 'lucide-react';
 import { SubTaskManager } from './SubTaskManager';
 import { useAppContext } from '../context/AppContext';
 
@@ -13,7 +13,7 @@ interface ActivityFormProps {
 }
 
 export function ActivityForm({ onClose, onSubmit, initialValues, isDuplicate }: ActivityFormProps) {
-  const { projects, customFieldDefinitions } = useAppContext();
+  const { activities, projects, customFieldDefinitions } = useAppContext();
   
   const [formData, setFormData] = useState<Partial<Activity>>(() => {
     if (initialValues) {
@@ -280,6 +280,88 @@ export function ActivityForm({ onClose, onSubmit, initialValues, isDuplicate }: 
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          {/* Workstream & Project Row */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5 text-[#0B5FFF]" />
+                Select Independent Workstream
+              </label>
+              <span className="text-[10px] text-slate-400">
+                Determines the operational domain and cross-discipline linking rules
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              {(Object.keys(WORKSTREAMS) as WorkstreamType[]).map(wsKey => {
+                const ws = WORKSTREAMS[wsKey];
+                const isSelected = (formData.workstream || 'PTS_CONSTRUCTION') === wsKey;
+                return (
+                  <button
+                    key={wsKey}
+                    type="button"
+                    onClick={() => {
+                      handleChange('workstream', wsKey);
+                      if (wsKey === 'SURVEYING' && !formData.discipline) handleChange('discipline', 'Surveying');
+                      if (wsKey === 'QA_QC' && !formData.discipline) handleChange('discipline', 'Quality');
+                      if (wsKey === 'SAFETY' && !formData.discipline) handleChange('discipline', 'Safety');
+                    }}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
+                      isSelected 
+                        ? 'border-[#0B5FFF] bg-blue-50/80 dark:bg-blue-950/60 ring-2 ring-[#0B5FFF]/30 shadow-xs' 
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {ws.shortName}
+                    </span>
+                    <span className="text-[9px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-tight">
+                      {ws.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Optional Target PTS Activity Linking (for non-PTS workstreams) */}
+            {formData.workstream && formData.workstream !== 'PTS_CONSTRUCTION' && (
+              <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <Link2 className="h-4 w-4 text-indigo-600 shrink-0" />
+                  <div>
+                    <div className="font-bold text-indigo-900 dark:text-indigo-200">
+                      Link Work Item to Target PTS Construction Activity
+                    </div>
+                    <div className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80">
+                      Progress and sign-offs in this {WORKSTREAMS[formData.workstream]?.shortName} item will automatically unlock and update the target PTS activity.
+                    </div>
+                  </div>
+                </div>
+
+                <select
+                  value={formData.linkedPTSActivityId || ''}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    const foundAct = activities.find(a => a.id === selectedId);
+                    handleChange('linkedPTSActivityId', selectedId);
+                    handleChange('linkedPTSActivityName', foundAct?.name || '');
+                    if (foundAct?.sectionSpan) handleChange('sectionSpan', foundAct.sectionSpan);
+                  }}
+                  className="h-9 px-3 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white font-medium outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-72 shrink-0"
+                >
+                  <option value="">None (Independent / Multi-span)</option>
+                  {activities
+                    .filter(a => a.workstream === 'PTS_CONSTRUCTION' || !a.workstream)
+                    .map(act => (
+                      <option key={act.id} value={act.id}>
+                        {act.name} {act.sectionSpan ? `[${act.sectionSpan}]` : ''}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <label className="text-xs font-semibold text-slate-500 block mb-1">Project *</label>
@@ -310,7 +392,7 @@ export function ActivityForm({ onClose, onSubmit, initialValues, isDuplicate }: 
               <CustomSelect
                 value={formData.discipline || 'Civil'}
                 onChange={(val) => handleChange('discipline', val)}
-                options={['Civil', 'MEP', 'Structural', 'Architectural', 'Instrumentation', 'Geotechnical']}
+                options={['Civil', 'Surveying', 'Quality', 'Safety', 'MEP', 'Structural', 'Electrical', 'Instrumentation', 'Geotechnical']}
                 className={`${getInputClass('discipline')} appearance-none`}
                 customPlaceholder="Enter custom discipline..."
               />

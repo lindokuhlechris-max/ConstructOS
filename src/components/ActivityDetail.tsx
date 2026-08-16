@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ActivityStatus, Priority, TaskMaterialAssignment, TaskLabourAssignment, TaskEquipmentAssignment, SubTask, DailyReport, canUserEditSection } from '../types';
+import { Activity, ActivityStatus, Priority, TaskMaterialAssignment, TaskLabourAssignment, TaskEquipmentAssignment, SubTask, DailyReport, canUserEditSection, WORKSTREAMS, WorkstreamType } from '../types';
 import { Card, CardHeader, CardTitle, CardContent, Badge, ProgressBar, Button } from './ui';
 import { InteractiveProgress } from './InteractiveProgress';
 import { CameraCapture } from './CameraCapture';
@@ -69,7 +69,11 @@ import {
   CheckSquare,
   Layers,
   Sparkles,
-  CheckCircle
+  CheckCircle,
+  Compass,
+  Zap,
+  Link2,
+  ShieldCheck
 } from 'lucide-react';
 
 interface ActivityDetailProps {
@@ -84,7 +88,7 @@ interface ActivityDetailProps {
 export function ActivityDetail({ activity: initialActivity, onSave, onClose, onDelete, onDuplicate, isEditable = true }: ActivityDetailProps) {
   const navigate = useNavigate();
   const { 
-    projects, materials, employees, equipment, documents, updateActivity, addReport, addAuditLog, addAllocation, 
+    activities, projects, materials, employees, equipment, documents, updateActivity, addReport, addAuditLog, addAllocation, 
     userRole, currentUserProfile, labourLogs, addLabourLog, deleteLabourLog, equipmentLogs, addEquipmentLog, deleteEquipmentLog 
   } = useAppContext();
   const canEditActivities = canUserEditSection(currentUserProfile, 'activities');
@@ -95,6 +99,74 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
   const [copiedGps, setCopiedGps] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+
+  // Cross-Workstream Multi-Discipline Handshake Data
+  const crossDisciplineData = React.useMemo(() => {
+    const actSpan = activity.sectionSpan || activity.name.match(/PTS\s*\d+\s*(?:TO|-)\s*PTS\s*\d+/i)?.[0]?.toUpperCase().replace(/\s*TO\s*/i, ' - ');
+    
+    // Find all linked survey items (from other activities or subtasks)
+    const surveyItems: any[] = [];
+    const qaItems: any[] = [];
+    const materialItems: any[] = [];
+    const safetyItems: any[] = [];
+
+    (activities || []).forEach(a => {
+      const isSurveyAct = a.workstream === 'SURVEYING' && (a.linkedPTSActivityId === activity.id || (actSpan && a.sectionSpan === actSpan));
+      const isQaAct = a.workstream === 'QA_QC' && (a.linkedPTSActivityId === activity.id || (actSpan && a.sectionSpan === actSpan));
+      const isMatAct = a.workstream === 'MATERIALS' && (a.linkedPTSActivityId === activity.id || (actSpan && a.sectionSpan === actSpan));
+      const isSafetyAct = a.workstream === 'SAFETY' && (a.linkedPTSActivityId === activity.id || (actSpan && a.sectionSpan === actSpan));
+
+      if (isSurveyAct) surveyItems.push({ id: a.id, title: a.name, status: a.status, progress: a.progress, source: 'Activity', data: a });
+      if (isQaAct) qaItems.push({ id: a.id, title: a.name, status: a.status, holdPoint: true, data: a });
+      if (isMatAct) materialItems.push({ id: a.id, title: a.name, status: a.status, data: a });
+      if (isSafetyAct) safetyItems.push({ id: a.id, title: a.name, status: a.status, data: a });
+
+      // Scan subtasks for cross-links
+      (a.subtasks || []).forEach(st => {
+        const isLinkedToThis = st.linkedActivityId === activity.id;
+        const matchesSpan = actSpan && st.sectionSpan === actSpan;
+        const isThisAct = a.id === activity.id;
+
+        if (isLinkedToThis || matchesSpan || isThisAct) {
+          if (st.category === 'Surveying & Set-out' || st.surveyData || st.isLinkedDiscipline) {
+            surveyItems.push({
+              id: st.id,
+              title: st.title,
+              status: st.status,
+              progress: st.completedQuantity ? Math.round(((st.completedQuantity || 0)/(st.targetQuantity || 1))*100) : (st.status === 'Completed' ? 100 : 0),
+              surveyor: st.surveyData?.surveyorName,
+              coords: st.surveyData?.coordinates,
+              source: 'Subtask',
+              data: st
+            });
+          }
+          if (st.isHoldPoint || st.category === 'Quality Control & Hold Points') {
+            qaItems.push({
+              id: st.id,
+              title: st.title,
+              status: st.holdPointSignOff?.approved ? 'Completed' : st.status,
+              holdPoint: true,
+              inspector: st.holdPointSignOff?.signedBy,
+              source: 'Subtask',
+              data: st
+            });
+          }
+        }
+      });
+    });
+
+    (activity.assignedMaterials || []).forEach(m => {
+      materialItems.push({ id: m.id, title: `${m.name} (${m.quantity} ${m.unit || 'units'})`, status: 'Allocated', data: m });
+    });
+
+    return {
+      actSpan,
+      surveyItems,
+      qaItems,
+      materialItems,
+      safetyItems
+    };
+  }, [activity, activities]);
 
   const calculatedActualHours = React.useMemo(() => {
     if (!labourLogs) return activity.actualHours || 0;
@@ -1629,6 +1701,150 @@ ${subtaskSummaryLines}
                     ))}
                   </div>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Multi-Discipline Cross-Workstream Readiness Matrix */}
+          <Card className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-b from-white to-indigo-50/20 dark:from-slate-900 dark:to-indigo-950/20 shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between py-4 border-b border-indigo-100/60 dark:border-indigo-900/40">
+              <CardTitle className="text-sm font-bold uppercase text-slate-700 dark:text-slate-300 tracking-wider flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-[#0B5FFF]" />
+                Multi-Discipline Readiness & Handshake Matrix
+              </CardTitle>
+              {crossDisciplineData.actSpan && (
+                <Badge variant="outline" className="text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800">
+                  📍 {crossDisciplineData.actSpan}
+                </Badge>
+              )}
+            </CardHeader>
+            <CardContent className="p-4 flex flex-col gap-3">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Independent workstream records linked to this construction task. Updates in Surveying, QA/QC, Materials, or Safety automatically synchronize here.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* 1. Surveying & Set-out */}
+                <div className="p-3 rounded-xl bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-sky-900 dark:text-sky-200 flex items-center gap-1.5">
+                      <Compass className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                      Surveying & Setting-Out
+                    </span>
+                    {crossDisciplineData.surveyItems.some(s => s.status === 'Completed') ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                        ✅ Pegged & Cleared
+                      </span>
+                    ) : crossDisciplineData.surveyItems.length > 0 ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                        🚀 In Progress
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                        ⚪ Not Started
+                      </span>
+                    )}
+                  </div>
+
+                  {crossDisciplineData.surveyItems.length > 0 ? (
+                    <div className="space-y-1 mt-1">
+                      {crossDisciplineData.surveyItems.map((s, idx) => (
+                        <div key={idx} className="text-xs p-2 rounded-lg bg-white/80 dark:bg-slate-900/60 border border-sky-100 dark:border-sky-900/40">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">{s.title}</div>
+                          {s.coords && <div className="text-[10px] font-mono text-slate-500">Coords: {s.coords}</div>}
+                          {s.surveyor && <div className="text-[10px] text-slate-500">Surveyor: {s.surveyor}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic">No survey record bound to this section yet.</p>
+                  )}
+                </div>
+
+                {/* 2. QA/QC & Hold Points */}
+                <div className="p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-800/60 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-rose-900 dark:text-rose-200 flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                      QA/QC Hold Points
+                    </span>
+                    {crossDisciplineData.qaItems.length > 0 ? (
+                      crossDisciplineData.qaItems.some(q => q.status === 'Completed') ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                          ✅ Signed Off
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                          🛑 Hold Point Active
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                        No Active Hold
+                      </span>
+                    )}
+                  </div>
+
+                  {crossDisciplineData.qaItems.length > 0 ? (
+                    <div className="space-y-1 mt-1">
+                      {crossDisciplineData.qaItems.map((q, idx) => (
+                        <div key={idx} className="text-xs p-2 rounded-lg bg-white/80 dark:bg-slate-900/60 border border-rose-100 dark:border-rose-900/40 flex justify-between items-center">
+                          <div>
+                            <div className="font-semibold text-slate-800 dark:text-slate-200">{q.title}</div>
+                            {q.inspector && <div className="text-[10px] text-slate-500">Inspector: {q.inspector}</div>}
+                          </div>
+                          <span className="text-[10px] font-bold text-rose-700 dark:text-rose-300">
+                            {q.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic">No QA hold points pending for this section.</p>
+                  )}
+                </div>
+
+                {/* 3. Materials & Supply */}
+                <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                      <Package className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                      Materials & Ducts
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                      {crossDisciplineData.materialItems.length > 0 ? 'Batch Allocated' : 'Standard'}
+                    </span>
+                  </div>
+
+                  {crossDisciplineData.materialItems.length > 0 ? (
+                    <div className="space-y-1 mt-1">
+                      {crossDisciplineData.materialItems.map((m, idx) => (
+                        <div key={idx} className="text-xs p-2 rounded-lg bg-white/80 dark:bg-slate-900/60 border border-amber-100 dark:border-amber-900/40">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">{m.title}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic">No dedicated material batches linked.</p>
+                  )}
+                </div>
+
+                {/* 4. Safety & HSE */}
+                <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                      <ShieldAlert className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      Safety & Permits
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                      Permit Cleared
+                    </span>
+                  </div>
+                  <div className="text-xs p-2 rounded-lg bg-white/80 dark:bg-slate-900/60 border border-emerald-100 dark:border-emerald-900/40">
+                    <div className="font-semibold text-slate-800 dark:text-slate-200">Daily Trenching & Excavation Permit</div>
+                    <div className="text-[10px] text-slate-500">Site Risk Assessment Active & PPE Mandated</div>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

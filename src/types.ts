@@ -243,7 +243,105 @@ export interface Activity {
   assignedLabour?: TaskLabourAssignment[];
   assignedEquipment?: TaskEquipmentAssignment[];
   subtasks?: SubTask[];
+
+  // Multi-Discipline Workstream Metadata
+  workstream?: WorkstreamType;
+  linkedPTSActivityId?: string;
+  linkedPTSActivityName?: string;
+  sectionSpan?: string; // e.g. "PTS 19 - PTS 20", "PTS 1 - PTS 2"
+  chainageStart?: string;
+  chainageEnd?: string;
+  prerequisiteWorkstreamIds?: string[];
 }
+
+export type WorkstreamType = 
+  | 'PTS_CONSTRUCTION'  // Civil & Physical Construction Execution
+  | 'SURVEYING'         // Topography, Setting-Out, Pegging, Benchmark, Elevation, As-Builts
+  | 'QA_QC'             // Hold Points, Compaction Tests, Non-Conformance, Sign-Offs
+  | 'MATERIALS'         // Batch Procurement, Delivery Tracking, Mill Certs, Material Allocation
+  | 'SAFETY'            // Daily Risk Assessments, Trench Permits, Tool Box Talks
+  | 'COMMISSIONING';    // Cable Splicing, Jointing, Pressure Testing, Energization
+
+export interface WorkstreamConfig {
+  id: WorkstreamType;
+  name: string;
+  shortName: string;
+  description: string;
+  icon: string;
+  color: string;
+  bgLight: string;
+  borderLight: string;
+  badgeClass: string;
+}
+
+export const WORKSTREAMS: Record<WorkstreamType, WorkstreamConfig> = {
+  PTS_CONSTRUCTION: {
+    id: 'PTS_CONSTRUCTION',
+    name: 'PTS & Civil Execution',
+    shortName: 'PTS Works',
+    description: 'Physical site civil works, trenching, cable installation & structures',
+    icon: 'Building2',
+    color: '#0B5FFF',
+    bgLight: 'bg-blue-50 dark:bg-blue-950/40',
+    borderLight: 'border-blue-200 dark:border-blue-800',
+    badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300'
+  },
+  SURVEYING: {
+    id: 'SURVEYING',
+    name: 'Surveying & Setting-Out',
+    shortName: 'Surveying',
+    description: 'Pegging, boundary verification, chainage coordinate logs & benchmarks',
+    icon: 'Compass',
+    color: '#0284C7',
+    bgLight: 'bg-sky-50 dark:bg-sky-950/40',
+    borderLight: 'border-sky-200 dark:border-sky-800',
+    badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300'
+  },
+  QA_QC: {
+    id: 'QA_QC',
+    name: 'QA/QC & Inspections',
+    shortName: 'QA/QC',
+    description: 'Quality hold points, witness inspections, compaction tests & sign-offs',
+    icon: 'ShieldCheck',
+    color: '#E11D48',
+    bgLight: 'bg-rose-50 dark:bg-rose-950/40',
+    borderLight: 'border-rose-200 dark:border-rose-800',
+    badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300'
+  },
+  MATERIALS: {
+    id: 'MATERIALS',
+    name: 'Materials & Supply Chain',
+    shortName: 'Materials',
+    description: 'Batch tracking, mill test certificates, delivery notes & stock issuance',
+    icon: 'Package',
+    color: '#D97706',
+    bgLight: 'bg-amber-50 dark:bg-amber-950/40',
+    borderLight: 'border-amber-200 dark:border-amber-800',
+    badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300'
+  },
+  SAFETY: {
+    id: 'SAFETY',
+    name: 'Safety & HSE Compliance',
+    shortName: 'Safety / HSE',
+    description: 'Work permits, trench box checks, risk assessments & toolbox talks',
+    icon: 'ShieldAlert',
+    color: '#059669',
+    bgLight: 'bg-emerald-50 dark:bg-emerald-950/40',
+    borderLight: 'border-emerald-200 dark:border-emerald-800',
+    badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
+  },
+  COMMISSIONING: {
+    id: 'COMMISSIONING',
+    name: 'Electrical & Commissioning',
+    shortName: 'Commissioning',
+    description: 'Cable jointing, termination, pressure tests, energization & handover',
+    icon: 'Zap',
+    color: '#7C3AED',
+    bgLight: 'bg-purple-50 dark:bg-purple-950/40',
+    borderLight: 'border-purple-200 dark:border-purple-800',
+    badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300'
+  }
+};
 
 export interface TaskMaterialAssignment {
   id: string;
