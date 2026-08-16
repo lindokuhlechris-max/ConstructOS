@@ -99,6 +99,25 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     'Parking Bay'
   ];
 
+  // Helper safe employee display functions
+  const getEmpDisplayName = (emp?: Employee | null): string => {
+    if (!emp) return 'Staff Member';
+    const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+    return fullName || (emp as any).name || emp.id;
+  };
+
+  const getEmpDisplayRole = (emp?: Employee | null): string => {
+    if (!emp) return 'Staff';
+    return emp.position || (emp as any).role || 'Staff';
+  };
+
+  const getEmpInitials = (emp?: Employee | null): string => {
+    const name = getEmpDisplayName(emp);
+    const parts = name.split(' ').filter(Boolean);
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return name.substring(0, 2).toUpperCase();
+  };
+
   // Helper formatting in ZAR
   const formatZAR = (amount: number) => {
     return `R ${Number(amount || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -344,9 +363,9 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
         if (emp) {
           rows.push([
             emp.id,
-            `"${emp.name.replace(/"/g, '""')}"`,
-            `"${emp.role.replace(/"/g, '""')}"`,
-            `"${emp.department || ''}"`,
+            `"${getEmpDisplayName(emp).replace(/"/g, '""')}"`,
+            `"${getEmpDisplayRole(emp).replace(/"/g, '""')}"`,
+            `"${emp.department || 'Operations'}"`,
             `"${emp.phone || ''}"`,
             acc.id,
             `"${acc.name.replace(/"/g, '""')}"`,
@@ -791,29 +810,32 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                               <p className="text-slate-500 text-xs italic">No personnel currently allocated to this unit.</p>
                             ) : (
                               <div className="flex flex-wrap gap-2 pt-1">
-                                {occupants.map((emp) => (
-                                  <div
-                                    key={emp.id}
-                                    className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200"
-                                  >
-                                    <div className="w-5 h-5 rounded-full bg-indigo-600/40 text-indigo-300 font-bold flex items-center justify-center text-[10px]">
-                                      {emp.name.substring(0, 2).toUpperCase()}
-                                    </div>
-                                    <span className="font-medium text-white">{emp.name}</span>
-                                    <span className="text-slate-400 text-[10px]">({emp.accommodationDetails?.roomNumber || 'Room 1'})</span>
-                                    <button
-                                      onClick={() => {
-                                        if (window.confirm(`Remove ${emp.name} from ${unit.name}?`)) {
-                                          removeEmployeeFromAccommodation(unit.id, emp.id);
-                                        }
-                                      }}
-                                      className="text-slate-500 hover:text-rose-400 ml-1"
-                                      title="Vacate Bed"
+                                {occupants.map((emp) => {
+                                  const displayName = getEmpDisplayName(emp);
+                                  return (
+                                    <div
+                                      key={emp.id}
+                                      className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200"
                                     >
-                                      ×
-                                    </button>
-                                  </div>
-                                ))}
+                                      <div className="w-5 h-5 rounded-full bg-indigo-600/40 text-indigo-300 font-bold flex items-center justify-center text-[10px]">
+                                        {getEmpInitials(emp)}
+                                      </div>
+                                      <span className="font-medium text-white">{displayName}</span>
+                                      <span className="text-slate-400 text-[10px]">({emp.accommodationDetails?.roomNumber || 'Room 1'})</span>
+                                      <button
+                                        onClick={() => {
+                                          if (window.confirm(`Remove ${displayName} from ${unit.name}?`)) {
+                                            removeEmployeeFromAccommodation(unit.id, emp.id);
+                                          }
+                                        }}
+                                        className="text-slate-500 hover:text-rose-400 ml-1 font-bold"
+                                        title="Vacate Bed"
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
@@ -1013,19 +1035,22 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                         const emp = employees.find(e => e.id === empId);
                         if (!emp) return null;
 
+                        const displayName = getEmpDisplayName(emp);
+                        const displayRole = getEmpDisplayRole(emp);
+
                         return (
                           <tr key={`${acc.id}-${emp.id}`} className="hover:bg-slate-800/40 transition">
                             <td className="px-4 py-3.5 font-bold text-white flex items-center gap-2.5">
                               <div className="w-7 h-7 rounded-full bg-indigo-600/40 text-indigo-300 font-bold flex items-center justify-center text-xs">
-                                {emp.name.substring(0, 2).toUpperCase()}
+                                {getEmpInitials(emp)}
                               </div>
                               <div>
-                                <div>{emp.name}</div>
+                                <div>{displayName}</div>
                                 <div className="text-[10px] text-slate-500 font-mono">{emp.id}</div>
                               </div>
                             </td>
                             <td className="px-4 py-3.5 text-slate-300 text-xs">
-                              <div className="font-medium text-slate-200">{emp.role}</div>
+                              <div className="font-medium text-slate-200">{displayRole}</div>
                               <div className="text-slate-500">{emp.department || 'Operations'}</div>
                             </td>
                             <td className="px-4 py-3.5">
@@ -1046,7 +1071,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                             <td className="px-4 py-3.5 whitespace-nowrap text-right">
                               <button
                                 onClick={() => {
-                                  if (window.confirm(`Check out ${emp.name} from ${acc.name}?`)) {
+                                  if (window.confirm(`Check out ${displayName} from ${acc.name}?`)) {
                                     removeEmployeeFromAccommodation(acc.id, emp.id);
                                   }
                                 }}
@@ -1386,7 +1411,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                     const isAlreadyAssigned = emp.hasAccommodation;
                     return (
                       <option key={emp.id} value={emp.id}>
-                        {emp.name} ({emp.role}) {isAlreadyAssigned ? `[Currently: ${emp.accommodationDetails?.campName || 'Housed'}]` : ''}
+                        {getEmpDisplayName(emp)} ({getEmpDisplayRole(emp)}) {isAlreadyAssigned ? `[Currently: ${emp.accommodationDetails?.campName || 'Housed'}]` : ''}
                       </option>
                     );
                   })}
