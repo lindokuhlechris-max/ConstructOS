@@ -132,7 +132,7 @@ interface ChecklistItem {
   initials?: string;
 }
 
-interface MultiSelectPopoverChecklistProps {
+interface MultiSelectModalSelectorProps {
   label: string;
   placeholder?: string;
   icon: React.ReactNode;
@@ -141,9 +141,11 @@ interface MultiSelectPopoverChecklistProps {
   onChange: (selectedIds: string[]) => void;
   accentColor?: 'blue' | 'purple' | 'amber' | 'emerald' | 'orange';
   emptyMessage?: string;
+  modalTitle?: string;
+  modalSubtitle?: string;
 }
 
-function MultiSelectPopoverChecklist({
+function MultiSelectModalSelector({
   label,
   placeholder = 'Select options...',
   icon,
@@ -151,23 +153,21 @@ function MultiSelectPopoverChecklist({
   selectedIds,
   onChange,
   accentColor = 'blue',
-  emptyMessage = 'No items available.'
-}: MultiSelectPopoverChecklistProps) {
+  emptyMessage = 'No items available.',
+  modalTitle,
+  modalSubtitle
+}: MultiSelectModalSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const popoverRef = useRef<HTMLDivElement>(null);
+  const [tempSelectedIds, setTempSelectedIds] = useState<string[]>(selectedIds);
 
+  // Sync selection when modal opens
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+      setTempSelectedIds(selectedIds);
+      setSearch('');
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, selectedIds]);
 
   const filteredItems = items.filter(it => 
     it.title.toLowerCase().includes(search.toLowerCase()) || 
@@ -176,230 +176,346 @@ function MultiSelectPopoverChecklist({
   );
 
   const toggleItem = (id: string) => {
-    if (selectedIds.includes(id)) {
-      onChange(selectedIds.filter(s => s !== id));
+    if (tempSelectedIds.includes(id)) {
+      setTempSelectedIds(tempSelectedIds.filter(s => s !== id));
     } else {
-      onChange([...selectedIds, id]);
+      setTempSelectedIds([...tempSelectedIds, id]);
     }
   };
 
   const handleSelectAllFiltered = () => {
     const allFilteredIds = filteredItems.map(f => f.id);
-    const newSelected = Array.from(new Set([...selectedIds, ...allFilteredIds]));
-    onChange(newSelected);
+    const newSelected = Array.from(new Set([...tempSelectedIds, ...allFilteredIds]));
+    setTempSelectedIds(newSelected);
   };
 
   const handleClearAll = () => {
-    onChange([]);
+    setTempSelectedIds([]);
   };
 
-  const removeTag = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    onChange(selectedIds.filter(s => s !== id));
+  const handleApply = () => {
+    onChange(tempSelectedIds);
+    setIsOpen(false);
   };
 
-  const getAccentBg = () => {
+  const handleCancel = () => {
+    setTempSelectedIds(selectedIds);
+    setIsOpen(false);
+  };
+
+  const removeSelectedInsideModal = (id: string) => {
+    setTempSelectedIds(tempSelectedIds.filter(s => s !== id));
+  };
+
+  const getAccentStyles = () => {
     switch (accentColor) {
-      case 'orange': return 'bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800';
-      case 'purple': return 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800';
-      case 'amber': return 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800';
-      case 'emerald': return 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
-      default: return 'bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF] dark:text-blue-300 border-blue-200 dark:border-blue-800';
+      case 'amber':
+        return {
+          badge: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800',
+          iconBg: 'bg-amber-100 dark:bg-amber-950/80 text-amber-600 dark:text-amber-300',
+          ring: 'focus:ring-amber-500',
+          activeCard: 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700',
+          checkbox: 'bg-amber-500 border-amber-500 text-white',
+          highlightText: 'text-amber-800 dark:text-amber-300'
+        };
+      case 'purple':
+        return {
+          badge: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800',
+          iconBg: 'bg-purple-100 dark:bg-purple-950/80 text-purple-600 dark:text-purple-300',
+          ring: 'focus:ring-purple-500',
+          activeCard: 'bg-purple-50/90 dark:bg-purple-950/40 border-purple-300 dark:border-purple-700',
+          checkbox: 'bg-purple-600 border-purple-600 text-white',
+          highlightText: 'text-purple-800 dark:text-purple-300'
+        };
+      case 'emerald':
+        return {
+          badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+          iconBg: 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-300',
+          ring: 'focus:ring-emerald-500',
+          activeCard: 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700',
+          checkbox: 'bg-emerald-600 border-emerald-600 text-white',
+          highlightText: 'text-emerald-800 dark:text-emerald-300'
+        };
+      case 'orange':
+        return {
+          badge: 'bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300 border-orange-300 dark:border-orange-800',
+          iconBg: 'bg-orange-100 dark:bg-orange-950/80 text-orange-600 dark:text-orange-300',
+          ring: 'focus:ring-orange-500',
+          activeCard: 'bg-orange-50/90 dark:bg-orange-950/40 border-orange-300 dark:border-orange-700',
+          checkbox: 'bg-orange-500 border-orange-500 text-white',
+          highlightText: 'text-orange-800 dark:text-orange-300'
+        };
+      default:
+        return {
+          badge: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800',
+          iconBg: 'bg-blue-100 dark:bg-blue-950/80 text-blue-600 dark:text-blue-300',
+          ring: 'focus:ring-blue-500',
+          activeCard: 'bg-blue-50/90 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700',
+          checkbox: 'bg-[#0B5FFF] border-[#0B5FFF] text-white',
+          highlightText: 'text-[#0B5FFF] dark:text-blue-400'
+        };
     }
   };
 
+  const styles = getAccentStyles();
   const selectedCount = selectedIds.length;
+  const tempCount = tempSelectedIds.length;
+
+  const displayTitle = modalTitle || `Select ${label}`;
+  const displaySubtitle = modalSubtitle || `Choose and assign ${label.toLowerCase()} for this subtask.`;
 
   return (
-    <div className="space-y-1 relative" ref={popoverRef}>
+    <div className="space-y-1">
+      {/* Label & Selected Badge */}
       <div className="flex items-center justify-between">
-        <label className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+        <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
           {icon}
           {label}
         </label>
         {selectedCount > 0 && (
-          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${getAccentBg()}`}>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border shadow-2xs ${styles.badge}`}>
             {selectedCount} Selected
           </span>
         )}
       </div>
 
-      {/* Trigger Button */}
+      {/* Clean Trigger Button */}
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full h-9 px-3 rounded-lg border text-xs text-left flex items-center justify-between transition-all bg-white dark:bg-slate-900 ${
-          isOpen ? 'ring-2 ring-[#0B5FFF] border-[#0B5FFF]' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
-        }`}
+        onClick={() => setIsOpen(true)}
+        className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-left flex items-center justify-between hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-all shadow-2xs group cursor-pointer"
       >
-        <span className="truncate pr-2 font-medium text-slate-700 dark:text-slate-200">
+        <div className="flex items-center gap-2 min-w-0 flex-1 pr-2">
           {selectedCount === 0 ? (
-            <span className="text-slate-400 font-normal">{placeholder}</span>
-          ) : selectedCount === 1 ? (
-            items.find(i => i.id === selectedIds[0])?.title || selectedIds[0]
+            <span className="text-slate-400 font-normal truncate">{placeholder}</span>
           ) : (
-            `${items.find(i => i.id === selectedIds[0])?.title || selectedIds[0]} (+${selectedCount - 1} more)`
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                {items.find(i => i.id === selectedIds[0])?.title || selectedIds[0]}
+              </span>
+              {selectedCount > 1 && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md shrink-0 border ${styles.badge}`}>
+                  +{selectedCount - 1} more
+                </span>
+              )}
+            </div>
           )}
-        </span>
-        <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+        </div>
+        <div className="flex items-center gap-1 shrink-0 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200">
+          <span className="text-[10px] font-medium hidden sm:inline-block">Assign</span>
+          <ChevronDown className="h-3.5 w-3.5" />
+        </div>
       </button>
 
-      {/* Selected tags chip bar */}
-      {selectedCount > 0 && (
-        <div className="flex flex-wrap gap-1 pt-1 max-h-16 overflow-y-auto">
-          {selectedIds.map(id => {
-            const itemObj = items.find(i => i.id === id);
-            const title = itemObj?.title || id;
-            return (
-              <span 
-                key={id} 
-                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${getAccentBg()}`}
-              >
-                <span className="truncate max-w-[120px]">{title}</span>
-                <button
-                  type="button"
-                  onClick={(e) => removeTag(id, e)}
-                  className="hover:opacity-75 p-0.5 rounded"
-                  title={`Remove ${title}`}
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Floating Popover Checklist Modal */}
+      {/* POP-UP MODAL DIALOG */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1.5 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xl p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-2">
-          {/* Popover Header & Search */}
-          <div className="relative">
-            <input
-              type="text"
-              autoFocus
-              placeholder={`Search ${label.toLowerCase()}...`}
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full h-8 pl-8 pr-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:ring-1 focus:ring-[#0B5FFF] outline-none"
-            />
-            <div className="absolute left-2.5 top-2 text-slate-400">
-              <Search className="h-3.5 w-3.5" />
-            </div>
-            {search && (
-              <button 
-                type="button" 
-                onClick={() => setSearch('')}
-                className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Quick Action Buttons */}
-          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1 border-b border-slate-100 dark:border-slate-800 pb-1.5">
-            <span className="font-semibold">{filteredItems.length} available</span>
-            <div className="flex gap-2">
-              {filteredItems.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleSelectAllFiltered}
-                  className="text-[#0B5FFF] hover:underline font-bold"
-                >
-                  Select All
-                </button>
-              )}
-              {selectedCount > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearAll}
-                  className="text-rose-600 hover:underline font-semibold"
-                >
-                  Clear All
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Scrollable Checklist */}
-          <div className="max-h-52 overflow-y-auto space-y-1 pr-0.5">
-            {filteredItems.length === 0 ? (
-              <div className="text-center py-5 text-slate-400 text-xs font-medium">
-                {emptyMessage}
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCancel();
+          }}
+        >
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-slate-50 via-slate-50/50 to-white dark:from-slate-800/40 dark:to-slate-900 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl ${styles.iconBg}`}>
+                  {icon}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    {displayTitle}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${styles.badge}`}>
+                      {tempCount} Selected
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {displaySubtitle}
+                  </p>
+                </div>
               </div>
-            ) : (
-              filteredItems.map(item => {
-                const isSelected = selectedIds.includes(item.id);
-                return (
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Selected Items Quick Removal Bar (Inside Modal) */}
+            {tempCount > 0 && (
+              <div className="px-4 py-2.5 bg-slate-50/80 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-1.5">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                  <span>Currently Selected ({tempCount}):</span>
                   <button
-                    key={item.id}
                     type="button"
-                    onClick={() => toggleItem(item.id)}
-                    className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-all ${
-                      isSelected 
-                        ? 'bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800' 
-                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/60 border border-transparent'
-                    }`}
+                    onClick={handleClearAll}
+                    className="text-rose-600 dark:text-rose-400 hover:underline text-[10px] font-bold"
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className={`w-4 h-4 rounded flex items-center justify-center border transition-colors shrink-0 ${
+                    Clear All
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                  {tempSelectedIds.map(id => {
+                    const itemObj = items.find(i => i.id === id);
+                    const title = itemObj?.title || id;
+                    return (
+                      <span
+                        key={id}
+                        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-semibold border shadow-2xs transition-colors ${styles.badge}`}
+                      >
+                        <span className="truncate max-w-[150px]">{title}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeSelectedInsideModal(id)}
+                          className="hover:opacity-70 p-0.5 rounded-full"
+                          title={`Remove ${title}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Search & Action Bar */}
+            <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder={`Search ${label.toLowerCase()}...`}
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full h-9 pl-9 pr-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:ring-2 focus:ring-[#0B5FFF] dark:focus:ring-blue-500 outline-none transition-all"
+                />
+                <div className="absolute left-3 top-2.5 text-slate-400">
+                  <Search className="h-4 w-4" />
+                </div>
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {filteredItems.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSelectAllFiltered}
+                  className="h-9 text-xs font-bold shrink-0 text-[#0B5FFF] dark:text-blue-400 border-blue-200 dark:border-blue-800"
+                >
+                  Select All ({filteredItems.length})
+                </Button>
+              )}
+            </div>
+
+            {/* Scrollable Items List */}
+            <div className="p-3 overflow-y-auto flex-1 space-y-1.5 max-h-[380px]">
+              {filteredItems.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 flex flex-col items-center gap-2">
+                  <div className="p-3 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400">
+                    <Search className="h-5 w-5" />
+                  </div>
+                  <span className="text-xs font-medium">{search ? `No matches found for "${search}"` : emptyMessage}</span>
+                </div>
+              ) : (
+                filteredItems.map(item => {
+                  const isSelected = tempSelectedIds.includes(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => toggleItem(item.id)}
+                      className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all border cursor-pointer ${
                         isSelected 
-                          ? 'bg-[#0B5FFF] border-[#0B5FFF] text-white' 
-                          : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'
-                      }`}>
-                        {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
-                      </div>
-
-                      {item.initials && (
-                        <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-700 dark:text-slate-300 shrink-0">
-                          {item.initials}
+                          ? `${styles.activeCard} shadow-xs` 
+                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/60 border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className={`w-4.5 h-4.5 rounded-md flex items-center justify-center border transition-all shrink-0 ${
+                          isSelected 
+                            ? styles.checkbox 
+                            : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'
+                        }`}>
+                          {isSelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
                         </div>
-                      )}
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-xs font-semibold leading-tight truncate ${isSelected ? 'text-[#0B5FFF] dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                            {item.title}
-                          </span>
-                          {item.badge && (
-                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${item.badgeColor || 'bg-slate-100 text-slate-600'}`}>
-                              {item.badge}
+                        {item.initials && (
+                          <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                            {item.initials}
+                          </div>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-xs font-bold leading-tight truncate ${isSelected ? styles.highlightText : 'text-slate-800 dark:text-slate-200'}`}>
+                              {item.title}
+                            </span>
+                            {item.badge && (
+                              <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md border ${item.badgeColor || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}>
+                                {item.badge}
+                              </span>
+                            )}
+                          </div>
+                          {item.subtitle && (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate mt-0.5">
+                              {item.subtitle}
                             </span>
                           )}
                         </div>
-                        {item.subtitle && (
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
-                            {item.subtitle}
-                          </span>
-                        )}
                       </div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
 
-          {/* Footer */}
-          <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <span className="text-[10px] text-slate-500 font-medium">
-              {selectedCount} selected
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setIsOpen(false)}
-              className="text-[11px] h-7 px-3 bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-lg"
-            >
-              Done
-            </Button>
+            {/* Modal Footer */}
+            <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/80 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                {tempCount} {label.toLowerCase()} selected
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancel}
+                  className="text-xs h-8 px-3 rounded-lg"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleApply}
+                  className="text-xs h-8 px-4 bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-lg gap-1.5 font-bold shadow-xs"
+                >
+                  <Check className="h-3.5 w-3.5" /> Apply & Done
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
+
+// Backwards compatibility alias
+const MultiSelectPopoverChecklist = MultiSelectModalSelector;
 
 interface SubTaskManagerProps {
   subtasks: SubTask[];
@@ -1946,7 +2062,7 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
 
               {/* Assignment Checklist Popovers: Workers, Machinery, Teams */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <MultiSelectPopoverChecklist
+                <MultiSelectModalSelector
                   label="Assigned Worker(s)"
                   placeholder="Assign workers..."
                   icon={<HardHat className="h-3.5 w-3.5 text-amber-500" />}
@@ -1955,8 +2071,10 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                   onChange={setAssignedWorkers}
                   accentColor="amber"
                   emptyMessage="No employees found in directory."
+                  modalTitle="Assign Site Workers & Personnel"
+                  modalSubtitle="Search and select workforce employees allocated to this subtask."
                 />
-                <MultiSelectPopoverChecklist
+                <MultiSelectModalSelector
                   label="Assigned Machinery"
                   placeholder="Assign equipment..."
                   icon={<Truck className="h-3.5 w-3.5 text-blue-500" />}
@@ -1965,8 +2083,10 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                   onChange={setAssignedEquipmentList}
                   accentColor="blue"
                   emptyMessage="No machinery registered."
+                  modalTitle="Assign Machinery & Heavy Plant"
+                  modalSubtitle="Search and select construction vehicles and equipment allocated to this subtask."
                 />
-                <MultiSelectPopoverChecklist
+                <MultiSelectModalSelector
                   label="Assigned Team(s)"
                   placeholder="Assign teams..."
                   icon={<Users className="h-3.5 w-3.5 text-purple-500" />}
@@ -1975,6 +2095,8 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                   onChange={setAssignedTeams}
                   accentColor="purple"
                   emptyMessage="No teams created yet."
+                  modalTitle="Assign Teams & Work Crews"
+                  modalSubtitle="Search and select specialized crews and subcontractor teams."
                 />
               </div>
 
@@ -2618,7 +2740,7 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
 
                                   {/* Edit Form Assignment Checklists: Workers, Machinery, Teams */}
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    <MultiSelectPopoverChecklist
+                                    <MultiSelectModalSelector
                                       label="Assigned Worker(s)"
                                       placeholder="Assign workers..."
                                       icon={<HardHat className="h-3.5 w-3.5 text-amber-500" />}
@@ -2627,8 +2749,10 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                                       onChange={setEditAssignedWorkers}
                                       accentColor="amber"
                                       emptyMessage="No employees found."
+                                      modalTitle="Assign Site Workers & Personnel"
+                                      modalSubtitle="Search and select workforce employees allocated to this subtask."
                                     />
-                                    <MultiSelectPopoverChecklist
+                                    <MultiSelectModalSelector
                                       label="Assigned Machinery"
                                       placeholder="Assign equipment..."
                                       icon={<Truck className="h-3.5 w-3.5 text-blue-500" />}
@@ -2637,8 +2761,10 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                                       onChange={setEditAssignedEquipmentList}
                                       accentColor="blue"
                                       emptyMessage="No machinery registered."
+                                      modalTitle="Assign Machinery & Heavy Plant"
+                                      modalSubtitle="Search and select construction vehicles and equipment allocated to this subtask."
                                     />
-                                    <MultiSelectPopoverChecklist
+                                    <MultiSelectModalSelector
                                       label="Assigned Team(s)"
                                       placeholder="Assign teams..."
                                       icon={<Users className="h-3.5 w-3.5 text-purple-500" />}
@@ -2647,6 +2773,8 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                                       onChange={setEditAssignedTeams}
                                       accentColor="purple"
                                       emptyMessage="No teams created."
+                                      modalTitle="Assign Teams & Work Crews"
+                                      modalSubtitle="Search and select specialized crews and subcontractor teams."
                                     />
                                   </div>
 
