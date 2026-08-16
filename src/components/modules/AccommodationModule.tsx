@@ -4,7 +4,7 @@ import {
   Building2, Plus, Bed, Users, Zap, Droplets, Flame, Wifi, 
   Trash2, Edit3, ArrowLeft, Download, Search, CheckCircle2, 
   Shield, Home, Fuel, UserPlus, Receipt, DollarSign,
-  Briefcase, X, Sparkles, MapPin, Copy, DoorClosed, Eye, ExternalLink
+  Briefcase, X, Sparkles, MapPin, Copy, DoorClosed, Eye, ExternalLink, Printer
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { 
@@ -12,7 +12,8 @@ import {
   AccommodationOwnership, AccommodationStatus, UtilityType, Employee, RentalRateType 
 } from '../../types';
 import { AccommodationDetail } from '../AccommodationDetail';
-import { calculateAccommodationMonthlyCost, getAccommodationRateDescription } from '../../lib/pdfAccommodation';
+import { calculateAccommodationMonthlyCost, getAccommodationRateDescription, generateAllAccommodationsSummaryPDF } from '../../lib/pdfAccommodation';
+import { exportAccommodationsToExcel } from '../../lib/csvExport';
 
 interface AccommodationModuleProps {
   onBack?: () => void;
@@ -541,6 +542,20 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           <button
+            onClick={() => generateAllAccommodationsSummaryPDF(accommodations, accommodationUtilities, employees)}
+            className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 rounded-xl transition-colors text-xs font-bold shadow-sm"
+            title="Download Executive Accommodations Portfolio Summary PDF"
+          >
+            <Printer className="h-4 w-4 text-indigo-600 dark:text-indigo-400" /> Print Summary
+          </button>
+          <button
+            onClick={() => exportAccommodationsToExcel(accommodations, employees, accommodationUtilities)}
+            className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 rounded-xl transition-colors text-xs font-bold shadow-sm"
+            title="Export Accommodations Portfolio to Excel CSV"
+          >
+            <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Export Excel
+          </button>
+          <button
             onClick={() => handleOpenLogUtility()}
             className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-xl transition-colors text-xs font-semibold shadow-sm"
           >
@@ -679,6 +694,14 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
 
         {/* Context Actions per Tab */}
         <div className="flex items-center gap-2">
+          {activeTab === 'properties' && (
+            <button
+              onClick={() => exportAccommodationsToExcel(accommodations, employees, accommodationUtilities)}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5"
+            >
+              <Download className="h-4 w-4 text-emerald-500" /> Export Excel
+            </button>
+          )}
           {activeTab === 'utilities' && (
             <button
               onClick={exportUtilitiesCSV}

@@ -17,6 +17,7 @@ import {
   getAccommodationRateDescription, 
   generateAccommodationMonthlyPDF 
 } from '../lib/pdfAccommodation';
+import { exportSingleAccommodationToExcel } from '../lib/csvExport';
 
 interface AccommodationDetailProps {
   unit: AccommodationUnit;
@@ -367,6 +368,14 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
             title="Download Monthly PDF Report"
           >
             <Printer className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Print Monthly Report
+          </button>
+
+          <button
+            onClick={() => exportSingleAccommodationToExcel(unit, employees, unitUtilities)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition shadow-sm"
+            title="Export Facility Data to Excel CSV"
+          >
+            <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Export Excel
           </button>
 
           <button

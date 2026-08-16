@@ -266,3 +266,136 @@ export const generateAccommodationMonthlyPDF = (
   const fileName = `Constructfield_Accommodation_${sanitizedName}_${new Date().toISOString().split('T')[0]}.pdf`;
   doc.save(fileName);
 };
+
+/**
+ * Generates an Executive Master Summary PDF of all company accommodations and housing operations
+ */
+export const generateAllAccommodationsSummaryPDF = (
+  accommodations: AccommodationUnit[],
+  utilities: AccommodationUtilityLog[],
+  employees: Employee[]
+) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const primaryBlue: [number, number, number] = [11, 95, 255]; // #0B5FFF
+  const darkSlate: [number, number, number] = [15, 23, 42]; // #0F172A
+  const textMuted: [number, number, number] = [100, 116, 139]; // #64748B
+  const emeraldGreen: [number, number, number] = [16, 185, 129];
+  const amberOrange: [number, number, number] = [217, 119, 6];
+
+  // Top Header Banner
+  doc.setFillColor(...primaryBlue);
+  doc.rect(0, 0, pageWidth, 24, 'F');
+
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.text('CONSTRUCTFIELD FACILITIES MANAGEMENT', 14, 15);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Master Accommodation & Staff Housing Executive Report', pageWidth - 14, 15, { align: 'right' });
+
+  let currentY = 34;
+
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...darkSlate);
+  doc.text('Accommodation Portfolio Summary', 14, currentY);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...textMuted);
+  currentY += 6;
+  const reportDate = new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' });
+  doc.text(`Generated: ${reportDate} | Facilities: ${accommodations.length}`, 14, currentY);
+
+  // Overall KPIs
+  const totalBeds = accommodations.reduce((sum, a) => sum + (a.totalCapacityBeds || 0), 0);
+  const totalRooms = accommodations.reduce((sum, a) => sum + (a.totalRooms || 0), 0);
+  const totalOccupants = accommodations.reduce((sum, a) => sum + (a.occupantIds?.length || 0), 0);
+  const totalVacant = Math.max(0, totalBeds - totalOccupants);
+  const globalOccupancyRate = totalBeds > 0 ? Math.round((totalOccupants / totalBeds) * 100) : 0;
+  const totalMonthlyLease = accommodations.filter(a => a.ownership === 'Rented').reduce((sum, a) => sum + calculateAccommodationMonthlyCost(a), 0);
+  const totalUtilitiesCost = utilities.reduce((sum, u) => sum + (u.amountZAR || 0), 0);
+  const totalOpsCost = totalMonthlyLease + totalUtilitiesCost;
+
+  currentY += 6;
+  doc.autoTable({
+    startY: currentY,
+    head: [['Total Facilities', 'Rooms / Beds', 'Occupancy Status', 'Active Monthly Lease', 'Utilities Incurred', 'Total Monthly Ops']],
+    body: [[
+      `${accommodations.length} Properties\n(${accommodations.filter(a => a.ownership === 'Owned').length} Owned, ${accommodations.filter(a => a.ownership === 'Rented').length} Rented)`,
+      `${totalRooms} Rooms\n${totalBeds} Total Beds`,
+      `${totalOccupants} / ${totalBeds} Beds\n(${globalOccupancyRate}% Occupied)\n${totalVacant} Vacant Beds`,
+      `R ${totalMonthlyLease.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}\n/ month`,
+      `R ${totalUtilitiesCost.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}\n(${utilities.length} bills)`,
+      `R ${totalOpsCost.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}\n/ month`
+    ]],
+    theme: 'grid',
+    headStyles: { fillColor: primaryBlue, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+    bodyStyles: { fontSize: 8, textColor: darkSlate, cellPadding: 3 },
+    alternateRowStyles: { fillColor: [248, 250, 252] }
+  });
+
+  currentY = doc.lastAutoTable.finalY + 8;
+
+  // Master Facilities Table
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...darkSlate);
+  doc.text('Facilities Master Directory & Financial Breakdown', 14, currentY);
+  currentY += 4;
+
+  const facilityRows = accommodations.map((unit, idx) => {
+    const occupants = employees.filter(e => unit.occupantIds?.includes(e.id));
+    const activeLease = calculateAccommodationMonthlyCost(unit);
+    const unitUtils = utilities.filter(u => u.accommodationId === unit.id);
+    const unitUtilsCost = unitUtils.reduce((sum, u) => sum + (u.amountZAR || 0), 0);
+    const occPct = unit.totalCapacityBeds > 0 ? Math.round((occupants.length / unit.totalCapacityBeds) * 100) : 0;
+
+    return [
+      (idx + 1).toString(),
+      `${unit.name}\n${unit.id} • ${unit.location}`,
+      unit.ownership,
+      unit.type,
+      `${unit.totalRooms || 1} Rms\n${unit.totalCapacityBeds} Beds`,
+      `${occupants.length} / ${unit.totalCapacityBeds}\n(${occPct}%)`,
+      `R ${activeLease.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}\n${unit.rentalRateType || (unit.ownership === 'Rented' ? 'Fixed' : 'Owned')}`,
+      `R ${unitUtilsCost.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`,
+      `R ${(activeLease + unitUtilsCost).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`
+    ];
+  });
+
+  doc.autoTable({
+    startY: currentY,
+    head: [['#', 'Facility & Location', 'Ownership', 'Type', 'Capacity', 'Occupancy', 'Monthly Lease', 'Utilities', 'Total Cost']],
+    body: facilityRows,
+    theme: 'grid',
+    headStyles: { fillColor: darkSlate, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    bodyStyles: { fontSize: 7.5, textColor: darkSlate, cellPadding: 2.5 },
+    alternateRowStyles: { fillColor: [248, 250, 252] }
+  });
+
+  currentY = doc.lastAutoTable.finalY + 8;
+
+  // Footer & Sign-off
+  if (currentY > pageHeight - 30) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  doc.setDrawColor(226, 232, 240);
+  doc.line(14, currentY, pageWidth - 14, currentY);
+  currentY += 6;
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...textMuted);
+  doc.text('Constructfield OS Facility Portfolio Master Statement', 14, currentY);
+  doc.text(`Page 1 of 1 • ${reportDate}`, pageWidth - 14, currentY, { align: 'right' });
+
+  doc.save(`Constructfield_Accommodations_Portfolio_Summary_${new Date().toISOString().split('T')[0]}.pdf`);
+};

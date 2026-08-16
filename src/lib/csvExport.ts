@@ -1,4 +1,5 @@
-import { Activity, DailyReport, DocumentItem, MaterialInventory, Project } from '../types';
+import { Activity, DailyReport, DocumentItem, MaterialInventory, Project, AccommodationUnit, AccommodationUtilityLog, Employee } from '../types';
+import { calculateAccommodationMonthlyCost, getAccommodationRateDescription } from './pdfAccommodation';
 
 /**
  * Escapes CSV cell content by handling quotes, commas, and line breaks.
@@ -417,5 +418,174 @@ export function exportMaterialRequestsToCSV(requests: any[], filenameSuffix?: st
   const dateStr = new Date().toISOString().split('T')[0];
   const filename = `constructfield_material_requests_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
   
+  downloadCSVFile(filename, csvString);
+}
+
+/**
+ * Export All Accommodation Facilities to Excel-ready CSV format
+ */
+export function exportAccommodationsToExcel(
+  accommodations: AccommodationUnit[], 
+  employees: Employee[], 
+  utilities: AccommodationUtilityLog[],
+  filenameSuffix?: string
+) {
+  const headers = [
+    'Facility ID',
+    'Facility Name',
+    'Ownership',
+    'Structure Type',
+    'Location',
+    'Physical Address',
+    'Total Rooms',
+    'Beds per Room',
+    'Total Bed Capacity',
+    'Occupied Beds',
+    'Vacant Beds',
+    'Occupancy Rate',
+    'Status',
+    'Linked Project',
+    'Landlord / Vendor',
+    'Lease Agreement #',
+    'Pricing Model',
+    'Active Monthly Lease (ZAR)',
+    'Rate Description',
+    'Lease Start Date',
+    'Lease End Date',
+    'Deposit Paid (ZAR)',
+    'Utilities Incurred (ZAR)',
+    'Total Monthly Cost (ZAR)',
+    'Contact Person',
+    'Contact Phone',
+    'Amenities'
+  ];
+
+  const rows = accommodations.map(unit => {
+    const occupants = employees.filter(e => unit.occupantIds?.includes(e.id));
+    const occupiedCount = occupants.length;
+    const vacantCount = Math.max(0, unit.totalCapacityBeds - occupiedCount);
+    const occupancyRate = unit.totalCapacityBeds > 0 ? `${Math.round((occupiedCount / unit.totalCapacityBeds) * 100)}%` : '0%';
+    const activeLease = calculateAccommodationMonthlyCost(unit);
+    const unitUtils = utilities.filter(u => u.accommodationId === unit.id);
+    const totalUtils = unitUtils.reduce((sum, u) => sum + (u.amountZAR || 0), 0);
+    const totalCost = activeLease + totalUtils;
+
+    return [
+      unit.id,
+      unit.name,
+      unit.ownership,
+      unit.type,
+      unit.location,
+      unit.address || '',
+      unit.totalRooms || 1,
+      unit.bedsPerRoom || 1,
+      unit.totalCapacityBeds,
+      occupiedCount,
+      vacantCount,
+      occupancyRate,
+      unit.status,
+      unit.projectName || '',
+      unit.rentalVendor || '',
+      unit.rentalAgreementNumber || '',
+      unit.rentalRateType || (unit.ownership === 'Rented' ? 'Fixed Monthly' : 'N/A'),
+      activeLease,
+      getAccommodationRateDescription(unit),
+      unit.rentalStartDate || '',
+      unit.rentalEndDate || '',
+      unit.rentalDepositPaid || 0,
+      totalUtils,
+      totalCost,
+      unit.contactPerson || '',
+      unit.contactPhone || '',
+      (unit.amenities || []).join('; ')
+    ];
+  });
+
+  const csvRows = [
+    headers.map(escapeCSVCell).join(','),
+    ...rows.map(row => row.map(escapeCSVCell).join(','))
+  ];
+
+  const csvString = csvRows.join('\r\n');
+  const dateStr = new Date().toISOString().split('T')[0];
+  const filename = `constructfield_accommodations_master_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+
+  downloadCSVFile(filename, csvString);
+}
+
+/**
+ * Export a Single Accommodation Facility (with Resident Roster & Utilities) to Excel-ready CSV format
+ */
+export function exportSingleAccommodationToExcel(
+  unit: AccommodationUnit,
+  employees: Employee[],
+  utilities: AccommodationUtilityLog[]
+) {
+  const occupants = employees.filter(e => unit.occupantIds?.includes(e.id));
+  const activeLease = calculateAccommodationMonthlyCost(unit);
+  const totalUtils = utilities.reduce((sum, u) => sum + (u.amountZAR || 0), 0);
+  const totalFacilityCost = activeLease + totalUtils;
+
+  const lines: string[] = [];
+
+  // Section 1: Executive Summary
+  lines.push(escapeCSVCell(`CONSTRUCTFIELD ACCOMMODATION FACILITY REPORT: ${unit.name.toUpperCase()}`));
+  lines.push([escapeCSVCell('Generated Date'), escapeCSVCell(new Date().toLocaleDateString())].join(','));
+  lines.push([escapeCSVCell('Facility ID'), escapeCSVCell(unit.id), escapeCSVCell('Ownership'), escapeCSVCell(unit.ownership)].join(','));
+  lines.push([escapeCSVCell('Structure Type'), escapeCSVCell(unit.type), escapeCSVCell('Location'), escapeCSVCell(unit.location)].join(','));
+  lines.push([escapeCSVCell('Physical Address'), escapeCSVCell(unit.address || 'N/A'), escapeCSVCell('Linked Project'), escapeCSVCell(unit.projectName || 'General Site')].join(','));
+  lines.push([escapeCSVCell('Total Rooms'), escapeCSVCell(unit.totalRooms || 1), escapeCSVCell('Total Beds'), escapeCSVCell(unit.totalCapacityBeds)].join(','));
+  lines.push([escapeCSVCell('Occupied Beds'), escapeCSVCell(occupants.length), escapeCSVCell('Vacant Beds'), escapeCSVCell(Math.max(0, unit.totalCapacityBeds - occupants.length))].join(','));
+  lines.push([escapeCSVCell('Active Monthly Lease (ZAR)'), escapeCSVCell(activeLease), escapeCSVCell('Rate Terms'), escapeCSVCell(getAccommodationRateDescription(unit))].join(','));
+  lines.push([escapeCSVCell('Utilities Incurred (ZAR)'), escapeCSVCell(totalUtils), escapeCSVCell('Total Monthly Cost (ZAR)'), escapeCSVCell(totalFacilityCost)].join(','));
+  lines.push('');
+
+  // Section 2: Resident Personnel Roster
+  lines.push(escapeCSVCell('--- RESIDENT PERSONNEL ROSTER ---'));
+  lines.push(['Employee ID', 'Full Name', 'Position / Role', 'Department', 'Room / Bed #', 'Check-In Date', 'Phone Number'].map(escapeCSVCell).join(','));
+  if (occupants.length === 0) {
+    lines.push(escapeCSVCell('No personnel currently allocated to this facility.'));
+  } else {
+    occupants.forEach(emp => {
+      const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || (emp as any).name || emp.id;
+      lines.push([
+        emp.id,
+        fullName,
+        emp.position || (emp as any).role || 'Staff',
+        emp.department || 'Operations',
+        emp.accommodationDetails?.roomNumber || '—',
+        emp.accommodationDetails?.checkInDate || unit.createdAt || '—',
+        emp.phone || '—'
+      ].map(escapeCSVCell).join(','));
+    });
+  }
+  lines.push('');
+
+  // Section 3: Itemized Utility Bills & Expenses
+  lines.push(escapeCSVCell('--- UTILITIES & EXPENSES LEDGER ---'));
+  lines.push(['Utility ID', 'Date', 'Category', 'Amount (ZAR)', 'Units Consumed', 'Unit Label', 'Vendor / Supplier', 'Receipt / Invoice #', 'Status', 'Notes'].map(escapeCSVCell).join(','));
+  if (utilities.length === 0) {
+    lines.push(escapeCSVCell('No utility expenses logged for this facility.'));
+  } else {
+    utilities.forEach(u => {
+      lines.push([
+        u.id,
+        u.date,
+        u.utilityType,
+        u.amountZAR,
+        u.unitsConsumed || '',
+        u.unitLabel || '',
+        u.vendorOrProvider || '',
+        u.invoiceOrReceiptNumber || '',
+        u.paidStatus,
+        u.notes || ''
+      ].map(escapeCSVCell).join(','));
+    });
+  }
+
+  const csvString = lines.join('\r\n');
+  const sanitizedName = unit.name.replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `constructfield_accommodation_${sanitizedName}_${new Date().toISOString().split('T')[0]}.csv`;
+
   downloadCSVFile(filename, csvString);
 }
