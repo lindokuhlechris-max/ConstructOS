@@ -67,9 +67,11 @@ import { WORKSTREAMS, WorkstreamType } from '../types';
 import { ActivityKanbanBoard } from '../components/ActivityKanbanBoard';
 import { ActivityDataTable } from '../components/ActivityDataTable';
 import { PTSCrossDisciplineMatrix } from '../components/PTSCrossDisciplineMatrix';
+import { DisciplineTrackerView } from '../components/DisciplineTrackerView';
 
 export function Activities() {
   const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole } = useAppContext();
+  const [mainScreen, setMainScreen] = useState<'activities' | 'disciplines'>('activities');
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [slideOverActivity, setSlideOverActivity] = useState<Activity | null>(null);
   const [capturingActivityId, setCapturingActivityId] = useState<string | null>(null);
@@ -80,8 +82,7 @@ export function Activities() {
   const [duplicateInitialValues, setDuplicateInitialValues] = useState<Partial<Activity> | null>(null);
   const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedWorkstream, setSelectedWorkstream] = useState<WorkstreamType | 'ALL'>('PTS_CONSTRUCTION');
-  const [viewMode, setViewMode] = useState<'board' | 'grid' | 'list' | 'table' | 'timeline' | 'survey'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'grid' | 'list' | 'table' | 'timeline'>('board');
   const [timeframe, setTimeframe] = useState<'all' | 'day' | 'week' | 'month'>('all');
 
   // Quick Log Progress Modal State
@@ -311,12 +312,6 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
   };
 
   const filtered = activities.filter(a => {
-    // 0. Workstream Filter
-    if (selectedWorkstream !== 'ALL') {
-      const actWs = a.workstream || 'PTS_CONSTRUCTION';
-      if (actWs !== selectedWorkstream) return false;
-    }
-
     // 1. Search Filter
     const matchesSearch = a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           a.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -499,38 +494,61 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-8">
-      {/* Header & Main Controls */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex justify-between items-center w-full md:w-auto">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">Activity Tracker</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm">
-              Independent multi-discipline workstreams & cross-linked construction activities.
-            </p>
-          </div>
-          <Button onClick={() => setIsAdding(true)} className="md:hidden gap-2 rounded-xl bg-[#0B5FFF]">
-            <Plus className="h-4 w-4" /> Add
-          </Button>
+      {/* Top Level Screen Switcher: Activity Tracker | Discipline Tracker */}
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 flex-wrap gap-3">
+        <div className="flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
+          <button
+            type="button"
+            onClick={() => setMainScreen('activities')}
+            className={`px-5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all ${
+              mainScreen === 'activities'
+                ? 'bg-white dark:bg-slate-900 text-[#0B5FFF] shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Building2 className="h-4 w-4 text-[#0B5FFF]" />
+            <span>Activity Tracker</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] font-bold">
+              {activities.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMainScreen('disciplines')}
+            className={`px-5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all ${
+              mainScreen === 'disciplines'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Compass className="h-4 w-4 text-indigo-600" />
+            <span>Discipline Tracker</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold">
+              Scope of Work
+            </span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Global Audit & Export Actions */}
+        <div className="flex items-center gap-2">
           <Button 
             onClick={() => setIsAuditView(true)} 
             variant="outline" 
-            className="gap-2 rounded-xl border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/30 text-[#0B5FFF] dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/50 font-semibold h-10"
+            className="gap-2 rounded-xl border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/30 text-[#0B5FFF] dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/50 font-semibold h-9 text-xs"
             title="Open Activity & Subtask Audit Screen"
           >
-            <History className="h-4 w-4" />
+            <History className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Audit Trail</span>
           </Button>
 
           <Button 
             onClick={() => exportActivitiesToCSV(filtered, projects)} 
             variant="outline" 
-            className="gap-2 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 h-10"
+            className="gap-2 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 h-9 text-xs"
             title="Export activities to offline CSV spreadsheet"
           >
-            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="hidden sm:inline">Export CSV</span>
           </Button>
 
@@ -538,184 +556,179 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
             onClick={() => printActivitiesSummary({
               project: projects[0],
               activities: filtered,
-              filterLabel: searchTerm ? `Search query: "${searchTerm}"` : `${selectedWorkstream === 'ALL' ? 'All Workstreams' : WORKSTREAMS[selectedWorkstream]?.name || selectedWorkstream}`,
+              filterLabel: searchTerm ? `Search query: "${searchTerm}"` : 'All Activities',
               totalActivitiesCount: activities.length
             })} 
             variant="outline" 
-            className="gap-2 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 h-10"
+            className="gap-2 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 h-9 text-xs"
             title="Print or Export summary report as clean PDF"
           >
-            <Printer className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+            <Printer className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
             <span className="hidden sm:inline">Print / PDF</span>
           </Button>
-
-          <Button onClick={() => setIsAdding(true)} className="hidden md:flex gap-2 rounded-xl bg-[#0B5FFF] h-10">
-            <Plus className="h-4 w-4" /> Add Activity
-          </Button>
-
-          {/* Search Box */}
-          <div className="relative w-full md:w-56">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Search tasks, spans..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-xs sm:text-sm focus:border-[#0B5FFF] focus:outline-none focus:ring-1 focus:ring-[#0B5FFF] dark:border-slate-800 dark:bg-slate-900"
-            />
-          </div>
-
-          {/* View Mode Switcher Toolbar */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-0.5 border border-slate-200/80 dark:border-slate-700/80">
-            <button
-              onClick={() => setViewMode('board')}
-              className={`px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-bold ${viewMode === 'board' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              title="Kanban Board View"
-            >
-              <Kanban className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">Board</span>
-            </button>
-            <button
-              onClick={() => setViewMode('table')}
-              className={`px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-bold ${viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              title="Spreadsheet / Data Table View"
-            >
-              <Table className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">Table</span>
-            </button>
-            <button
-              onClick={() => setViewMode('survey')}
-              className={`px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-bold ${viewMode === 'survey' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              title="Cross-Discipline PTS Readiness Matrix"
-            >
-              <Compass className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">PTS Matrix</span>
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              title="Grid Card View"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              title="List View"
-            >
-              <ListIcon className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => setViewMode('timeline')}
-              className={`p-1.5 rounded-lg transition-all ${viewMode === 'timeline' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              title="Timeline Schedule"
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* Independent Workstreams Selector Ribbon */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-        {/* All Workstreams Button */}
-        <button
-          type="button"
-          onClick={() => setSelectedWorkstream('ALL')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 flex items-center gap-2 transition-all ${
-            selectedWorkstream === 'ALL'
-              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
-              : 'bg-white dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300'
-          }`}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          <span>All Disciplines</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-            {activities.length}
-          </span>
-        </button>
-
-        {/* Individual Workstreams */}
-        {(Object.keys(WORKSTREAMS) as WorkstreamType[]).map(wsKey => {
-          const ws = WORKSTREAMS[wsKey];
-          const isSelected = selectedWorkstream === wsKey;
-          const count = activities.filter(a => (a.workstream || 'PTS_CONSTRUCTION') === wsKey).length;
-
-          return (
-            <button
-              key={wsKey}
-              type="button"
-              onClick={() => setSelectedWorkstream(wsKey)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 flex items-center gap-2 transition-all ${
-                isSelected
-                  ? `${ws.badgeClass} ring-2 ring-blue-500/40 shadow-xs`
-                  : 'bg-white dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300'
-              }`}
-            >
-              {wsKey === 'SURVEYING' && <Compass className="h-3.5 w-3.5 text-sky-600" />}
-              {wsKey === 'QA_QC' && <ShieldCheck className="h-3.5 w-3.5 text-rose-600" />}
-              {wsKey === 'MATERIALS' && <Package className="h-3.5 w-3.5 text-amber-600" />}
-              {wsKey === 'SAFETY' && <ShieldAlert className="h-3.5 w-3.5 text-emerald-600" />}
-              {wsKey === 'COMMISSIONING' && <Zap className="h-3.5 w-3.5 text-purple-600" />}
-              {wsKey === 'PTS_CONSTRUCTION' && <Building2 className="h-3.5 w-3.5 text-blue-600" />}
-              
-              <span>{ws.name}</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-700 shadow-2xs">
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      
-      {/* Timeframe Progress Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-          <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Total Activities</div>
-          <div className="text-xl font-black text-slate-900 dark:text-white">{filtered.length}</div>
-        </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-          <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">In Progress</div>
-          <div className="text-xl font-black text-[#0B5FFF]">{filtered.filter(a => a.status === 'In Progress').length}</div>
-        </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-          <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Completed</div>
-          <div className="text-xl font-black text-[#2E7D32]">{filtered.filter(a => a.status === 'Completed').length}</div>
-        </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-          <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Blocked / Hold Points</div>
-          <div className="text-xl font-black text-[#D32F2F]">{filtered.filter(a => a.status === 'Blocked').length}</div>
-        </div>
-      </div>
-
-      {/* Render Active View Mode */}
-      {viewMode === 'board' ? (
-        <ActivityKanbanBoard 
-          activities={filtered} 
-          onSelectActivity={setSelectedActivity} 
-          onOpenSlideOver={setSlideOverActivity} 
-          onOpenLogProgress={handleOpenLogProgress} 
-          onUpdateStatus={handleQuickUpdateStatus} 
+      {/* Screen 2: Dedicated Discipline Tracker */}
+      {mainScreen === 'disciplines' ? (
+        <DisciplineTrackerView
+          activities={activities}
+          onSelectActivity={setSelectedActivity}
+          onOpenSlideOver={setSlideOverActivity}
+          onOpenLogProgress={handleOpenLogProgress}
+          onAddNewDisciplineItem={(ws) => {
+            setDuplicateInitialValues({ workstream: ws });
+            setIsAdding(true);
+          }}
+          onUpdateStatus={handleQuickUpdateStatus}
         />
-      ) : viewMode === 'table' ? (
-        <ActivityDataTable 
-          activities={filtered} 
-          onSelectActivity={setSelectedActivity} 
-          onOpenSlideOver={setSlideOverActivity} 
-          onOpenLogProgress={handleOpenLogProgress} 
-          onUpdateStatus={handleQuickUpdateStatus} 
-          onBulkStatusChange={handleBulkStatusChange} 
-          onExportSelected={(selected) => exportActivitiesToCSV(selected, projects)} 
-        />
-      ) : viewMode === 'survey' ? (
-        <PTSCrossDisciplineMatrix 
-          activities={activities} 
-          onSelectActivity={setSelectedActivity} 
-          onOpenSlideOver={setSlideOverActivity} 
-        />
-      ) : viewMode === 'timeline' ? (
-        <ActivityTimeline activities={filtered} onSelectActivity={(id) => setExpandedActivityId(expandedActivityId === id ? null : id)} />
       ) : (
+        /* Screen 1: Master Activity Tracker (Free of Discipline Constraints) */
+        <div className="flex flex-col gap-6">
+          {/* Header & Main Controls */}
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex justify-between items-center w-full md:w-auto">
+              <div>
+                <h1 className="text-xl font-bold tracking-tight">Activity Tracker</h1>
+                <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm">
+                  Track and manage all project activities and progress across the entire site.
+                </p>
+              </div>
+              <Button onClick={() => setIsAdding(true)} className="md:hidden gap-2 rounded-xl bg-[#0B5FFF]">
+                <Plus className="h-4 w-4" /> Add
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button onClick={() => setIsAdding(true)} className="hidden md:flex gap-2 rounded-xl bg-[#0B5FFF] h-10">
+                <Plus className="h-4 w-4" /> Add Activity
+              </Button>
+
+              {/* Search Box */}
+              <div className="relative w-full md:w-56">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input 
+                  type="text" 
+                  placeholder="Search activities, codes..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-xs sm:text-sm focus:border-[#0B5FFF] focus:outline-none focus:ring-1 focus:ring-[#0B5FFF] dark:border-slate-800 dark:bg-slate-900"
+                />
+              </div>
+
+              {/* Timeframe Filter */}
+              <div className="hidden lg:flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-medium border border-slate-200/80 dark:border-slate-700/80">
+                <button
+                  onClick={() => setTimeframe('all')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'all' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white font-bold' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setTimeframe('day')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'day' ? 'bg-white dark:bg-slate-700 shadow-sm text-[#0B5FFF] font-bold' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  Today
+                </button>
+                <button
+                  onClick={() => setTimeframe('week')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'week' ? 'bg-white dark:bg-slate-700 shadow-sm text-[#0B5FFF] font-bold' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  This Week
+                </button>
+                <button
+                  onClick={() => setTimeframe('month')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'month' ? 'bg-white dark:bg-slate-700 shadow-sm text-[#0B5FFF] font-bold' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  This Month
+                </button>
+              </div>
+
+              {/* View Mode Switcher Toolbar */}
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-0.5 border border-slate-200/80 dark:border-slate-700/80">
+                <button
+                  onClick={() => setViewMode('board')}
+                  className={`px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-bold ${viewMode === 'board' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                  title="Kanban Board View"
+                >
+                  <Kanban className="h-3.5 w-3.5" />
+                  <span className="hidden xl:inline">Board</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-bold ${viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                  title="Spreadsheet / Data Table View"
+                >
+                  <Table className="h-3.5 w-3.5" />
+                  <span className="hidden xl:inline">Table</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                  title="Grid Card View"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                  title="List View"
+                >
+                  <ListIcon className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setViewMode('timeline')}
+                  className={`p-1.5 rounded-lg transition-all ${viewMode === 'timeline' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                  title="Timeline Schedule"
+                >
+                  <CalendarDays className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Timeframe Progress Metrics */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+              <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Total Activities</div>
+              <div className="text-xl font-black text-slate-900 dark:text-white">{filtered.length}</div>
+            </div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+              <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">In Progress</div>
+              <div className="text-xl font-black text-[#0B5FFF]">{filtered.filter(a => a.status === 'In Progress').length}</div>
+            </div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+              <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Completed</div>
+              <div className="text-xl font-black text-[#2E7D32]">{filtered.filter(a => a.status === 'Completed').length}</div>
+            </div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+              <div className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Blocked / Hold Points</div>
+              <div className="text-xl font-black text-[#D32F2F]">{filtered.filter(a => a.status === 'Blocked').length}</div>
+            </div>
+          </div>
+
+          {/* Render Active View Mode */}
+          {viewMode === 'board' ? (
+            <ActivityKanbanBoard 
+              activities={filtered} 
+              onSelectActivity={setSelectedActivity} 
+              onOpenSlideOver={setSlideOverActivity} 
+              onOpenLogProgress={handleOpenLogProgress} 
+              onUpdateStatus={handleQuickUpdateStatus} 
+            />
+          ) : viewMode === 'table' ? (
+            <ActivityDataTable 
+              activities={filtered} 
+              onSelectActivity={setSelectedActivity} 
+              onOpenSlideOver={setSlideOverActivity} 
+              onOpenLogProgress={handleOpenLogProgress} 
+              onUpdateStatus={handleQuickUpdateStatus} 
+              onBulkStatusChange={handleBulkStatusChange} 
+              onExportSelected={(selected) => exportActivitiesToCSV(selected, projects)} 
+            />
+          ) : viewMode === 'timeline' ? (
+            <ActivityTimeline activities={filtered} onSelectActivity={(id) => setExpandedActivityId(expandedActivityId === id ? null : id)} />
+          ) : (
         <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start" : "flex flex-col gap-4"}>
           {filtered.map((activity) => {
             const subtasks = activity.subtasks || [];
@@ -1104,7 +1117,8 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
             );
           })}
         </div>
-
+      )}
+      </div>
       )}
       {/* Direct Camera Capture Overlay for list view */}
       {capturingActivityId && (
