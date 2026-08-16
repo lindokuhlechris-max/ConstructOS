@@ -880,6 +880,12 @@ export type UtilityType =
   | 'Waste & Septic Pump-out'
   | 'Repairs & Maintenance';
 
+export type RentalRateType = 
+  | 'Fixed Monthly' 
+  | 'Per Occupant / Bed (Monthly)' 
+  | 'Per Room (Monthly)' 
+  | 'Daily / Per Night per Person';
+
 export interface AccommodationUnit {
   id: string; // e.g. ACC-101
   name: string; // e.g. "Main Camp Block A", "Polokwane Staff House #2"
@@ -900,7 +906,9 @@ export interface AccommodationUnit {
   rentalAgreementNumber?: string;
   rentalStartDate?: string;
   rentalEndDate?: string;
-  rentalMonthlyCost?: number; // Base monthly rent in ZAR
+  rentalRateType?: RentalRateType; // Pricing model: Fixed vs Per-Occupant vs Per-Room
+  rentalRatePerUnit?: number; // Rate per person/bed or per room in ZAR
+  rentalMonthlyCost?: number; // Base or fixed monthly rent in ZAR
   rentalDepositPaid?: number;
   rentalBillingCycle?: 'Monthly' | 'Weekly' | 'Daily';
 
@@ -924,6 +932,8 @@ export interface AccommodationUtilityLog {
   vendorOrProvider?: string; // e.g. "Eskom", "Municipality", "Engen Diesel", "Afrox Gas"
   invoiceOrReceiptNumber?: string;
   paidStatus: 'Paid' | 'Pending' | 'Overdue';
+  receiptPhotoUrl?: string; // Uploaded receipt image / invoice PDF data URL
+  receiptFileName?: string;
   loggedBy: string;
   notes?: string;
 }

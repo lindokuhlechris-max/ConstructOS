@@ -632,6 +632,66 @@
       "entityType": "Employee",
       "entityId": "ACC-285",
       "actionType": "create"
+    },
+    {
+      "id": "AL-msw8r37f-ep8n",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Accommodation Facility Registered",
+      "details": "Added Rented accommodation: \"kraft lodge\" (Single Room / Lodge, Capacity: 1 beds)",
+      "timestamp": "2026-08-16T20:12:13.947Z",
+      "entityType": "Employee",
+      "entityId": "ACC-854",
+      "actionType": "create"
+    },
+    {
+      "id": "AL-msw8rbcu-7hom",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Accommodation Facility Deleted",
+      "details": "Deleted accommodation facility \"kraft lodge\"",
+      "timestamp": "2026-08-16T20:12:24.510Z",
+      "entityType": "Employee",
+      "entityId": "ACC-285",
+      "actionType": "delete"
+    },
+    {
+      "id": "AL-msw8wz4g-ex2a",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Accommodation Facility Registered",
+      "details": "Added Rented accommodation: \"Center Court\" (Shared House / Flat, Capacity: 10 beds)",
+      "timestamp": "2026-08-16T20:16:48.592Z",
+      "entityType": "Employee",
+      "entityId": "ACC-541",
+      "actionType": "create"
+    },
+    {
+      "id": "AL-msw8z06u-nc71",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Accommodation Utility Logged",
+      "details": "Logged LPG Gas / Cooking (R 750) for \"Center Court\"",
+      "timestamp": "2026-08-16T20:18:23.286Z",
+      "entityType": "Employee",
+      "entityId": "ACC-UTL-7918",
+      "actionType": "create"
+    },
+    {
+      "id": "AL-msw95nv0-zvrm",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Employee Profile Updated",
+      "details": "Updated employee details for \"Sibusiso Nkumbi\" (EMP-3708)",
+      "timestamp": "2026-08-16T20:23:33.900Z",
+      "entityType": "Employee",
+      "entityId": "EMP-3708",
+      "actionType": "update"
     }
   ],
   "allocations": [],
@@ -671,11 +731,9 @@
       },
       "hasAccommodation": true,
       "accommodationDetails": {
+        "campId": "ACC-854",
         "campName": "kraft lodge",
         "roomNumber": "6",
-        "subsidyAmount": 0,
-        "notes": "",
-        "campId": "ACC-285",
         "checkInDate": "2026-08-16"
       },
       "hasTransport": true,

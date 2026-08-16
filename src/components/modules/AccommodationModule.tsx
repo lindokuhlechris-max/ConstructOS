@@ -4,13 +4,15 @@ import {
   Building2, Plus, Bed, Users, Zap, Droplets, Flame, Wifi, 
   Trash2, Edit3, ArrowLeft, Download, Search, CheckCircle2, 
   Shield, Home, Fuel, UserPlus, Receipt, DollarSign,
-  Briefcase, X, Sparkles, MapPin, Copy, DoorClosed
+  Briefcase, X, Sparkles, MapPin, Copy, DoorClosed, Eye, ExternalLink
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { 
   AccommodationUnit, AccommodationUtilityLog, AccommodationType, 
-  AccommodationOwnership, AccommodationStatus, UtilityType, Employee 
+  AccommodationOwnership, AccommodationStatus, UtilityType, Employee, RentalRateType 
 } from '../../types';
+import { AccommodationDetail } from '../AccommodationDetail';
+import { calculateAccommodationMonthlyCost, getAccommodationRateDescription } from '../../lib/pdfAccommodation';
 
 interface AccommodationModuleProps {
   onBack?: () => void;
@@ -31,6 +33,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     deleteAccommodationUtility,
   } = useAppContext();
 
+  const [selectedAccommodationId, setSelectedAccommodationId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'properties' | 'utilities' | 'roster'>('properties');
   const [searchTerm, setSearchTerm] = useState('');
   const [ownershipFilter, setOwnershipFilter] = useState<'All' | 'Owned' | 'Rented'>('All');
@@ -44,6 +47,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
   const [assignTargetUnit, setAssignTargetUnit] = useState<AccommodationUnit | null>(null);
   const [isUtilityModalOpen, setIsUtilityModalOpen] = useState(false);
   const [utilityTargetUnit, setUtilityTargetUnit] = useState<AccommodationUnit | null>(null);
+  const [viewingReceiptUrl, setViewingReceiptUrl] = useState<string | null>(null);
 
   // Unit Form state
   const [formName, setFormName] = useState('');
@@ -60,6 +64,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
   const [formRentalAgreementNumber, setFormRentalAgreementNumber] = useState('');
   const [formRentalStartDate, setFormRentalStartDate] = useState('');
   const [formRentalEndDate, setFormRentalEndDate] = useState('');
+  const [formRentalRateType, setFormRentalRateType] = useState<RentalRateType>('Fixed Monthly');
+  const [formRentalRatePerUnit, setFormRentalRatePerUnit] = useState<number | ''>('');
   const [formRentalMonthlyCost, setFormRentalMonthlyCost] = useState<number | ''>('');
   const [formRentalDepositPaid, setFormRentalDepositPaid] = useState<number | ''>('');
   const [formRentalBillingCycle, setFormRentalBillingCycle] = useState<'Monthly' | 'Weekly' | 'Daily'>('Monthly');
@@ -82,6 +88,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
   const [utilVendor, setUtilVendor] = useState('');
   const [utilInvoiceNo, setUtilInvoiceNo] = useState('');
   const [utilPaidStatus, setUtilPaidStatus] = useState<'Paid' | 'Pending' | 'Overdue'>('Paid');
+  const [utilReceiptPhoto, setUtilReceiptPhoto] = useState<string>('');
+  const [utilReceiptName, setUtilReceiptName] = useState<string>('');
   const [utilNotes, setUtilNotes] = useState('');
 
   // Predefined amenities list
@@ -157,9 +165,10 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     const availableBeds = Math.max(0, totalBeds - occupiedBeds);
     const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
 
+    // Calculate active monthly rental commitments taking per-occupant / per-room lodges into account!
     const monthlyRentalCommitment = accommodations
       .filter(a => a.ownership === 'Rented')
-      .reduce((sum, a) => sum + (a.rentalMonthlyCost || 0), 0);
+      .reduce((sum, a) => sum + calculateAccommodationMonthlyCost(a), 0);
 
     const totalUtilitiesCost = accommodationUtilities
       .reduce((sum, u) => sum + (u.amountZAR || 0), 0);
@@ -220,6 +229,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     setFormRentalAgreementNumber('');
     setFormRentalStartDate('');
     setFormRentalEndDate('');
+    setFormRentalRateType('Fixed Monthly');
+    setFormRentalRatePerUnit('');
     setFormRentalMonthlyCost('');
     setFormRentalDepositPaid('');
     setFormRentalBillingCycle('Monthly');
@@ -247,6 +258,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     setFormRentalAgreementNumber(unit.rentalAgreementNumber || '');
     setFormRentalStartDate(unit.rentalStartDate || '');
     setFormRentalEndDate(unit.rentalEndDate || '');
+    setFormRentalRateType(unit.rentalRateType || 'Fixed Monthly');
+    setFormRentalRatePerUnit(unit.rentalRatePerUnit !== undefined ? unit.rentalRatePerUnit : (unit.rentalMonthlyCost || ''));
     setFormRentalMonthlyCost(unit.rentalMonthlyCost !== undefined ? unit.rentalMonthlyCost : '');
     setFormRentalDepositPaid(unit.rentalDepositPaid !== undefined ? unit.rentalDepositPaid : '');
     setFormRentalBillingCycle(unit.rentalBillingCycle || 'Monthly');
@@ -259,7 +272,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
 
   // Duplicate / Copy Accommodation Unit
   const handleDuplicateUnit = (unit: AccommodationUnit) => {
-    setEditingUnit(null); // Set to null so it creates a fresh duplicate record
+    setEditingUnit(null);
     setFormName(`${unit.name} (Copy)`);
     setFormType(unit.type);
     setFormOwnership(unit.ownership);
@@ -274,6 +287,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     setFormRentalAgreementNumber(unit.rentalAgreementNumber || '');
     setFormRentalStartDate(unit.rentalStartDate || '');
     setFormRentalEndDate(unit.rentalEndDate || '');
+    setFormRentalRateType(unit.rentalRateType || 'Fixed Monthly');
+    setFormRentalRatePerUnit(unit.rentalRatePerUnit !== undefined ? unit.rentalRatePerUnit : (unit.rentalMonthlyCost || ''));
     setFormRentalMonthlyCost(unit.rentalMonthlyCost !== undefined ? unit.rentalMonthlyCost : '');
     setFormRentalDepositPaid(unit.rentalDepositPaid !== undefined ? unit.rentalDepositPaid : '');
     setFormRentalBillingCycle(unit.rentalBillingCycle || 'Monthly');
@@ -288,6 +303,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
   const handleSaveUnit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
+
+    const rateAmount = formRentalRatePerUnit !== '' ? Number(formRentalRatePerUnit) : (formRentalMonthlyCost !== '' ? Number(formRentalMonthlyCost) : undefined);
 
     const unitData: AccommodationUnit = {
       id: editingUnit ? editingUnit.id : `ACC-${Math.floor(100 + Math.random() * 900)}`,
@@ -307,7 +324,9 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
       rentalAgreementNumber: formOwnership === 'Rented' ? formRentalAgreementNumber.trim() || undefined : undefined,
       rentalStartDate: formOwnership === 'Rented' ? formRentalStartDate || undefined : undefined,
       rentalEndDate: formOwnership === 'Rented' ? formRentalEndDate || undefined : undefined,
-      rentalMonthlyCost: formOwnership === 'Rented' && formRentalMonthlyCost !== '' ? Number(formRentalMonthlyCost) : undefined,
+      rentalRateType: formOwnership === 'Rented' ? formRentalRateType : undefined,
+      rentalRatePerUnit: formOwnership === 'Rented' ? rateAmount : undefined,
+      rentalMonthlyCost: formOwnership === 'Rented' ? rateAmount : undefined,
       rentalDepositPaid: formOwnership === 'Rented' && formRentalDepositPaid !== '' ? Number(formRentalDepositPaid) : undefined,
       rentalBillingCycle: formOwnership === 'Rented' ? formRentalBillingCycle : undefined,
       amenities: formAmenities,
@@ -355,6 +374,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     setUtilVendor('');
     setUtilInvoiceNo('');
     setUtilPaidStatus('Paid');
+    setUtilReceiptPhoto('');
+    setUtilReceiptName('');
     setUtilNotes('');
     setIsUtilityModalOpen(true);
   };
@@ -377,12 +398,29 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
       vendorOrProvider: utilVendor.trim() || undefined,
       invoiceOrReceiptNumber: utilInvoiceNo.trim() || undefined,
       paidStatus: utilPaidStatus,
+      receiptPhotoUrl: utilReceiptPhoto || undefined,
+      receiptFileName: utilReceiptName || undefined,
       loggedBy: '',
       notes: utilNotes.trim() || undefined
     };
 
     addAccommodationUtility(newLog);
     setIsUtilityModalOpen(false);
+  };
+
+  // Handle Receipt Image Select
+  const handleReceiptFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUtilReceiptName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setUtilReceiptPhoto(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   // CSV Export for Utilities
@@ -461,8 +499,24 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     }
   };
 
+  // If an accommodation is selected, render the dedicated Detail Screen
+  const selectedAccommodation = accommodations.find(a => a.id === selectedAccommodationId);
+  if (selectedAccommodation) {
+    return (
+      <AccommodationDetail
+        unit={selectedAccommodation}
+        onClose={() => setSelectedAccommodationId(null)}
+        onUpdate={(updated) => updateAccommodation(updated)}
+        onDelete={(id) => {
+          deleteAccommodation(id);
+          setSelectedAccommodationId(null);
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-6 w-full">
+    <div className="flex flex-col gap-6 w-full animate-in fade-in duration-200">
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -564,8 +618,9 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
             <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">{formatZARShort(stats.monthlyRentalCommitment)}</span>
             <span className="text-xs text-slate-500">/ month</span>
           </div>
-          <p className="mt-3 text-xs text-slate-500 flex items-center gap-1.5 font-medium">
-            <Briefcase className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" /> Across {stats.rentedUnits} leased property contracts
+          <p className="mt-3 text-xs text-slate-500 flex items-center gap-1.5 font-medium truncate">
+            <Briefcase className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" /> 
+            Active incurred across {stats.rentedUnits} leased facilities
           </p>
         </Card>
 
@@ -723,6 +778,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                 const occupants = employees.filter(e => unit.occupantIds?.includes(e.id));
                 const vacantBeds = Math.max(0, unit.totalCapacityBeds - (unit.occupantIds?.length || 0));
                 const isFull = vacantBeds === 0;
+                const activeLeaseCost = calculateAccommodationMonthlyCost(unit);
 
                 return (
                   <div 
@@ -732,7 +788,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                     <div>
                       {/* Card Header: Title & Badges */}
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
+                        <div className="flex-1 cursor-pointer" onClick={() => setSelectedAccommodationId(unit.id)}>
                           <div className="flex flex-wrap items-center gap-2 mb-1.5">
                             {unit.ownership === 'Owned' ? (
                               <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/50 text-xs font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -766,8 +822,9 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                             )}
                           </div>
 
-                          <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 hover:text-[#0B5FFF] transition">
                             {unit.name}
+                            <ExternalLink className="w-3.5 h-3.5 opacity-40 hover:opacity-100" />
                           </h3>
                           
                           <p className="text-slate-500 text-xs flex items-center gap-1.5 mt-1">
@@ -806,7 +863,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                         </div>
                       </div>
 
-                      {/* Rented Details Block */}
+                      {/* Rented Details Block with Dynamic Occupancy Calculation */}
                       {unit.ownership === 'Rented' && (
                         <div className="mt-3 p-3 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/40 rounded-xl space-y-1 text-xs">
                           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -815,8 +872,13 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                               <span className="font-bold text-slate-900 dark:text-slate-100">{unit.rentalVendor || 'Private Landlord'}</span>
                             </div>
                             <div>
-                              <span className="text-slate-500 text-[11px] block">Monthly Rent:</span>
-                              <span className="font-bold text-amber-700 dark:text-amber-400">{unit.rentalMonthlyCost ? formatZAR(unit.rentalMonthlyCost) : 'R 0.00'}</span>
+                              <span className="text-slate-500 text-[11px] block">Active Monthly Rent:</span>
+                              <span className="font-bold text-amber-700 dark:text-amber-400">
+                                {formatZAR(activeLeaseCost)}
+                              </span>
+                              <span className="text-[10px] text-slate-500 block truncate max-w-[200px]" title={getAccommodationRateDescription(unit)}>
+                                {getAccommodationRateDescription(unit)}
+                              </span>
                             </div>
                             <div>
                               <span className="text-slate-500 text-[11px] block">Lease Expiry:</span>
@@ -917,24 +979,33 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                     </div>
 
                     {/* Card Footer Actions */}
-                    <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
-                      <button
-                        onClick={() => handleOpenLogUtility(unit)}
-                        className="text-xs text-amber-700 dark:text-amber-400 font-bold flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 px-3 py-1.5 rounded-xl border border-amber-200 dark:border-amber-500/30 transition"
-                      >
-                        <Zap className="w-3.5 h-3.5" /> Log Electricity/Water
-                      </button>
+                    <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleOpenLogUtility(unit)}
+                          className="text-xs text-amber-700 dark:text-amber-400 font-bold flex items-center gap-1 bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 px-2.5 py-1.5 rounded-xl border border-amber-200 dark:border-amber-500/30 transition"
+                        >
+                          <Zap className="w-3.5 h-3.5" /> Log Bill
+                        </button>
+                        <button
+                          onClick={() => handleOpenAssign(unit)}
+                          disabled={isFull}
+                          className={`text-xs font-bold flex items-center gap-1 px-2.5 py-1.5 rounded-xl transition ${
+                            isFull
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                              : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800'
+                          }`}
+                        >
+                          <UserPlus className="w-3.5 h-3.5" /> Allocate
+                        </button>
+                      </div>
 
                       <button
-                        onClick={() => handleOpenAssign(unit)}
-                        disabled={isFull}
-                        className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition ${
-                          isFull
-                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                            : 'bg-[#0B5FFF] hover:bg-blue-700 text-white shadow-sm'
-                        }`}
+                        onClick={() => setSelectedAccommodationId(unit.id)}
+                        className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0B5FFF] hover:bg-blue-700 text-white shadow-sm transition"
                       >
-                        <UserPlus className="w-3.5 h-3.5" /> {isFull ? 'Camp Full' : 'Assign Employee'}
+                        <span>View Details</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -988,6 +1059,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                       <th className="px-4 py-3.5">Units / Consumed</th>
                       <th className="px-4 py-3.5">Cost (ZAR)</th>
                       <th className="px-4 py-3.5">Vendor / Receipt #</th>
+                      <th className="px-4 py-3.5">Receipt Voucher</th>
                       <th className="px-4 py-3.5">Status</th>
                       <th className="px-4 py-3.5 text-right">Actions</th>
                     </tr>
@@ -1024,6 +1096,18 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                           <div className="font-medium">{util.vendorOrProvider || '—'}</div>
                           {util.invoiceOrReceiptNumber && (
                             <div className="text-[10px] text-slate-400 font-mono">Ref: {util.invoiceOrReceiptNumber}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-xs">
+                          {util.receiptPhotoUrl ? (
+                            <button
+                              onClick={() => setViewingReceiptUrl(util.receiptPhotoUrl || null)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800 text-[11px] transition"
+                            >
+                              <Eye className="w-3 h-3" /> View Receipt
+                            </button>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">None</span>
                           )}
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap">
@@ -1409,19 +1493,50 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Pricing Model Selector */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Monthly Rent (ZAR) *</label>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                        Rental Pricing Calculation Model *
+                      </label>
+                      <select
+                        value={formRentalRateType}
+                        onChange={(e) => setFormRentalRateType(e.target.value as RentalRateType)}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold"
+                      >
+                        <option value="Fixed Monthly">Fixed Monthly Lease (Flat Rate)</option>
+                        <option value="Per Occupant / Bed (Monthly)">Per Occupant / Bed (Monthly Rate)</option>
+                        <option value="Per Room (Monthly)">Per Room (Monthly Rate)</option>
+                        <option value="Daily / Per Night per Person">Daily / Per Night per Person</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                        {formRentalRateType === 'Fixed Monthly'
+                          ? 'Fixed Monthly Rent (ZAR) *'
+                          : formRentalRateType === 'Per Occupant / Bed (Monthly)'
+                          ? 'Rate per Occupant / Month (ZAR) *'
+                          : formRentalRateType === 'Per Room (Monthly)'
+                          ? 'Rate per Room / Month (ZAR) *'
+                          : 'Rate per Person / Night (ZAR) *'}
+                      </label>
                       <input
                         type="number"
                         min="0"
-                        placeholder="e.g. 18500"
-                        value={formRentalMonthlyCost}
-                        onChange={(e) => setFormRentalMonthlyCost(e.target.value === '' ? '' : Number(e.target.value))}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                        placeholder="e.g. 3500"
+                        value={formRentalRatePerUnit !== '' ? formRentalRatePerUnit : (formRentalMonthlyCost !== '' ? formRentalMonthlyCost : '')}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Number(e.target.value);
+                          setFormRentalRatePerUnit(val);
+                          setFormRentalMonthlyCost(val);
+                        }}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
                       />
                     </div>
+                  </div>
 
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Lease Start Date</label>
                       <input
@@ -1761,6 +1876,19 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                 </div>
               </div>
 
+              {/* Receipt File Upload */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">
+                  Attach Receipt Voucher / Slip
+                </label>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={handleReceiptFileChange}
+                  className="text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 dark:file:bg-amber-950/60 dark:file:text-amber-300 hover:file:bg-amber-100"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">
                   Notes & Description
@@ -1791,6 +1919,32 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
               </div>
             </form>
           </Card>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: RECEIPT PHOTO VIEWER                                            */}
+      {/* ========================================================================= */}
+      {viewingReceiptUrl && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-4 relative flex flex-col items-center">
+            <button
+              onClick={() => setViewingReceiptUrl(null)}
+              className="absolute right-3 top-3 p-1.5 text-slate-400 hover:text-white bg-slate-800 rounded-xl"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2 self-start">
+              <Receipt className="w-4 h-4 text-amber-400" /> Utility Receipt / Invoice Voucher
+            </h3>
+            <div className="max-h-[75vh] overflow-auto rounded-xl border border-slate-800 w-full flex justify-center bg-black/40">
+              <img
+                src={viewingReceiptUrl}
+                alt="Utility Receipt"
+                className="max-h-[70vh] object-contain rounded-lg shadow-lg"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
