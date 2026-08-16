@@ -1846,10 +1846,10 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                               <div>
                                 <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
                                   <Home className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
-                                  {emp.accommodationDetails?.campName || 'Central Site Camp'}
+                                  {emp.accommodationDetails?.campName || 'Assigned Camp'}
                                 </p>
                                 <p className="text-slate-400 text-[11px]">
-                                  Room / Unit: <strong>{emp.accommodationDetails?.roomNumber || 'Room 12B'}</strong>
+                                  Room / Unit: <strong>{emp.accommodationDetails?.roomNumber || '—'}</strong>
                                   {emp.accommodationDetails?.subsidyAmount ? ` (R${emp.accommodationDetails.subsidyAmount}/mo)` : ''}
                                 </p>
                               </div>

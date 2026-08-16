@@ -280,131 +280,9 @@ const DEFAULT_INITIAL_EQUIPMENT: Equipment[] = [];
 
 const DEFAULT_INITIAL_EQUIPMENT_LOGS: EquipmentLog[] = [];
 
-const DEFAULT_INITIAL_ACCOMMODATIONS: AccommodationUnit[] = [
-  {
-    id: 'ACC-101',
-    name: 'Central Site Camp (Modular Container Block A)',
-    type: 'Site Camp / Modular Cabin',
-    ownership: 'Owned',
-    location: 'Zone 1 - Main Construction Yard',
-    address: 'Plot 4, Site Village, N1 North Corridor',
-    totalCapacityBeds: 8,
-    occupantIds: [],
-    status: 'Available',
-    amenities: ['WiFi', 'Aircon / Heating', 'Generator Backup', 'Water Tank / Borehole', 'Kitchenette', 'En-suite Bathroom'],
-    notes: 'Company-owned parkhome cabins with backup diesel generator connection.',
-    contactPerson: 'Sipho Zulu (Camp Manager)',
-    contactPhone: '+27 82 455 1920',
-    createdAt: '2026-01-10'
-  },
-  {
-    id: 'ACC-102',
-    name: 'Polokwane Town Staff House #3',
-    type: 'Shared House / Flat',
-    ownership: 'Rented',
-    location: 'Polokwane Central',
-    address: '42 Grobler Street, Polokwane, Limpopo',
-    totalCapacityBeds: 4,
-    occupantIds: [],
-    status: 'Available',
-    rentalVendor: 'Limpopo Property Rentals Ltd',
-    rentalAgreementNumber: 'LPR-2026-ACC-88',
-    rentalStartDate: '2026-01-01',
-    rentalEndDate: '2026-12-31',
-    rentalMonthlyCost: 18500,
-    rentalDepositPaid: 20000,
-    rentalBillingCycle: 'Monthly',
-    amenities: ['WiFi', 'Aircon / Heating', 'En-suite Bathroom', 'Kitchenette', 'Laundry'],
-    notes: 'Leased 4-bedroom residential house for engineering and survey team.',
-    contactPerson: 'Mrs. Dlamini (Landlord Agent)',
-    contactPhone: '+27 15 291 8842',
-    createdAt: '2026-01-01'
-  },
-  {
-    id: 'ACC-103',
-    name: 'Makhado Executive Guest Lodge (Unit 4)',
-    type: 'Single Room / Lodge',
-    ownership: 'Rented',
-    location: 'Louis Trichardt / Makhado',
-    address: '12 Songozwi St, Makhado',
-    totalCapacityBeds: 2,
-    occupantIds: [],
-    status: 'Available',
-    rentalVendor: 'Songozwi Bush Lodge',
-    rentalAgreementNumber: 'SBL-2026-L4',
-    rentalStartDate: '2026-02-01',
-    rentalEndDate: '2026-08-31',
-    rentalMonthlyCost: 12000,
-    rentalDepositPaid: 12000,
-    rentalBillingCycle: 'Monthly',
-    amenities: ['WiFi', 'Aircon / Heating', 'En-suite Bathroom'],
-    notes: 'Rented executive lodge for senior project consultants.',
-    contactPerson: 'Reception Desk',
-    contactPhone: '+27 15 516 0001',
-    createdAt: '2026-02-01'
-  }
-];
+const DEFAULT_INITIAL_ACCOMMODATIONS: AccommodationUnit[] = [];
 
-const DEFAULT_INITIAL_UTILITIES: AccommodationUtilityLog[] = [
-  {
-    id: 'ACC-UTL-001',
-    accommodationId: 'ACC-101',
-    accommodationName: 'Central Site Camp (Modular Container Block A)',
-    utilityType: 'Electricity / Eskom Tokens',
-    date: '2026-08-01',
-    amountZAR: 4500,
-    unitsConsumed: 1500,
-    unitLabel: 'kWh',
-    vendorOrProvider: 'Eskom Prepaid',
-    invoiceOrReceiptNumber: 'ESK-9041284',
-    paidStatus: 'Paid',
-    loggedBy: 'Sipho Zulu',
-    notes: 'Monthly bulk prepaid meter token top-up for camp air conditioning and lights.'
-  },
-  {
-    id: 'ACC-UTL-002',
-    accommodationId: 'ACC-101',
-    accommodationName: 'Central Site Camp (Modular Container Block A)',
-    utilityType: 'Water & Sanitation',
-    date: '2026-08-05',
-    amountZAR: 2200,
-    unitsConsumed: 10000,
-    unitLabel: 'Litres',
-    vendorOrProvider: 'Limpopo Water Tankers',
-    invoiceOrReceiptNumber: 'WT-5502',
-    paidStatus: 'Paid',
-    loggedBy: 'Sipho Zulu',
-    notes: '10,000L potable water delivery to camp header tanks.'
-  },
-  {
-    id: 'ACC-UTL-003',
-    accommodationId: 'ACC-101',
-    accommodationName: 'Central Site Camp (Modular Container Block A)',
-    utilityType: 'Camp Generator Diesel',
-    date: '2026-08-10',
-    amountZAR: 5400,
-    unitsConsumed: 220,
-    unitLabel: 'Litres',
-    vendorOrProvider: 'Engen Bulk Fuels',
-    invoiceOrReceiptNumber: 'ENG-88120',
-    paidStatus: 'Paid',
-    loggedBy: 'Pieter Venter',
-    notes: 'Diesel top-up for 65kVA camp backup generator.'
-  },
-  {
-    id: 'ACC-UTL-004',
-    accommodationId: 'ACC-102',
-    accommodationName: 'Polokwane Town Staff House #3',
-    utilityType: 'WiFi & Internet',
-    date: '2026-08-01',
-    amountZAR: 999,
-    vendorOrProvider: 'Openserve / Telkom Fiber',
-    invoiceOrReceiptNumber: 'TEL-44910',
-    paidStatus: 'Paid',
-    loggedBy: 'Lindokuhle Chris',
-    notes: 'Monthly 100Mbps uncapped fiber subscription.'
-  }
-];
+const DEFAULT_INITIAL_UTILITIES: AccommodationUtilityLog[] = [];
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -701,19 +579,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (getLocal('documents')) setDocuments(getLocal('documents'));
       
       const localAcc = getLocal('accommodations');
-      if (localAcc && Array.isArray(localAcc) && localAcc.length > 0) {
-        setAccommodations(localAcc);
+      if (localAcc && Array.isArray(localAcc)) {
+        const cleanedAcc = localAcc.filter(a => !['ACC-101', 'ACC-102', 'ACC-103'].includes(a.id));
+        setAccommodations(cleanedAcc);
+        localStorage.setItem('accommodations', JSON.stringify(cleanedAcc));
       } else {
-        setAccommodations(DEFAULT_INITIAL_ACCOMMODATIONS);
-        localStorage.setItem('accommodations', JSON.stringify(DEFAULT_INITIAL_ACCOMMODATIONS));
+        setAccommodations([]);
+        localStorage.setItem('accommodations', JSON.stringify([]));
       }
 
       const localUtils = getLocal('accommodationUtilities');
-      if (localUtils && Array.isArray(localUtils) && localUtils.length > 0) {
-        setAccommodationUtilities(localUtils);
+      if (localUtils && Array.isArray(localUtils)) {
+        const cleanedUtils = localUtils.filter(u => !['ACC-UTL-001', 'ACC-UTL-002', 'ACC-UTL-003', 'ACC-UTL-004'].includes(u.id));
+        setAccommodationUtilities(cleanedUtils);
+        localStorage.setItem('accommodationUtilities', JSON.stringify(cleanedUtils));
       } else {
-        setAccommodationUtilities(DEFAULT_INITIAL_UTILITIES);
-        localStorage.setItem('accommodationUtilities', JSON.stringify(DEFAULT_INITIAL_UTILITIES));
+        setAccommodationUtilities([]);
+        localStorage.setItem('accommodationUtilities', JSON.stringify([]));
       }
 
       const localProfiles = getLocal('userProfiles');

@@ -744,8 +744,8 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
                   </div>
                   {employee.hasAccommodation ? (
                     <div className="space-y-1 text-xs text-slate-700 dark:text-slate-300 pt-1">
-                      <p className="font-bold text-indigo-950 dark:text-indigo-200">{employee.accommodationDetails?.campName || 'Central Site Camp'}</p>
-                      <p className="text-slate-500">Room / Unit: <strong className="text-slate-700 dark:text-slate-300 font-mono">{employee.accommodationDetails?.roomNumber || 'Room 1'}</strong></p>
+                      <p className="font-bold text-indigo-950 dark:text-indigo-200">{employee.accommodationDetails?.campName || 'Assigned Camp'}</p>
+                      <p className="text-slate-500">Room / Unit: <strong className="text-slate-700 dark:text-slate-300 font-mono">{employee.accommodationDetails?.roomNumber || '—'}</strong></p>
                       {employee.accommodationDetails?.checkInDate && (
                         <p className="text-slate-500 text-[11px]">Check-in Date: {employee.accommodationDetails.checkInDate}</p>
                       )}
