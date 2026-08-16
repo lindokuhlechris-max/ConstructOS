@@ -191,8 +191,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     setFormOwnership('Owned');
     setFormLocation('');
     setFormAddress('');
-    setFormCapacity(4);
-    setFormProjectId(projects[0]?.id || '');
+    setFormCapacity(1);
+    setFormProjectId('');
     setFormStatus('Available');
     setFormRentalVendor('');
     setFormRentalAgreementNumber('');
@@ -201,7 +201,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     setFormRentalMonthlyCost('');
     setFormRentalDepositPaid('');
     setFormRentalBillingCycle('Monthly');
-    setFormAmenities(['WiFi & Internet', 'Generator Backup', 'Water Tank / Borehole']);
+    setFormAmenities([]);
     setFormContactPerson('');
     setFormContactPhone('');
     setFormNotes('');
@@ -243,7 +243,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
       name: formName.trim(),
       type: formType,
       ownership: formOwnership,
-      location: formLocation.trim() || 'Site Area',
+      location: formLocation.trim(),
       address: formAddress.trim() || undefined,
       totalCapacityBeds: Number(formCapacity) || 1,
       occupantIds: editingUnit ? editingUnit.occupantIds : [],
@@ -277,7 +277,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
   const handleOpenAssign = (unit: AccommodationUnit) => {
     setAssignTargetUnit(unit);
     setAssignEmployeeId('');
-    setAssignRoomNumber(`Room ${(unit.occupantIds.length || 0) + 1}`);
+    setAssignRoomNumber('');
     setIsAssignModalOpen(true);
   };
 
@@ -315,7 +315,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     const newLog: AccommodationUtilityLog = {
       id: `ACC-UTL-${Math.floor(1000 + Math.random() * 9000)}`,
       accommodationId: utilAccId,
-      accommodationName: target ? target.name : 'Site Camp',
+      accommodationName: target ? target.name : '',
       utilityType: utilType,
       date: utilDate,
       amountZAR: Number(utilAmount),
@@ -324,7 +324,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
       vendorOrProvider: utilVendor.trim() || undefined,
       invoiceOrReceiptNumber: utilInvoiceNo.trim() || undefined,
       paidStatus: utilPaidStatus,
-      loggedBy: 'Site Supervisor',
+      loggedBy: '',
       notes: utilNotes.trim() || undefined
     };
 
@@ -378,7 +378,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
             acc.id,
             `"${acc.name.replace(/"/g, '""')}"`,
             acc.ownership,
-            `"${emp.accommodationDetails?.roomNumber || 'Room 1'}"`,
+            `"${emp.accommodationDetails?.roomNumber || ''}"`,
             `"${emp.accommodationDetails?.checkInDate || acc.createdAt || ''}"`
           ]);
         }
@@ -809,7 +809,9 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                                       {getEmpInitials(emp)}
                                     </div>
                                     <span className="font-semibold">{displayName}</span>
-                                    <span className="text-slate-500 text-[10px]">({emp.accommodationDetails?.roomNumber || 'Room 1'})</span>
+                                    {emp.accommodationDetails?.roomNumber && (
+                                      <span className="text-slate-500 text-[10px]">({emp.accommodationDetails.roomNumber})</span>
+                                    )}
                                     <button
                                       onClick={() => {
                                         if (window.confirm(`Remove ${displayName} from ${unit.name}?`)) {
@@ -1053,11 +1055,11 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                             </td>
                             <td className="px-4 py-3.5 whitespace-nowrap">
                               <span className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono font-bold text-slate-700 dark:text-cyan-300">
-                                {emp.accommodationDetails?.roomNumber || 'Room 1'}
+                                {emp.accommodationDetails?.roomNumber || '—'}
                               </span>
                             </td>
                             <td className="px-4 py-3.5 whitespace-nowrap text-slate-500 dark:text-slate-400 text-xs">
-                              {emp.accommodationDetails?.checkInDate || acc.createdAt || '2026-01-01'}
+                              {emp.accommodationDetails?.checkInDate || acc.createdAt || '—'}
                             </td>
                             <td className="px-4 py-3.5 text-xs text-slate-500 dark:text-slate-400">
                               {emp.phone || '—'}

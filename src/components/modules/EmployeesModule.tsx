@@ -919,7 +919,7 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                       <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Camp / Residence Name</label>
                       <input
                         type="text"
-                        placeholder="e.g. Central Site Camp A"
+                        placeholder="e.g. Camp or Facility Name"
                         className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
                         value={newEmployee.accommodationDetails?.campName || ''}
                         onChange={e => setNewEmployee({
@@ -3158,7 +3158,7 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                             accommodationDetails: {
                               campId: e.target.value,
                               campName: selectedAcc ? selectedAcc.name : e.target.value,
-                              roomNumber: editingEmployee.accommodationDetails?.roomNumber || 'Room 1',
+                              roomNumber: editingEmployee.accommodationDetails?.roomNumber || '',
                               subsidyAmount: editingEmployee.accommodationDetails?.subsidyAmount || 0,
                               notes: editingEmployee.accommodationDetails?.notes || ''
                             }

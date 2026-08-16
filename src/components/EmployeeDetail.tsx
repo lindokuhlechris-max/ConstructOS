@@ -2005,7 +2005,7 @@ export function EmployeeDetail({ employee, onSave, onClose, onDelete }: Employee
                               ...logisticsData.accommodationDetails,
                               campId: e.target.value,
                               campName: selectedAcc ? selectedAcc.name : e.target.value,
-                              roomNumber: logisticsData.accommodationDetails.roomNumber || 'Room 1'
+                              roomNumber: logisticsData.accommodationDetails.roomNumber || ''
                             }
                           });
                         }}
