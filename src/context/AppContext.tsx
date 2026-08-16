@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -36,6 +36,7 @@ interface AppContextType {
   reminders: Reminder[];
   accommodations: AccommodationUnit[];
   accommodationUtilities: AccommodationUtilityLog[];
+  accommodationPayments: AccommodationPaymentLog[];
   theme: 'light' | 'dark';
   units: 'metric' | 'imperial';
   currency: import('../types').CurrencyCode;
@@ -152,6 +153,9 @@ interface AppContextType {
   removeEmployeeFromAccommodation: (accId: string, empId: string) => void;
   addAccommodationUtility: (log: AccommodationUtilityLog) => void;
   deleteAccommodationUtility: (id: string) => void;
+  addAccommodationPayment: (payment: AccommodationPaymentLog) => void;
+  updateAccommodationPayment: (payment: AccommodationPaymentLog) => void;
+  deleteAccommodationPayment: (id: string) => void;
 }
 
 const DEFAULT_INITIAL_PROFILES: UserProfile[] = [
@@ -329,6 +333,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [accommodations, setAccommodations] = useState<AccommodationUnit[]>([]);
   const [accommodationUtilities, setAccommodationUtilities] = useState<AccommodationUtilityLog[]>([]);
+  const [accommodationPayments, setAccommodationPayments] = useState<AccommodationPaymentLog[]>([]);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [currentUserProfile, setCurrentUserProfileState] = useState<UserProfile>({
     id: 'USR-001',
@@ -596,6 +601,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } else {
         setAccommodationUtilities([]);
         localStorage.setItem('accommodationUtilities', JSON.stringify([]));
+      }
+
+      const localPays = getLocal('accommodationPayments');
+      if (localPays && Array.isArray(localPays)) {
+        setAccommodationPayments(localPays);
+      } else {
+        setAccommodationPayments([]);
       }
 
       const localProfiles = getLocal('userProfiles');
@@ -2112,6 +2124,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncToServer('delete_accommodation_utility', { id });
   };
 
+  const addAccommodationPayment = (payment: AccommodationPaymentLog) => {
+    setAccommodationPayments(prev => {
+      const updated = [payment, ...prev];
+      localStorage.setItem('accommodationPayments', JSON.stringify(updated));
+      return updated;
+    });
+    syncToServer('add_accommodation_payment', payment);
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: 'Accommodation Lease Payment Logged',
+      details: `Logged lease payment of R ${payment.amountPaidZAR.toLocaleString()} for "${payment.accommodationName}" (${payment.billingPeriod})`,
+      timestamp: new Date().toISOString(),
+      entityType: 'Employee',
+      entityId: payment.id,
+      actionType: 'create'
+    });
+  };
+
+  const updateAccommodationPayment = (payment: AccommodationPaymentLog) => {
+    setAccommodationPayments(prev => {
+      const updated = prev.map(p => p.id === payment.id ? payment : p);
+      localStorage.setItem('accommodationPayments', JSON.stringify(updated));
+      return updated;
+    });
+    syncToServer('update_accommodation_payment', payment);
+  };
+
+  const deleteAccommodationPayment = (id: string) => {
+    setAccommodationPayments(prev => {
+      const updated = prev.filter(p => p.id !== id);
+      localStorage.setItem('accommodationPayments', JSON.stringify(updated));
+      return updated;
+    });
+    syncToServer('delete_accommodation_payment', { id });
+  };
+
   const setTheme = (newTheme: 'light' | 'dark') => {
     setThemeState(newTheme);
     localStorage.setItem('theme', newTheme);
@@ -2369,10 +2423,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addReminder, updateReminder, deleteReminder,
       addWeatherLog, updateWeatherLog, deleteWeatherLog,
       addDocument, updateDocument, deleteDocument, assignDocumentToActivity,
-      accommodations, accommodationUtilities,
+      accommodations, accommodationUtilities, accommodationPayments,
       addAccommodation, updateAccommodation, deleteAccommodation,
       assignEmployeeToAccommodation, removeEmployeeFromAccommodation,
-      addAccommodationUtility, deleteAccommodationUtility
+      addAccommodationUtility, deleteAccommodationUtility,
+      addAccommodationPayment, updateAccommodationPayment, deleteAccommodationPayment
     }}>
       {children}
       <SyncNotificationToast />

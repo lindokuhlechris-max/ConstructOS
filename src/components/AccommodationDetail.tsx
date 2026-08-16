@@ -5,11 +5,12 @@ import {
   Trash2, Edit3, ArrowLeft, Download, Search, CheckCircle2, 
   Shield, Home, Fuel, UserPlus, Receipt, DollarSign,
   Briefcase, X, Sparkles, MapPin, Copy, DoorClosed, Printer,
-  FileText, Calendar, Phone, Lock, Image as ImageIcon, Eye, Plus
+  FileText, Calendar, Phone, Lock, Image as ImageIcon, Eye, Plus,
+  CreditCard, Clock, CheckCircle, AlertTriangle
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { 
-  AccommodationUnit, AccommodationUtilityLog, AccommodationType, 
+  AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, AccommodationType, 
   AccommodationOwnership, AccommodationStatus, UtilityType, Employee, RentalRateType 
 } from '../types';
 import { 
@@ -29,21 +30,50 @@ interface AccommodationDetailProps {
 export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: AccommodationDetailProps) {
   const { 
     accommodationUtilities, 
+    accommodationPayments,
     employees, 
     projects,
     assignEmployeeToAccommodation,
     removeEmployeeFromAccommodation,
     addAccommodationUtility, 
     deleteAccommodationUtility,
+    addAccommodationPayment,
+    updateAccommodationPayment,
+    deleteAccommodationPayment
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<'roster' | 'utilities' | 'lease' | 'specs'>('roster');
   
+  // Filter payments for this accommodation
+  const facilityPayments = useMemo(() => {
+    return (accommodationPayments || []).filter(p => p.accommodationId === unit.id);
+  }, [accommodationPayments, unit.id]);
+
   // Modals inside Detail view
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isUtilityModalOpen, setIsUtilityModalOpen] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [viewingReceiptUrl, setViewingReceiptUrl] = useState<string | null>(null);
+  const [viewingProofUrl, setViewingProofUrl] = useState<string | null>(null);
+
+  // Payment Form state
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [payBillingPeriod, setPayBillingPeriod] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [payDate, setPayDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [payOccupantCount, setPayOccupantCount] = useState<number>(unit.occupantIds?.length || 0);
+  const [payAmountDue, setPayAmountDue] = useState<number | ''>(calculateAccommodationMonthlyCost(unit));
+  const [payAmountPaid, setPayAmountPaid] = useState<number | ''>(calculateAccommodationMonthlyCost(unit));
+  const [payMethod, setPayMethod] = useState<'EFT / Bank Transfer' | 'Direct Debit' | 'Company Cheque' | 'Credit Card' | 'Cash'>('EFT / Bank Transfer');
+  const [payReference, setPayReference] = useState('');
+  const [payVendor, setPayVendor] = useState(unit.rentalVendor || '');
+  const [payStatus, setPayStatus] = useState<'Paid' | 'Partial' | 'Pending' | 'Overdue'>('Paid');
+  const [payProofUrl, setPayProofUrl] = useState<string | null>(null);
+  const [payProofFileName, setPayProofFileName] = useState<string | null>(null);
+  const [payNotes, setPayNotes] = useState('');
 
   // Assign Form state
   const [assignEmployeeId, setAssignEmployeeId] = useState('');
@@ -301,6 +331,91 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
     reader.readAsDataURL(file);
   };
 
+  // Open Log Payment Modal
+  const handleOpenLogPayment = (paymentToEdit?: AccommodationPaymentLog) => {
+    if (paymentToEdit) {
+      setEditingPaymentId(paymentToEdit.id);
+      setPayBillingPeriod(paymentToEdit.billingPeriod);
+      setPayDate(paymentToEdit.paymentDate);
+      setPayOccupantCount(paymentToEdit.occupantCount);
+      setPayAmountDue(paymentToEdit.amountDueZAR);
+      setPayAmountPaid(paymentToEdit.amountPaidZAR);
+      setPayMethod(paymentToEdit.paymentMethod);
+      setPayReference(paymentToEdit.referenceNumber || '');
+      setPayVendor(paymentToEdit.paidToVendor || unit.rentalVendor || '');
+      setPayStatus(paymentToEdit.status);
+      setPayProofUrl(paymentToEdit.proofOfPaymentUrl || null);
+      setPayProofFileName(paymentToEdit.proofOfPaymentFileName || null);
+      setPayNotes(paymentToEdit.notes || '');
+    } else {
+      const calculatedLease = calculateAccommodationMonthlyCost(unit);
+      setEditingPaymentId(null);
+      const now = new Date();
+      setPayBillingPeriod(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+      setPayDate(now.toISOString().split('T')[0]);
+      setPayOccupantCount(unit.occupantIds?.length || 0);
+      setPayAmountDue(calculatedLease);
+      setPayAmountPaid(calculatedLease);
+      setPayMethod('EFT / Bank Transfer');
+      setPayReference(`EFT-${unit.id}-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`);
+      setPayVendor(unit.rentalVendor || '');
+      setPayStatus('Paid');
+      setPayProofUrl(null);
+      setPayProofFileName(null);
+      setPayNotes('');
+    }
+    setIsPaymentModalOpen(true);
+  };
+
+  // Save Payment Log
+  const handleSavePayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    const due = payAmountDue === '' ? 0 : Number(payAmountDue);
+    const paid = payAmountPaid === '' ? 0 : Number(payAmountPaid);
+
+    const paymentObj: AccommodationPaymentLog = {
+      id: editingPaymentId || `ACC-PAY-${Date.now()}`,
+      accommodationId: unit.id,
+      accommodationName: unit.name,
+      billingPeriod: payBillingPeriod,
+      paymentDate: payDate,
+      occupantCount: payOccupantCount,
+      amountDueZAR: due,
+      amountPaidZAR: paid,
+      paymentMethod: payMethod,
+      referenceNumber: payReference.trim() || undefined,
+      paidToVendor: payVendor.trim() || unit.rentalVendor || undefined,
+      status: payStatus,
+      proofOfPaymentUrl: payProofUrl || undefined,
+      proofOfPaymentFileName: payProofFileName || undefined,
+      loggedBy: 'Current User',
+      notes: payNotes.trim() || undefined,
+      createdAt: new Date().toISOString()
+    };
+
+    if (editingPaymentId) {
+      updateAccommodationPayment(paymentObj);
+    } else {
+      addAccommodationPayment(paymentObj);
+    }
+    setIsPaymentModalOpen(false);
+  };
+
+  // Handle proof of payment file upload
+  const handlePaymentProofChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPayProofFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setPayProofUrl(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Utility category badge icon
   const getUtilityIcon = (type: UtilityType) => {
     switch (type) {
@@ -363,20 +478,30 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           <button
-            onClick={() => generateAccommodationMonthlyPDF(unit, unitUtilities, employees)}
+            onClick={() => generateAccommodationMonthlyPDF(unit, unitUtilities, employees, facilityPayments)}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition shadow-sm"
-            title="Download Monthly PDF Report"
+            title="Download Monthly PDF Statement"
           >
             <Printer className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Print Monthly Report
           </button>
 
           <button
-            onClick={() => exportSingleAccommodationToExcel(unit, employees, unitUtilities)}
+            onClick={() => exportSingleAccommodationToExcel(unit, employees, unitUtilities, facilityPayments)}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition shadow-sm"
-            title="Export Facility Data to Excel CSV"
+            title="Export Clean Multi-Sheet Excel (.xlsx)"
           >
             <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Export Excel
           </button>
+
+          {unit.ownership === 'Rented' && (
+            <button
+              onClick={() => handleOpenLogPayment()}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition shadow-sm"
+              title="Log Monthly Lease Payment"
+            >
+              <CreditCard className="w-4 h-4" /> Log Payment
+            </button>
+          )}
 
           <button
             onClick={() => setIsUtilityModalOpen(true)}
@@ -517,7 +642,7 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
         >
           <Zap className="h-4 w-4" /> Utilities & Receipts ({unitUtilities.length})
         </button>
-        {unit.ownership === 'Rented' && (
+        {(unit.ownership === 'Rented' || facilityPayments.length > 0) && (
           <button
             onClick={() => setActiveTab('lease')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
@@ -526,7 +651,7 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
-            <Home className="h-4 w-4" /> Lease & Landlord Terms
+            <CreditCard className="h-4 w-4" /> Lease & Payments Tracking ({facilityPayments.length})
           </button>
         )}
         <button
@@ -776,79 +901,230 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: LEASE TERMS & LANDLORD AGREEMENT                                   */}
+      {/* TAB 3: LEASE TERMS & PAYMENT TRACKING                                     */}
       {/* ========================================================================= */}
-      {activeTab === 'lease' && unit.ownership === 'Rented' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="p-5 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm space-y-4">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Home className="w-5 h-5 text-amber-500" />
-              Landlord & Rental Agreement
-            </h3>
+      {activeTab === 'lease' && (
+        <div className="space-y-6">
+          {/* Top Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="p-5 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm space-y-4">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Home className="w-5 h-5 text-amber-500" />
+                Landlord & Rental Agreement
+              </h3>
 
-            <div className="space-y-3 text-xs divide-y divide-slate-100 dark:divide-slate-800">
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Landlord / Leasing Agency:</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">{unit.rentalVendor || 'Private Landlord'}</span>
+              <div className="space-y-3 text-xs divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Landlord / Leasing Agency:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">{unit.rentalVendor || 'Private Landlord'}</span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Lease Agreement / PO Number:</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{unit.rentalAgreementNumber || 'N/A'}</span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Pricing Model:</span>
+                  <span className="font-bold text-indigo-600 dark:text-indigo-400">{unit.rentalRateType || 'Fixed Monthly'}</span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Unit Rate / Base Amount:</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                    {formatZAR(unit.rentalRatePerUnit || unit.rentalMonthlyCost || 0)}
+                  </span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Active Monthly Lease Cost:</span>
+                  <span className="font-mono font-extrabold text-purple-600 dark:text-purple-400 text-sm">
+                    {formatZAR(stats.activeMonthlyLease)}
+                  </span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Deposit Paid:</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                    {unit.rentalDepositPaid ? formatZAR(unit.rentalDepositPaid) : 'R 0.00'}
+                  </span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Billing Cycle:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">{unit.rentalBillingCycle || 'Monthly'}</span>
+                </div>
               </div>
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Lease Agreement / PO Number:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{unit.rentalAgreementNumber || 'N/A'}</span>
+            </Card>
+
+            <Card className="p-5 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm space-y-4">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-indigo-500" />
+                Lease Duration & Validity
+              </h3>
+
+              <div className="space-y-3 text-xs divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Lease Commencement Date:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">{unit.rentalStartDate || 'Ongoing'}</span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Lease Expiry Date:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">{unit.rentalEndDate || 'Ongoing'}</span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Facility Manager / Contact:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">{unit.contactPerson || 'N/A'}</span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Manager Contact Phone:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">{unit.contactPhone || 'N/A'}</span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Total Payments Recorded:</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{facilityPayments.length} payment records</span>
+                </div>
+                <div className="pt-2 flex justify-between">
+                  <span className="text-slate-500">Total Lease Amount Disbursed:</span>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    {formatZAR(facilityPayments.reduce((sum, p) => sum + (p.amountPaidZAR || 0), 0))}
+                  </span>
+                </div>
               </div>
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Pricing Model:</span>
-                <span className="font-bold text-indigo-600 dark:text-indigo-400">{unit.rentalRateType || 'Fixed Monthly'}</span>
+            </Card>
+          </div>
+
+          {/* Payment Tracking & History Ledger */}
+          <div className="space-y-4 pt-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  Monthly Lease Payment Tracking Ledger
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Track monthly lease distributions calculated against active resident worker occupancies.
+                </p>
               </div>
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Unit Rate / Base Amount:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
-                  {formatZAR(unit.rentalRatePerUnit || unit.rentalMonthlyCost || 0)}
-                </span>
-              </div>
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Active Monthly Lease Cost:</span>
-                <span className="font-mono font-extrabold text-amber-600 dark:text-amber-400 text-sm">
-                  {formatZAR(stats.activeMonthlyLease)}
-                </span>
-              </div>
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Deposit Paid:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
-                  {unit.rentalDepositPaid ? formatZAR(unit.rentalDepositPaid) : 'R 0.00'}
-                </span>
-              </div>
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Billing Cycle:</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">{unit.rentalBillingCycle || 'Monthly'}</span>
-              </div>
+
+              <button
+                onClick={() => handleOpenLogPayment()}
+                className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition shadow-sm self-start sm:self-auto"
+              >
+                <CreditCard className="w-4 h-4" /> Log Lease Payment
+              </button>
             </div>
-          </Card>
 
-          <Card className="p-5 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm space-y-4">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-500" />
-              Lease Duration & Validity
-            </h3>
-
-            <div className="space-y-3 text-xs divide-y divide-slate-100 dark:divide-slate-800">
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Lease Commencement Date:</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">{unit.rentalStartDate || 'Ongoing'}</span>
+            {facilityPayments.length === 0 ? (
+              <div className="text-center py-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6">
+                <CreditCard className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">No Lease Payments Logged Yet</h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                  Log your first monthly lease payout for resident employee housing. Keep proof of payment slips and invoice vouchers organized.
+                </p>
+                <button 
+                  onClick={() => handleOpenLogPayment()} 
+                  className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm"
+                >
+                  + Log First Lease Payment
+                </button>
               </div>
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Lease Expiry Date:</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">{unit.rentalEndDate || 'Ongoing'}</span>
-              </div>
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Facility Manager / Contact:</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">{unit.contactPerson || 'N/A'}</span>
-              </div>
-              <div className="pt-2 flex justify-between">
-                <span className="text-slate-500">Manager Contact Phone:</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">{unit.contactPhone || 'N/A'}</span>
-              </div>
-            </div>
-          </Card>
+            ) : (
+              <Card className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-700 dark:text-slate-300">
+                    <thead className="bg-slate-50 dark:bg-slate-950 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <th className="px-4 py-3.5">Payment Date</th>
+                        <th className="px-4 py-3.5">Billing Month</th>
+                        <th className="px-4 py-3.5">Resident Staff</th>
+                        <th className="px-4 py-3.5">Lease Incurred</th>
+                        <th className="px-4 py-3.5">Amount Paid</th>
+                        <th className="px-4 py-3.5">Method / Ref #</th>
+                        <th className="px-4 py-3.5">Vendor / Landlord</th>
+                        <th className="px-4 py-3.5">Proof of Payment</th>
+                        <th className="px-4 py-3.5">Status</th>
+                        <th className="px-4 py-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                      {facilityPayments.map(pay => (
+                        <tr key={pay.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+                          <td className="px-4 py-3.5 whitespace-nowrap text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            {pay.paymentDate}
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap text-xs font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                            {pay.billingPeriod}
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-600 dark:text-slate-400">
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">{pay.occupantCount} staff</span>
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap text-xs font-mono text-slate-600 dark:text-slate-400">
+                            {formatZAR(pay.amountDueZAR)}
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <span className="font-extrabold text-xs text-purple-700 dark:text-purple-400 font-mono">
+                              {formatZAR(pay.amountPaidZAR)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-xs text-slate-600 dark:text-slate-400">
+                            <div className="font-medium">{pay.paymentMethod}</div>
+                            {pay.referenceNumber && (
+                              <div className="text-[10px] text-slate-400 font-mono">Ref: {pay.referenceNumber}</div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 text-xs font-medium text-slate-700 dark:text-slate-300">
+                            {pay.paidToVendor || unit.rentalVendor || 'Landlord'}
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap text-xs">
+                            {pay.proofOfPaymentUrl ? (
+                              <button
+                                onClick={() => setViewingProofUrl(pay.proofOfPaymentUrl || null)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold border border-purple-200 dark:border-purple-800 text-[11px] transition"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> View POP
+                              </button>
+                            ) : (
+                              <span className="text-slate-400 text-xs italic">No attachment</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              pay.status === 'Paid'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+                                : pay.status === 'Partial'
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800'
+                                : pay.status === 'Pending'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800'
+                            }`}>
+                              {pay.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => handleOpenLogPayment(pay)}
+                                className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition"
+                                title="Edit Payment Log"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Delete payment log "${pay.billingPeriod} - ${formatZAR(pay.amountPaidZAR)}"?`)) {
+                                    deleteAccommodationPayment(pay.id);
+                                  }
+                                }}
+                                className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                title="Delete Payment Record"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+          </div>
         </div>
       )}
 
@@ -1538,6 +1814,266 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
               <img
                 src={viewingReceiptUrl}
                 alt="Utility Receipt"
+                className="max-h-[70vh] object-contain rounded-lg shadow-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: LOG LEASE PAYMENT                                                */}
+      {/* ========================================================================= */}
+      {isPaymentModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <Card className="w-full max-w-xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 rounded-2xl animate-in fade-in zoom-in-95 my-auto max-h-[92vh] flex flex-col">
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 rounded-xl">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    {editingPaymentId ? 'Edit Lease Payment' : 'Log Monthly Lease Payment'}
+                  </h3>
+                  <p className="text-slate-500 text-xs">
+                    {unit.name} • Record monthly lease distribution for resident employees.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsPaymentModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePayment} className="p-6 space-y-4 overflow-y-auto flex-1 text-slate-900 dark:text-slate-100">
+              {/* Dynamic Rent Breakdown Banner */}
+              <div className="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/50 text-xs space-y-1">
+                <div className="flex items-center justify-between font-bold text-purple-900 dark:text-purple-200">
+                  <span className="flex items-center gap-1.5"><Home className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" /> Active Pricing Model:</span>
+                  <span>{unit.rentalRateType || 'Fixed Monthly'}</span>
+                </div>
+                <div className="text-purple-700 dark:text-purple-300 text-[11px]">
+                  {getAccommodationRateDescription(unit)}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    Billing Period Month *
+                  </label>
+                  <input
+                    type="month"
+                    required
+                    value={payBillingPeriod}
+                    onChange={(e) => setPayBillingPeriod(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    Payment Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={payDate}
+                    onChange={(e) => setPayDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    Resident Staff Count
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={payOccupantCount}
+                    onChange={(e) => setPayOccupantCount(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    Lease Due (ZAR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={payAmountDue}
+                    onChange={(e) => setPayAmountDue(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    Amount Paid (ZAR) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    placeholder="0.00"
+                    value={payAmountPaid}
+                    onChange={(e) => setPayAmountPaid(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl border border-purple-400 dark:border-purple-600 bg-white dark:bg-slate-900 text-xs font-mono font-extrabold text-purple-700 dark:text-purple-300"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    Payment Method *
+                  </label>
+                  <select
+                    value={payMethod}
+                    onChange={(e) => setPayMethod(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
+                  >
+                    <option value="EFT / Bank Transfer">EFT / Bank Transfer</option>
+                    <option value="Direct Debit">Direct Debit</option>
+                    <option value="Company Cheque">Company Cheque</option>
+                    <option value="Credit Card">Credit Card</option>
+                    <option value="Cash">Cash</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    Payment Status *
+                  </label>
+                  <select
+                    value={payStatus}
+                    onChange={(e) => setPayStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                  >
+                    <option value="Paid">Paid (Full Settlement)</option>
+                    <option value="Partial">Partial Payment</option>
+                    <option value="Pending">Pending Approval / Release</option>
+                    <option value="Overdue">Overdue</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    EFT / Transaction Reference #
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. EFT-2026-AUG-88"
+                    value={payReference}
+                    onChange={(e) => setPayReference(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    Paid to Landlord / Vendor
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Standerton Property Rentals"
+                    value={payVendor}
+                    onChange={(e) => setPayVendor(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Proof of Payment Upload */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">
+                  Attach Proof of Payment (POP Slip / Bank Receipt / PDF)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={handlePaymentProofChange}
+                    className="text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-purple-50 file:text-purple-700 dark:file:bg-purple-950/60 dark:file:text-purple-300 hover:file:bg-purple-100"
+                  />
+                  {payProofUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setViewingProofUrl(payProofUrl)}
+                      className="text-xs text-purple-600 dark:text-purple-400 font-bold underline flex items-center gap-1 shrink-0"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Preview POP
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">
+                  Notes & Remarks
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. August rent settled via FNB Corporate banking, authorized by Project Director"
+                  value={payNotes}
+                  onChange={(e) => setPayNotes(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                />
+              </div>
+
+              <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2 bg-slate-50/50 dark:bg-slate-900/50">
+                <button
+                  type="button"
+                  onClick={() => setIsPaymentModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl text-sm font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
+                >
+                  {editingPaymentId ? 'Update Payment' : 'Log Payment'}
+                </button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 6: PROOF OF PAYMENT PHOTO VIEWER                                    */}
+      {/* ========================================================================= */}
+      {viewingProofUrl && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-4 relative flex flex-col items-center">
+            <button
+              onClick={() => setViewingProofUrl(null)}
+              className="absolute right-3 top-3 p-1.5 text-slate-400 hover:text-white bg-slate-800 rounded-xl"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2 self-start">
+              <CreditCard className="w-4 h-4 text-purple-400" /> Proof of Payment Voucher / Slip
+            </h3>
+            <div className="max-h-[75vh] overflow-auto rounded-xl border border-slate-800 w-full flex justify-center bg-black/40">
+              <img
+                src={viewingProofUrl}
+                alt="Proof of Payment"
                 className="max-h-[70vh] object-contain rounded-lg shadow-lg"
               />
             </div>

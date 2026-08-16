@@ -1,4 +1,5 @@
-import { Activity, DailyReport, DocumentItem, MaterialInventory, Project, AccommodationUnit, AccommodationUtilityLog, Employee } from '../types';
+import * as XLSX from 'xlsx';
+import { Activity, DailyReport, DocumentItem, MaterialInventory, Project, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, Employee } from '../types';
 import { calculateAccommodationMonthlyCost, getAccommodationRateDescription } from './pdfAccommodation';
 
 /**
@@ -422,45 +423,19 @@ export function exportMaterialRequestsToCSV(requests: any[], filenameSuffix?: st
 }
 
 /**
- * Export All Accommodation Facilities to Excel-ready CSV format
+ * Export All Accommodation Facilities to a Multi-Sheet Excel (.xlsx) Workbook
  */
 export function exportAccommodationsToExcel(
   accommodations: AccommodationUnit[], 
   employees: Employee[], 
   utilities: AccommodationUtilityLog[],
+  payments: AccommodationPaymentLog[] = [],
   filenameSuffix?: string
 ) {
-  const headers = [
-    'Facility ID',
-    'Facility Name',
-    'Ownership',
-    'Structure Type',
-    'Location',
-    'Physical Address',
-    'Total Rooms',
-    'Beds per Room',
-    'Total Bed Capacity',
-    'Occupied Beds',
-    'Vacant Beds',
-    'Occupancy Rate',
-    'Status',
-    'Linked Project',
-    'Landlord / Vendor',
-    'Lease Agreement #',
-    'Pricing Model',
-    'Active Monthly Lease (ZAR)',
-    'Rate Description',
-    'Lease Start Date',
-    'Lease End Date',
-    'Deposit Paid (ZAR)',
-    'Utilities Incurred (ZAR)',
-    'Total Monthly Cost (ZAR)',
-    'Contact Person',
-    'Contact Phone',
-    'Amenities'
-  ];
+  const wb = XLSX.utils.book_new();
 
-  const rows = accommodations.map(unit => {
+  // TAB 1: Facilities Portfolio Master
+  const portfolioData = accommodations.map((unit, index) => {
     const occupants = employees.filter(e => unit.occupantIds?.includes(e.id));
     const occupiedCount = occupants.length;
     const vacantCount = Math.max(0, unit.totalCapacityBeds - occupiedCount);
@@ -470,122 +445,241 @@ export function exportAccommodationsToExcel(
     const totalUtils = unitUtils.reduce((sum, u) => sum + (u.amountZAR || 0), 0);
     const totalCost = activeLease + totalUtils;
 
-    return [
-      unit.id,
-      unit.name,
-      unit.ownership,
-      unit.type,
-      unit.location,
-      unit.address || '',
-      unit.totalRooms || 1,
-      unit.bedsPerRoom || 1,
-      unit.totalCapacityBeds,
-      occupiedCount,
-      vacantCount,
-      occupancyRate,
-      unit.status,
-      unit.projectName || '',
-      unit.rentalVendor || '',
-      unit.rentalAgreementNumber || '',
-      unit.rentalRateType || (unit.ownership === 'Rented' ? 'Fixed Monthly' : 'N/A'),
-      activeLease,
-      getAccommodationRateDescription(unit),
-      unit.rentalStartDate || '',
-      unit.rentalEndDate || '',
-      unit.rentalDepositPaid || 0,
-      totalUtils,
-      totalCost,
-      unit.contactPerson || '',
-      unit.contactPhone || '',
-      (unit.amenities || []).join('; ')
-    ];
+    return {
+      'No.': index + 1,
+      'Facility ID': unit.id,
+      'Facility Name': unit.name,
+      'Ownership': unit.ownership,
+      'Structure Type': unit.type,
+      'Location': unit.location,
+      'Physical Address': unit.address || '—',
+      'Linked Project': unit.projectName || '—',
+      'Total Rooms': unit.totalRooms || 1,
+      'Beds per Room': unit.bedsPerRoom || 1,
+      'Total Beds': unit.totalCapacityBeds,
+      'Occupied Beds': occupiedCount,
+      'Vacant Beds': vacantCount,
+      'Occupancy Rate': occupancyRate,
+      'Pricing Model': unit.rentalRateType || (unit.ownership === 'Rented' ? 'Fixed Monthly' : 'N/A'),
+      'Rate per Person/Room (ZAR)': unit.rentalRatePerUnit || unit.rentalMonthlyCost || 0,
+      'Active Monthly Lease (ZAR)': activeLease,
+      'Rate Description': getAccommodationRateDescription(unit),
+      'Utilities Incurred (ZAR)': totalUtils,
+      'Total Monthly Cost (ZAR)': totalCost,
+      'Landlord / Vendor': unit.rentalVendor || '—',
+      'Agreement / PO #': unit.rentalAgreementNumber || '—',
+      'Lease Start Date': unit.rentalStartDate || '—',
+      'Lease End Date': unit.rentalEndDate || '—',
+      'Deposit Paid (ZAR)': unit.rentalDepositPaid || 0,
+      'Status': unit.status,
+      'Contact Person': unit.contactPerson || '—',
+      'Contact Phone': unit.contactPhone || '—',
+      'Amenities': (unit.amenities || []).join('; ')
+    };
   });
-
-  const csvRows = [
-    headers.map(escapeCSVCell).join(','),
-    ...rows.map(row => row.map(escapeCSVCell).join(','))
+  const wsPortfolio = XLSX.utils.json_to_sheet(portfolioData);
+  wsPortfolio['!cols'] = [
+    { wch: 6 }, { wch: 15 }, { wch: 25 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 28 }, { wch: 20 },
+    { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 22 },
+    { wch: 24 }, { wch: 28 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 15 }, { wch: 15 },
+    { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 30 }
   ];
+  XLSX.utils.book_append_sheet(wb, wsPortfolio, 'Facilities Portfolio');
 
-  const csvString = csvRows.join('\r\n');
+  // TAB 2: Staff Housing Directory (All Resident Workers)
+  const rosterRows: any[] = [];
+  let rIndex = 1;
+  accommodations.forEach(acc => {
+    acc.occupantIds.forEach(empId => {
+      const emp = employees.find(e => e.id === empId);
+      if (emp) {
+        const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || (emp as any).name || emp.id;
+        rosterRows.push({
+          'No.': rIndex++,
+          'Employee ID': emp.id,
+          'Full Name': fullName,
+          'Position / Role': emp.position || (emp as any).role || 'Staff',
+          'Department': emp.department || 'Operations',
+          'Facility ID': acc.id,
+          'Facility Name': acc.name,
+          'Ownership': acc.ownership,
+          'Room / Bed #': emp.accommodationDetails?.roomNumber || '—',
+          'Check-in Date': emp.accommodationDetails?.checkInDate || acc.createdAt || '—',
+          'Phone Number': emp.phone || '—'
+        });
+      }
+    });
+  });
+  const wsRoster = XLSX.utils.json_to_sheet(rosterRows.length > 0 ? rosterRows : [{ 'Notice': 'No workers currently housed.' }]);
+  wsRoster['!cols'] = [
+    { wch: 6 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 18 }, { wch: 15 }, { wch: 25 }, { wch: 12 }, { wch: 14 }, { wch: 15 }, { wch: 16 }
+  ];
+  XLSX.utils.book_append_sheet(wb, wsRoster, 'Staff Housing Roster');
+
+  // TAB 3: Utilities & Running Costs Ledger
+  const utilitiesData = utilities.map((u, idx) => ({
+    'No.': idx + 1,
+    'Utility ID': u.id,
+    'Facility ID': u.accommodationId,
+    'Facility Name': u.accommodationName,
+    'Date Logged': u.date,
+    'Expense Category': u.utilityType,
+    'Amount (ZAR)': u.amountZAR,
+    'Units Consumed': u.unitsConsumed || 0,
+    'Unit Type': u.unitLabel || 'units',
+    'Supplier / Vendor': u.vendorOrProvider || '—',
+    'Invoice / Voucher #': u.invoiceOrReceiptNumber || '—',
+    'Status': u.paidStatus,
+    'Logged By': u.loggedBy,
+    'Notes': u.notes || ''
+  }));
+  const wsUtilities = XLSX.utils.json_to_sheet(utilitiesData.length > 0 ? utilitiesData : [{ 'Notice': 'No utility records found.' }]);
+  wsUtilities['!cols'] = [
+    { wch: 6 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 14 }, { wch: 28 }, { wch: 15 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 25 }
+  ];
+  XLSX.utils.book_append_sheet(wb, wsUtilities, 'Utilities Ledger');
+
+  // TAB 4: Lease Payments Tracking
+  const paymentsData = payments.map((p, idx) => ({
+    'No.': idx + 1,
+    'Payment ID': p.id,
+    'Facility ID': p.accommodationId,
+    'Facility Name': p.accommodationName,
+    'Payment Date': p.paymentDate,
+    'Billing Period': p.billingPeriod,
+    'Resident Occupants': p.occupantCount,
+    'Total Lease Due (ZAR)': p.amountDueZAR,
+    'Amount Paid (ZAR)': p.amountPaidZAR,
+    'Payment Method': p.paymentMethod,
+    'Reference / EFT #': p.referenceNumber || '—',
+    'Paid To (Vendor)': p.paidToVendor || '—',
+    'Status': p.status,
+    'Logged By': p.loggedBy || 'System',
+    'Notes': p.notes || ''
+  }));
+  const wsPayments = XLSX.utils.json_to_sheet(paymentsData.length > 0 ? paymentsData : [{ 'Notice': 'No lease payments logged yet.' }]);
+  wsPayments['!cols'] = [
+    { wch: 6 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 22 }, { wch: 12 }, { wch: 16 }, { wch: 25 }
+  ];
+  XLSX.utils.book_append_sheet(wb, wsPayments, 'Lease Payments Tracking');
+
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `constructfield_accommodations_master_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
-
-  downloadCSVFile(filename, csvString);
+  const filename = `Constructfield_Accommodations_Master_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.xlsx`;
+  XLSX.writeFile(wb, filename);
 }
 
 /**
- * Export a Single Accommodation Facility (with Resident Roster & Utilities) to Excel-ready CSV format
+ * Export a Single Accommodation Facility (with separate sheets for Monthly Lease, Resident Roster, Utilities, and Payments) to formatted Excel (.xlsx)
  */
 export function exportSingleAccommodationToExcel(
   unit: AccommodationUnit,
   employees: Employee[],
-  utilities: AccommodationUtilityLog[]
+  utilities: AccommodationUtilityLog[],
+  payments: AccommodationPaymentLog[] = []
 ) {
+  const wb = XLSX.utils.book_new();
   const occupants = employees.filter(e => unit.occupantIds?.includes(e.id));
   const activeLease = calculateAccommodationMonthlyCost(unit);
   const totalUtils = utilities.reduce((sum, u) => sum + (u.amountZAR || 0), 0);
   const totalFacilityCost = activeLease + totalUtils;
 
-  const lines: string[] = [];
+  // TAB 1: Monthly Lease & Facility Summary
+  const summaryData = [
+    { 'Parameter': 'Facility Name', 'Value': unit.name },
+    { 'Parameter': 'Facility ID', 'Value': unit.id },
+    { 'Parameter': 'Ownership Model', 'Value': unit.ownership },
+    { 'Parameter': 'Structure / Accommodation Type', 'Value': unit.type },
+    { 'Parameter': 'Facility Status', 'Value': unit.status },
+    { 'Parameter': 'Location', 'Value': unit.location },
+    { 'Parameter': 'Physical Address', 'Value': unit.address || 'N/A' },
+    { 'Parameter': 'Linked Project', 'Value': unit.projectName || 'General Site' },
+    { 'Parameter': 'Total Rooms', 'Value': unit.totalRooms || 1 },
+    { 'Parameter': 'Beds per Room', 'Value': unit.bedsPerRoom || 1 },
+    { 'Parameter': 'Total Bed Capacity', 'Value': unit.totalCapacityBeds },
+    { 'Parameter': 'Active Resident Occupants', 'Value': occupants.length },
+    { 'Parameter': 'Vacant Beds Available', 'Value': Math.max(0, unit.totalCapacityBeds - occupants.length) },
+    { 'Parameter': 'Occupancy Rate', 'Value': unit.totalCapacityBeds > 0 ? `${Math.round((occupants.length / unit.totalCapacityBeds) * 100)}%` : '0%' },
+    { 'Parameter': 'Rental Pricing Model', 'Value': unit.rentalRateType || (unit.ownership === 'Rented' ? 'Fixed Monthly' : 'N/A') },
+    { 'Parameter': 'Rental Rate per Unit / Person', 'Value': unit.rentalRatePerUnit || unit.rentalMonthlyCost || 0 },
+    { 'Parameter': 'Calculated Monthly Lease Incurred (ZAR)', 'Value': activeLease },
+    { 'Parameter': 'Rate Terms Description', 'Value': getAccommodationRateDescription(unit) },
+    { 'Parameter': 'Landlord / Vendor', 'Value': unit.rentalVendor || 'N/A' },
+    { 'Parameter': 'Lease Agreement / PO #', 'Value': unit.rentalAgreementNumber || 'N/A' },
+    { 'Parameter': 'Lease Start Date', 'Value': unit.rentalStartDate || 'N/A' },
+    { 'Parameter': 'Lease End Date', 'Value': unit.rentalEndDate || 'N/A' },
+    { 'Parameter': 'Security Deposit Paid (ZAR)', 'Value': unit.rentalDepositPaid || 0 },
+    { 'Parameter': 'Total Utilities Incurred (ZAR)', 'Value': totalUtils },
+    { 'Parameter': 'Total Monthly Facility Cost (ZAR)', 'Value': totalFacilityCost },
+    { 'Parameter': 'Contact Person', 'Value': unit.contactPerson || 'N/A' },
+    { 'Parameter': 'Contact Phone', 'Value': unit.contactPhone || 'N/A' },
+    { 'Parameter': 'Amenities', 'Value': (unit.amenities || []).join(', ') || 'Standard' },
+    { 'Parameter': 'Access / Gate Notes', 'Value': unit.notes || 'None' },
+    { 'Parameter': 'Report Generated Date', 'Value': new Date().toISOString().split('T')[0] }
+  ];
+  const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+  wsSummary['!cols'] = [{ wch: 42 }, { wch: 50 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Monthly Lease & Summary');
 
-  // Section 1: Executive Summary
-  lines.push(escapeCSVCell(`CONSTRUCTFIELD ACCOMMODATION FACILITY REPORT: ${unit.name.toUpperCase()}`));
-  lines.push([escapeCSVCell('Generated Date'), escapeCSVCell(new Date().toLocaleDateString())].join(','));
-  lines.push([escapeCSVCell('Facility ID'), escapeCSVCell(unit.id), escapeCSVCell('Ownership'), escapeCSVCell(unit.ownership)].join(','));
-  lines.push([escapeCSVCell('Structure Type'), escapeCSVCell(unit.type), escapeCSVCell('Location'), escapeCSVCell(unit.location)].join(','));
-  lines.push([escapeCSVCell('Physical Address'), escapeCSVCell(unit.address || 'N/A'), escapeCSVCell('Linked Project'), escapeCSVCell(unit.projectName || 'General Site')].join(','));
-  lines.push([escapeCSVCell('Total Rooms'), escapeCSVCell(unit.totalRooms || 1), escapeCSVCell('Total Beds'), escapeCSVCell(unit.totalCapacityBeds)].join(','));
-  lines.push([escapeCSVCell('Occupied Beds'), escapeCSVCell(occupants.length), escapeCSVCell('Vacant Beds'), escapeCSVCell(Math.max(0, unit.totalCapacityBeds - occupants.length))].join(','));
-  lines.push([escapeCSVCell('Active Monthly Lease (ZAR)'), escapeCSVCell(activeLease), escapeCSVCell('Rate Terms'), escapeCSVCell(getAccommodationRateDescription(unit))].join(','));
-  lines.push([escapeCSVCell('Utilities Incurred (ZAR)'), escapeCSVCell(totalUtils), escapeCSVCell('Total Monthly Cost (ZAR)'), escapeCSVCell(totalFacilityCost)].join(','));
-  lines.push('');
+  // TAB 2: Resident Personnel Roster
+  const rosterData = occupants.length > 0 ? occupants.map((emp, index) => {
+    const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || (emp as any).name || emp.id;
+    return {
+      'No.': index + 1,
+      'Employee ID': emp.id,
+      'Full Name': fullName,
+      'Position / Role': emp.position || (emp as any).role || 'Staff',
+      'Department': emp.department || 'Operations',
+      'Room / Bed #': emp.accommodationDetails?.roomNumber || '—',
+      'Check-in Date': emp.accommodationDetails?.checkInDate || unit.createdAt || '—',
+      'Contact Phone': emp.phone || '—',
+      'Status': emp.status || 'Active'
+    };
+  }) : [{ 'Notice': 'No resident workers currently allocated to this facility.' }];
+  const wsRoster = XLSX.utils.json_to_sheet(rosterData);
+  wsRoster['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 15 }, { wch: 16 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsRoster, 'Resident Roster');
 
-  // Section 2: Resident Personnel Roster
-  lines.push(escapeCSVCell('--- RESIDENT PERSONNEL ROSTER ---'));
-  lines.push(['Employee ID', 'Full Name', 'Position / Role', 'Department', 'Room / Bed #', 'Check-In Date', 'Phone Number'].map(escapeCSVCell).join(','));
-  if (occupants.length === 0) {
-    lines.push(escapeCSVCell('No personnel currently allocated to this facility.'));
-  } else {
-    occupants.forEach(emp => {
-      const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || (emp as any).name || emp.id;
-      lines.push([
-        emp.id,
-        fullName,
-        emp.position || (emp as any).role || 'Staff',
-        emp.department || 'Operations',
-        emp.accommodationDetails?.roomNumber || '—',
-        emp.accommodationDetails?.checkInDate || unit.createdAt || '—',
-        emp.phone || '—'
-      ].map(escapeCSVCell).join(','));
-    });
-  }
-  lines.push('');
+  // TAB 3: Utilities & Running Costs
+  const utilitiesData = utilities.length > 0 ? utilities.map((u, index) => ({
+    'No.': index + 1,
+    'Utility ID': u.id,
+    'Date Logged': u.date,
+    'Expense Category': u.utilityType,
+    'Amount (ZAR)': u.amountZAR,
+    'Units Consumed': u.unitsConsumed || 0,
+    'Unit Type': u.unitLabel || 'units',
+    'Supplier / Vendor': u.vendorOrProvider || '—',
+    'Invoice / Voucher #': u.invoiceOrReceiptNumber || '—',
+    'Payment Status': u.paidStatus,
+    'Logged By': u.loggedBy,
+    'Notes / Remarks': u.notes || ''
+  })) : [{ 'Notice': 'No utility or running bills logged for this facility.' }];
+  const wsUtilities = XLSX.utils.json_to_sheet(utilitiesData);
+  wsUtilities['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 14 }, { wch: 28 }, { wch: 15 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 25 }];
+  XLSX.utils.book_append_sheet(wb, wsUtilities, 'Utilities & Running Bills');
 
-  // Section 3: Itemized Utility Bills & Expenses
-  lines.push(escapeCSVCell('--- UTILITIES & EXPENSES LEDGER ---'));
-  lines.push(['Utility ID', 'Date', 'Category', 'Amount (ZAR)', 'Units Consumed', 'Unit Label', 'Vendor / Supplier', 'Receipt / Invoice #', 'Status', 'Notes'].map(escapeCSVCell).join(','));
-  if (utilities.length === 0) {
-    lines.push(escapeCSVCell('No utility expenses logged for this facility.'));
-  } else {
-    utilities.forEach(u => {
-      lines.push([
-        u.id,
-        u.date,
-        u.utilityType,
-        u.amountZAR,
-        u.unitsConsumed || '',
-        u.unitLabel || '',
-        u.vendorOrProvider || '',
-        u.invoiceOrReceiptNumber || '',
-        u.paidStatus,
-        u.notes || ''
-      ].map(escapeCSVCell).join(','));
-    });
-  }
+  // TAB 4: Lease Payment Tracking Ledger
+  const facilityPayments = payments.filter(p => p.accommodationId === unit.id);
+  const paymentData = facilityPayments.length > 0 ? facilityPayments.map((p, index) => ({
+    'No.': index + 1,
+    'Payment ID': p.id,
+    'Payment Date': p.paymentDate,
+    'Billing Period': p.billingPeriod,
+    'Resident Occupants Count': p.occupantCount,
+    'Total Lease Due (ZAR)': p.amountDueZAR,
+    'Amount Paid (ZAR)': p.amountPaidZAR,
+    'Payment Method': p.paymentMethod,
+    'Reference / EFT #': p.referenceNumber || '—',
+    'Paid To (Vendor)': p.paidToVendor || '—',
+    'Status': p.status,
+    'Logged By': p.loggedBy || 'System',
+    'Notes': p.notes || ''
+  })) : [{ 'Notice': 'No lease payments logged for this facility yet.' }];
+  const wsPayments = XLSX.utils.json_to_sheet(paymentData);
+  wsPayments['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 22 }, { wch: 12 }, { wch: 16 }, { wch: 25 }];
+  XLSX.utils.book_append_sheet(wb, wsPayments, 'Lease Payments Tracking');
 
-  const csvString = lines.join('\r\n');
   const sanitizedName = unit.name.replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `constructfield_accommodation_${sanitizedName}_${new Date().toISOString().split('T')[0]}.csv`;
-
-  downloadCSVFile(filename, csvString);
+  const filename = `Constructfield_Accommodation_${sanitizedName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(wb, filename);
 }

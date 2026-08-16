@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { AccommodationUnit, AccommodationUtilityLog, Employee } from '../types';
+import { AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, Employee } from '../types';
 
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
@@ -65,11 +65,13 @@ export const generateAccommodationMonthlyPDF = (
   unit: AccommodationUnit,
   utilities: AccommodationUtilityLog[],
   employees: Employee[],
+  payments: AccommodationPaymentLog[] = [],
   currency: string = 'ZAR'
 ) => {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
+  try {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
   // Primary Brand Colors: Deep Navy & Constructfield Blue
   const primaryBlue: [number, number, number] = [11, 95, 255]; // #0B5FFF
@@ -245,26 +247,69 @@ export const generateAccommodationMonthlyPDF = (
     currentY = doc.lastAutoTable.finalY + 8;
   }
 
-  // Footer & Sign-off Block
-  if (currentY > pageHeight - 35) {
-    doc.addPage();
-    currentY = 20;
+    // Section 4: Lease Payment Records Table
+    const facilityPayments = payments.filter(p => p.accommodationId === unit.id);
+    if (facilityPayments.length > 0) {
+      if (currentY > pageHeight - 50) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      const totalPaid = facilityPayments.reduce((sum, p) => sum + (p.amountPaidZAR || 0), 0);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...darkSlate);
+      doc.text(`Lease Payment History & Tracking (Total Paid: R ${totalPaid.toLocaleString('en-ZA', { minimumFractionDigits: 2 })})`, 14, currentY);
+      currentY += 4;
+
+      const paymentRows = facilityPayments.map(p => [
+        p.paymentDate,
+        p.billingPeriod,
+        `${p.occupantCount} staff`,
+        `R ${p.amountDueZAR.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`,
+        `R ${p.amountPaidZAR.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`,
+        p.paymentMethod,
+        p.referenceNumber || '—',
+        p.status
+      ]);
+
+      doc.autoTable({
+        startY: currentY,
+        head: [['Payment Date', 'Billing Period', 'Occupants', 'Due (ZAR)', 'Paid (ZAR)', 'Method', 'Ref #', 'Status']],
+        body: paymentRows,
+        theme: 'grid',
+        headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 7.5, textColor: darkSlate, cellPadding: 2.5 },
+        alternateRowStyles: { fillColor: [248, 250, 252] }
+      });
+
+      currentY = doc.lastAutoTable.finalY + 8;
+    }
+
+    // Footer & Sign-off Block
+    if (currentY > pageHeight - 35) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, currentY, pageWidth - 14, currentY);
+    currentY += 6;
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...textMuted);
+    doc.text(`Camp Contact / Supervisor: ${unit.contactPerson || 'Site Camp Supervisor'} ${unit.contactPhone ? `(${unit.contactPhone})` : ''}`, 14, currentY);
+    doc.text('Constructfield OS Facility Automated Statement', pageWidth - 14, currentY, { align: 'right' });
+
+    // Save the PDF
+    const sanitizedName = unit.name.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `Constructfield_Accommodation_${sanitizedName}_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+  } catch (error) {
+    console.error('Failed to generate accommodation monthly PDF:', error);
+    alert('Unable to generate PDF report. Please check the accommodation data.');
   }
-
-  doc.setDrawColor(226, 232, 240);
-  doc.line(14, currentY, pageWidth - 14, currentY);
-  currentY += 6;
-
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...textMuted);
-  doc.text(`Camp Contact / Supervisor: ${unit.contactPerson || 'Site Camp Supervisor'} ${unit.contactPhone ? `(${unit.contactPhone})` : ''}`, 14, currentY);
-  doc.text('Constructfield OS Facility Automated Statement', pageWidth - 14, currentY, { align: 'right' });
-
-  // Save the PDF
-  const sanitizedName = unit.name.replace(/[^a-zA-Z0-9]/g, '_');
-  const fileName = `Constructfield_Accommodation_${sanitizedName}_${new Date().toISOString().split('T')[0]}.pdf`;
-  doc.save(fileName);
 };
 
 /**

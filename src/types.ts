@@ -938,3 +938,23 @@ export interface AccommodationUtilityLog {
   notes?: string;
 }
 
+export interface AccommodationPaymentLog {
+  id: string; // e.g. ACC-PAY-001
+  accommodationId: string;
+  accommodationName: string;
+  billingPeriod: string; // e.g. "2026-08" or "August 2026"
+  paymentDate: string; // e.g. "2026-08-15"
+  amountDueZAR: number; // Total calculated lease based on active occupants
+  amountPaidZAR: number; // Amount paid in ZAR
+  paymentMethod: 'EFT / Bank Transfer' | 'Direct Debit' | 'Company Cheque' | 'Credit Card' | 'Cash';
+  referenceNumber?: string; // e.g. EFT-ACC-2026-08
+  paidToVendor?: string; // Landlord or leasing agent
+  status: 'Paid' | 'Partial' | 'Pending' | 'Overdue';
+  occupantCount: number; // Number of resident employees at payment time
+  proofOfPaymentUrl?: string; // Uploaded POP image or PDF data URL
+  proofOfPaymentFileName?: string;
+  loggedBy?: string;
+  notes?: string;
+  createdAt?: string;
+}
+
