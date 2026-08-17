@@ -958,10 +958,14 @@ export interface Equipment {
   status: EquipmentStatus;
   operator: string;
   location: string;
-  engineHours: number; // h
-  mileage?: number; // km
+  engineHours: number; // Current machine hour meter reading (h)
+  initialHours?: number; // Starting hour meter reading when machine was added to project/fleet
+  mileage?: number; // Current odometer reading (km)
+  initialMileage?: number; // Starting odometer reading (km)
   totalLoads?: number; // count of loads/trips
+  initialLoads?: number; // Starting load count
   totalPowerKWh?: number; // kWh output for generators/power units
+  initialPowerKWh?: number; // Starting power output meter
   licensePlate?: string; // for vehicles/trucks
   fuelLevel: number; // percentage (0 - 100)
   fuelColor?: string;

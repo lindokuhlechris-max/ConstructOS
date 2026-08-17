@@ -35,10 +35,14 @@ export const calculateEquipmentCosts = (eq: EquipmentType, logs: EquipmentLog[])
   const eqLogs = logs.filter(l => l.equipmentId === eq.id);
   const isCostTrackingEnabled = eq.trackOperationalCost !== false && (Boolean(eq.hourlyRate && eq.hourlyRate > 0) || Boolean(eq.dailyRate && eq.dailyRate > 0) || eq.ownership === 'Rented');
   const hourlyRate = (eq.trackOperationalCost !== false && eq.hourlyRate) ? eq.hourlyRate : 0;
-  const engineHours = typeof eq.engineHours === 'number' ? eq.engineHours : (parseInt(String(eq.engineHours)) || 0);
+  const currentEngineHours = typeof eq.engineHours === 'number' ? eq.engineHours : (parseInt(String(eq.engineHours)) || 0);
 
-  // Calculate hours cost based on direct engine hours or logged entries only if rate > 0
-  const directHoursCost = engineHours * hourlyRate;
+  // Total project operated hours logged in shifts
+  const loggedHours = eqLogs
+    .filter(l => l.type === 'Hours' || l.hoursAdded)
+    .reduce((sum, l) => sum + (l.hoursAdded || l.hours || 0), 0);
+
+  // Total calculated operating cost from logs
   const loggedHoursCost = eqLogs
     .filter(l => l.type === 'Hours' || l.hoursAdded)
     .reduce((sum, l) => {
@@ -46,8 +50,14 @@ export const calculateEquipmentCosts = (eq: EquipmentType, logs: EquipmentLog[])
       const calculated = l.calculatedOperatingCost !== undefined ? l.calculatedOperatingCost : (l.hoursAdded || 0) * rate;
       return sum + (calculated || 0);
     }, 0);
-  
-  const hoursCost = Math.max(directHoursCost, loggedHoursCost);
+
+  // If logs exist, operatedHours is strictly loggedHours.
+  // If no logs yet, delta is 0 (or delta above initial meter reading)
+  const initialBaseline = eq.initialHours !== undefined ? eq.initialHours : currentEngineHours;
+  const deltaFromInitial = Math.max(0, currentEngineHours - initialBaseline);
+  const operatedHours = loggedHours > 0 ? loggedHours : deltaFromInitial;
+
+  const hoursCost = loggedHoursCost > 0 ? loggedHoursCost : (operatedHours * hourlyRate);
 
   // Calculate maintenance cost (direct from maintenance logs)
   const maintenanceCost = eqLogs
@@ -83,7 +93,9 @@ export const calculateEquipmentCosts = (eq: EquipmentType, logs: EquipmentLog[])
   }
 
   return {
-    engineHours,
+    engineHours: currentEngineHours,
+    initialHours: initialBaseline,
+    operatedHours,
     hourlyRate,
     isCostTrackingEnabled,
     hoursCost,
@@ -357,6 +369,11 @@ export function Equipment() {
     e.preventDefault();
     if (!formName) return;
 
+    const engineHrs = Number(formEngineHours) || 0;
+    const mileageVal = Number(formMileage) || 0;
+    const loadsVal = Number(formTotalLoads) || 0;
+    const powerVal = Number(formTotalPowerKWh) || 0;
+
     const newEq: EquipmentType = {
       id: formId || `EQ-${Math.floor(100 + Math.random() * 900)}`,
       name: formName,
@@ -365,12 +382,16 @@ export function Equipment() {
       primaryMetric: formPrimaryMetric,
       operator: formOperator || 'Unassigned',
       location: formLocation || 'Main Compound',
-      engineHours: Number(formEngineHours) || 0,
-      mileage: Number(formMileage) || 0,
-      totalLoads: Number(formTotalLoads) || 0,
-      totalPowerKWh: Number(formTotalPowerKWh) || 0,
+      engineHours: engineHrs,
+      initialHours: engineHrs, // Baseline machine state on arrival
+      mileage: mileageVal,
+      initialMileage: mileageVal,
+      totalLoads: loadsVal,
+      initialLoads: loadsVal,
+      totalPowerKWh: powerVal,
+      initialPowerKWh: powerVal,
       licensePlate: formLicensePlate,
-      fuelCapacityLitres: Number(formFuelCapacityLitres) || 100,
+      fuelCapacityLitres: Number(formFuelCapacityLitres) || 200,
       fuelConsumptionRate: formFuelConsumptionRate ? Number(formFuelConsumptionRate) : undefined,
       serviceIntervalHours: formServiceIntervalHours ? Number(formServiceIntervalHours) : undefined,
       serviceIntervalKm: formServiceIntervalKm ? Number(formServiceIntervalKm) : undefined,
@@ -405,6 +426,11 @@ export function Equipment() {
     e.preventDefault();
     if (!editingEq || !formName) return;
 
+    const engineHrs = Number(formEngineHours) || 0;
+    const mileageVal = Number(formMileage) || 0;
+    const loadsVal = Number(formTotalLoads) || 0;
+    const powerVal = Number(formTotalPowerKWh) || 0;
+
     const updatedEq: EquipmentType = {
       ...editingEq,
       name: formName,
@@ -413,12 +439,16 @@ export function Equipment() {
       primaryMetric: formPrimaryMetric,
       operator: formOperator || 'Unassigned',
       location: formLocation || 'Main Compound',
-      engineHours: Number(formEngineHours) || 0,
-      mileage: Number(formMileage) || 0,
-      totalLoads: Number(formTotalLoads) || 0,
-      totalPowerKWh: Number(formTotalPowerKWh) || 0,
+      engineHours: engineHrs,
+      initialHours: editingEq.initialHours !== undefined ? editingEq.initialHours : engineHrs,
+      mileage: mileageVal,
+      initialMileage: editingEq.initialMileage !== undefined ? editingEq.initialMileage : mileageVal,
+      totalLoads: loadsVal,
+      initialLoads: editingEq.initialLoads !== undefined ? editingEq.initialLoads : loadsVal,
+      totalPowerKWh: powerVal,
+      initialPowerKWh: editingEq.initialPowerKWh !== undefined ? editingEq.initialPowerKWh : powerVal,
       licensePlate: formLicensePlate,
-      fuelCapacityLitres: Number(formFuelCapacityLitres) || 100,
+      fuelCapacityLitres: Number(formFuelCapacityLitres) || 200,
       fuelConsumptionRate: formFuelConsumptionRate ? Number(formFuelConsumptionRate) : undefined,
       serviceIntervalHours: formServiceIntervalHours ? Number(formServiceIntervalHours) : undefined,
       serviceIntervalKm: formServiceIntervalKm ? Number(formServiceIntervalKm) : undefined,
@@ -682,8 +712,8 @@ export function Equipment() {
                     </p>
                     <p className="text-[11px] text-slate-500 mt-1">
                       {eqCosts.hourlyRate > 0 
-                        ? `${eqCosts.engineHours} hrs @ ${formatRand(eqCosts.hourlyRate)}/hr`
-                        : 'No operating rate applied'}
+                        ? `${eqCosts.operatedHours.toLocaleString()} operated hrs @ ${formatRand(eqCosts.hourlyRate)}/hr`
+                        : `${eqCosts.operatedHours.toLocaleString()} operated hrs (No rate applied)`}
                     </p>
                   </div>
 
@@ -708,63 +738,45 @@ export function Equipment() {
                       {eqCosts.daysRemaining !== null && (
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
                           eqCosts.isOverdue 
-                            ? 'bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/30 animate-pulse' 
+                            ? 'bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/30' 
                             : 'bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30'
                         }`}>
                           {eqCosts.isOverdue 
-                            ? `⚠️ Return Overdue by ${Math.abs(eqCosts.daysRemaining)} days` 
-                            : `⏳ ${eqCosts.daysRemaining} days remaining on hire`}
+                            ? `Overdue Return by ${Math.abs(eqCosts.daysRemaining)} Days` 
+                            : `${eqCosts.daysRemaining} Days Remaining on Site`}
                         </span>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                       <div>
-                        <span className="text-slate-500 block mb-0.5">Rental Vendor / Supplier</span>
-                        <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                          {currentEq.rentalVendor || 'External Supplier'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block mb-0.5">Agreement / PO #</span>
-                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
-                          {currentEq.rentalAgreementNumber || 'PO-PENDING'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block mb-0.5">Hire Start Date</span>
+                        <span className="text-slate-500 block mb-0.5">Rental Vendor</span>
                         <span className="font-semibold text-slate-900 dark:text-slate-100">
-                          {currentEq.rentalStartDate || 'Not set'}
+                          {currentEq.rentalVendor || 'Barloworld / Supplier'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-500 block mb-0.5">Scheduled Return Date</span>
+                        <span className="text-slate-500 block mb-0.5">Contract / PO #</span>
+                        <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">
+                          {currentEq.rentalAgreementNumber || 'N/A'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block mb-0.5">Rental Period</span>
                         <span className="font-semibold text-slate-900 dark:text-slate-100">
-                          {currentEq.rentalEndDate || 'Ongoing / Open'}
+                          {currentEq.rentalStartDate || 'Start'} ➔ {currentEq.rentalEndDate || 'Open'}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-500 block mb-0.5">Billing Cycle</span>
                         <span className="font-semibold text-slate-900 dark:text-slate-100">
-                          {currentEq.rentalBillingCycle || 'Hourly'} Rate Model
+                          {currentEq.rentalBillingCycle || 'Hourly'}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-500 block mb-0.5">Refundable Deposit</span>
                         <span className="font-semibold text-slate-900 dark:text-slate-100">
                           {formatRand(currentEq.rentalDeposit || 0)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block mb-0.5">Days on Site</span>
-                        <span className="font-semibold text-slate-900 dark:text-slate-100">
-                          {eqCosts.daysOnHire} Days Active
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block mb-0.5">Total Hire Expense</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                          {formatRand(eqCosts.totalCost)}
                         </span>
                       </div>
                     </div>
@@ -809,10 +821,18 @@ export function Equipment() {
                       </div>
 
                       <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                        <p className="text-xs text-blue-600 dark:text-blue-400 mb-0.5 font-bold flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" /> Engine Hours
-                        </p>
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <p className="text-xs text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" /> Engine Hours (Meter)
+                          </p>
+                          <span className="text-[10px] text-blue-700 dark:text-blue-300 font-semibold bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">
+                            {eqCosts.operatedHours.toLocaleString()}h logged
+                          </span>
+                        </div>
                         <p className="text-lg font-bold text-slate-900 dark:text-white">{(currentEq.engineHours || 0).toLocaleString()} hrs</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">
+                          Arrival Baseline: {(eqCosts.initialHours || 0).toLocaleString()} hrs • Site Logged: {eqCosts.operatedHours.toLocaleString()} hrs
+                        </p>
                       </div>
 
                       {currentEq.totalLoads !== undefined && (
@@ -1234,7 +1254,12 @@ export function Equipment() {
 
                       {/* Usage Metric */}
                       <div>
-                        <p className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold mb-0.5">Engine Hours</p>
+                        <p className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold mb-0.5 flex items-center justify-between">
+                          <span>Engine Hours</span>
+                          {costs.operatedHours > 0 && (
+                            <span className="text-[9px] text-blue-500 font-bold">+{costs.operatedHours.toLocaleString()}h site</span>
+                          )}
+                        </p>
                         <p className="text-xs font-bold text-slate-900 dark:text-white">{(eq.engineHours || 0).toLocaleString()} hrs</p>
                       </div>
 
@@ -1703,15 +1728,18 @@ export function Equipment() {
               </div>
 
               <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Current Metrics & Status</span>
-                <div className="grid grid-cols-4 gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Current Metrics & Status</span>
+                  <span className="text-[11px] text-slate-400">Machine state on arrival</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Odometer (km)</label>
                     <input type="number" value={formMileage} onChange={e => setFormMileage(Number(e.target.value))} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
                   </div>
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Engine Hours</label>
-                    <input type="number" value={formEngineHours} onChange={e => setFormEngineHours(Number(e.target.value))} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Engine Hours (Meter)</label>
+                    <input type="number" placeholder="e.g. 1700" value={formEngineHours} onChange={e => setFormEngineHours(Number(e.target.value))} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
                   </div>
                   <div>
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Total Loads</label>
@@ -1723,7 +1751,7 @@ export function Equipment() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
                   <div>
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Status</label>
                     <select value={formStatus} onChange={e => setFormStatus(e.target.value as EquipmentStatus)} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white">
@@ -1740,6 +1768,10 @@ export function Equipment() {
                   <div>
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Fuel Tank Capacity (L)</label>
                     <input type="number" value={formFuelCapacityLitres} onChange={e => setFormFuelCapacityLitres(Number(e.target.value))} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Last Service Date</label>
+                    <input type="date" value={formLastService} onChange={e => setFormLastService(e.target.value)} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
                   </div>
                 </div>
               </div>
@@ -2017,14 +2049,17 @@ export function Equipment() {
               </div>
 
               <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Metrics Update</span>
-                <div className="grid grid-cols-4 gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Metrics & Status Update</span>
+                  <span className="text-[11px] text-slate-400">Update current machine state</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Odometer (km)</label>
                     <input type="number" value={formMileage} onChange={e => setFormMileage(Number(e.target.value))} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
                   </div>
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Engine Hours</label>
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Engine Hours (Meter)</label>
                     <input type="number" value={formEngineHours} onChange={e => setFormEngineHours(Number(e.target.value))} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
                   </div>
                   <div>
@@ -2037,7 +2072,7 @@ export function Equipment() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
                   <div>
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Status</label>
                     <select value={formStatus} onChange={e => setFormStatus(e.target.value as EquipmentStatus)} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white">
@@ -2050,6 +2085,10 @@ export function Equipment() {
                   <div>
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Fuel Level (%)</label>
                     <input type="number" min="0" max="100" value={formFuelLevel} onChange={e => setFormFuelLevel(Number(e.target.value))} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Fuel Tank Capacity (L)</label>
+                    <input type="number" value={formFuelCapacityLitres} onChange={e => setFormFuelCapacityLitres(Number(e.target.value))} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
                   </div>
                   <div>
                     <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Last Service Date</label>
