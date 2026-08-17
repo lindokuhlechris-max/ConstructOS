@@ -72,6 +72,8 @@ export function Documents() {
     hasPermission 
   } = useAppContext();
 
+  const canEditDocuments = hasPermission('documents') || hasPermission('settings');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'All' | DocumentCategory>('All');
   const [selectedFileType, setSelectedFileType] = useState<'all' | DocumentFileType>('all');
@@ -344,13 +346,15 @@ export function Documents() {
             <span>Export Excel</span>
           </Button>
 
-          <Button
-            onClick={() => setIsUploadOpen(true)}
-            className="bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl px-4 py-2 font-bold text-xs sm:text-sm shadow-sm gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Upload Document</span>
-          </Button>
+          {canEditDocuments && (
+            <Button
+              onClick={() => setIsUploadOpen(true)}
+              className="bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl px-4 py-2 font-bold text-xs sm:text-sm shadow-sm gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Upload Document</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -623,13 +627,15 @@ export function Documents() {
           <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-5">
             No files matched your search or active filter combination. You can adjust your filters or upload a new project document.
           </p>
-          <Button
-            onClick={() => setIsUploadOpen(true)}
-            className="bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl px-4 py-2 font-bold text-xs gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Upload Document</span>
-          </Button>
+          {canEditDocuments && (
+            <Button
+              onClick={() => setIsUploadOpen(true)}
+              className="bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl px-4 py-2 font-bold text-xs gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Upload Document</span>
+            </Button>
+          )}
         </div>
       ) : viewMode === 'grid' ? (
         
@@ -694,18 +700,20 @@ export function Documents() {
                           <LinkIcon className="h-3 w-3 text-blue-500" />
                           Activity
                         </span>
-                        <button
-                          onClick={() => setAssignDoc(doc)}
-                          className="text-[11px] text-[#0B5FFF] hover:underline font-bold"
-                        >
-                          {hasActivity ? 'Change' : '+ Assign'}
-                        </button>
+                        {canEditDocuments && (
+                          <button
+                            onClick={() => setAssignDoc(doc)}
+                            className="text-[11px] text-[#0B5FFF] hover:underline font-bold"
+                          >
+                            {hasActivity ? 'Change' : '+ Assign'}
+                          </button>
+                        )}
                       </div>
 
                       {hasActivity ? (
                         <div
-                          onClick={() => setAssignDoc(doc)}
-                          className="mt-1 p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 cursor-pointer hover:border-blue-300 transition-colors flex items-center justify-between gap-2"
+                          onClick={() => canEditDocuments && setAssignDoc(doc)}
+                          className={`mt-1 p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 flex items-center justify-between gap-2 ${canEditDocuments ? 'cursor-pointer hover:border-blue-300 transition-colors' : ''}`}
                         >
                           <div className="min-w-0">
                             <div className="text-xs font-bold text-blue-900 dark:text-blue-200 truncate">
@@ -719,11 +727,11 @@ export function Documents() {
                         </div>
                       ) : (
                         <div
-                          onClick={() => setAssignDoc(doc)}
-                          className="mt-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-center cursor-pointer hover:border-[#0B5FFF] transition-colors"
+                          onClick={() => canEditDocuments && setAssignDoc(doc)}
+                          className={`mt-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-center ${canEditDocuments ? 'cursor-pointer hover:border-[#0B5FFF] transition-colors' : ''}`}
                         >
                           <span className="text-[11px] text-slate-400 italic">
-                            Click to link this document to an activity
+                            {canEditDocuments ? 'Click to link this document to an activity' : 'No activity linked'}
                           </span>
                         </div>
                       )}
@@ -771,20 +779,24 @@ export function Documents() {
                       >
                         <Download className="h-4 w-4" />
                       </button>
-                      <button
-                        onClick={() => setEditDoc(doc)}
-                        className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700 transition-colors"
-                        title="Edit Document"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirmId(doc.id)}
-                        className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                        title="Delete Document"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {canEditDocuments && (
+                        <>
+                          <button
+                            onClick={() => setEditDoc(doc)}
+                            className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700 transition-colors"
+                            title="Edit Document"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(doc.id)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                            title="Delete Document"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -884,20 +896,24 @@ export function Documents() {
                         >
                           <Download className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => setEditDoc(doc)}
-                          className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                          title="Edit"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirmId(doc.id)}
-                          className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {canEditDocuments && (
+                          <>
+                            <button
+                              onClick={() => setEditDoc(doc)}
+                              className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              title="Edit"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(doc.id)}
+                              className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

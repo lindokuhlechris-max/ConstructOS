@@ -17,8 +17,11 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     addQAInspection, 
     updateQAInspection, 
     deleteQAInspection, 
-    userRole 
+    userRole,
+    hasPermission 
   } = useAppContext();
+
+  const canEditQuality = hasPermission('quality');
 
   const [selectedInspection, setSelectedInspection] = useState<QAInspectionItem | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -93,15 +96,15 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       <div className="w-full h-full p-4 md:p-6 overflow-y-auto">
         <QualityDetail
           inspection={selectedInspection}
-          onSave={(updated) => {
+          onSave={canEditQuality ? (updated) => {
             updateQAInspection(updated);
             setSelectedInspection(updated);
-          }}
+          } : undefined}
           onClose={() => setSelectedInspection(null)}
-          onDelete={(id) => {
+          onDelete={canEditQuality ? (id) => {
             deleteQAInspection(id);
             setSelectedInspection(null);
-          }}
+          } : undefined}
         />
       </div>
     );
@@ -135,9 +138,11 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             />
           </div>
 
-          <Button onClick={() => setIsAdding(!isAdding)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shrink-0">
-            <Plus className="h-4 w-4" /> Log Inspection
-          </Button>
+          {canEditQuality && (
+            <Button onClick={() => setIsAdding(!isAdding)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shrink-0">
+              <Plus className="h-4 w-4" /> Log Inspection
+            </Button>
+          )}
         </div>
       </div>
 

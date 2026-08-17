@@ -33,8 +33,11 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     removeEmployeeFromAccommodation,
     addAccommodationUtility, 
     deleteAccommodationUtility,
-    deleteAccommodationPayment
+    deleteAccommodationPayment,
+    hasPermission
   } = useAppContext();
+
+  const canEditAccommodation = hasPermission('labour') || hasPermission('settings');
 
   const [selectedAccommodationId, setSelectedAccommodationId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'properties' | 'utilities' | 'roster' | 'payments'>('properties');
@@ -513,11 +516,11 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
       <AccommodationDetail
         unit={selectedAccommodation}
         onClose={() => setSelectedAccommodationId(null)}
-        onUpdate={(updated) => updateAccommodation(updated)}
-        onDelete={(id) => {
+        onUpdate={canEditAccommodation ? (updated) => updateAccommodation(updated) : undefined}
+        onDelete={canEditAccommodation ? (id) => {
           deleteAccommodation(id);
           setSelectedAccommodationId(null);
-        }}
+        } : undefined}
       />
     );
   }
@@ -546,7 +549,6 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
         </div>
 
         {/* Header Action Buttons */}
-        {/* Header Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           <button
             onClick={() => generateAllAccommodationsSummaryPDF(accommodations, accommodationUtilities, employees)}
@@ -562,18 +564,22 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
           >
             <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Export Excel
           </button>
-          <button
-            onClick={() => handleOpenLogUtility()}
-            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-xl transition-colors text-xs font-semibold shadow-sm"
-          >
-            <Zap className="h-4 w-4" /> Log Utility Bill
-          </button>
-          <button
-            onClick={handleOpenCreate}
-            className="flex items-center gap-2 bg-[#0B5FFF] hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl transition-colors text-xs font-semibold shadow-sm"
-          >
-            <Plus className="h-4 w-4" /> Add Facility / Unit
-          </button>
+          {canEditAccommodation && (
+            <>
+              <button
+                onClick={() => handleOpenLogUtility()}
+                className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-xl transition-colors text-xs font-semibold shadow-sm"
+              >
+                <Zap className="h-4 w-4" /> Log Utility Bill
+              </button>
+              <button
+                onClick={handleOpenCreate}
+                className="flex items-center gap-2 bg-[#0B5FFF] hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl transition-colors text-xs font-semibold shadow-sm"
+              >
+                <Plus className="h-4 w-4" /> Add Facility / Unit
+              </button>
+            </>
+          )}
         </div>
       </div>
 

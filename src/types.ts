@@ -676,6 +676,7 @@ export interface UserProfile {
   accessAllowed?: boolean;
   permissions?: Partial<ProjectSectionPermissions>;
   allowedProjectIds?: string[];
+  password?: string;
 }
 
 export interface AccessRequest {

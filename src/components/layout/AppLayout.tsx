@@ -748,15 +748,17 @@ export function AppLayout() {
 
                 {/* Popover Actions */}
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
-                  <button
-                    onClick={() => {
-                      setShowProfileMenu(false);
-                      setShowCreateProfileModal(true);
-                    }}
-                    className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-bold text-slate-700 dark:text-slate-200"
-                  >
-                    <UserPlus className="h-4 w-4 text-[#0B5FFF]" /> Create New Profile
-                  </button>
+                  {currentUserProfile?.role === 'Admin' && (
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        setShowCreateProfileModal(true);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-bold text-slate-700 dark:text-slate-200"
+                    >
+                      <UserPlus className="h-4 w-4 text-[#0B5FFF]" /> Create New Profile
+                    </button>
+                  )}
 
                   <button
                     onClick={() => {

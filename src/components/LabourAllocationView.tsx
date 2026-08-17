@@ -6,7 +6,8 @@ import { Calendar, Plus, User, Briefcase, CalendarDays, Edit, Trash2 } from 'luc
 import { format, parseISO } from 'date-fns';
 
 export function LabourAllocationView({ projectId }: { projectId: string }) {
-  const { labourAllocations, activities, employees, addLabourAllocation, updateLabourAllocation, deleteLabourAllocation, userRole, updateActivity } = useAppContext();
+  const { labourAllocations, activities, employees, addLabourAllocation, updateLabourAllocation, deleteLabourAllocation, userRole, updateActivity, hasPermission } = useAppContext();
+  const canEditLabour = hasPermission('labour');
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -105,7 +106,7 @@ export function LabourAllocationView({ projectId }: { projectId: string }) {
             <p className="text-sm text-slate-500">Assign workers to specific tasks</p>
           </div>
         </div>
-        {canManage(userRole) && !isAdding && (
+        {canEditLabour && !isAdding && (
           <Button onClick={() => setIsAdding(true)} className="gap-2 bg-indigo-600 hover:bg-indigo-700">
             <Plus className="h-4 w-4" /> Assign Worker
           </Button>
@@ -295,7 +296,7 @@ export function LabourAllocationView({ projectId }: { projectId: string }) {
                       {format(parseISO(allocation.startDate), 'MMM d')} - {format(parseISO(allocation.endDate), 'MMM d, yyyy')}
                     </div>
                     
-                    {canManage(userRole) && (
+                    {canEditLabour && (
                       <div className="flex items-center gap-2 mt-2">
                         <Button variant="ghost" size="sm" onClick={() => handleEdit(allocation)} className="h-8 text-slate-500 hover:text-indigo-600">
                           <Edit className="h-3.5 w-3.5 mr-1" /> Edit

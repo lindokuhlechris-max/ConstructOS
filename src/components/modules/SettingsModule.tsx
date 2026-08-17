@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../ui';
 import { 
   ArrowLeft, 
@@ -36,7 +36,11 @@ import {
   CloudDownload,
   Loader2,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Fingerprint
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { CustomFieldDefinition, UserProfile, UserRole, ProjectSectionPermissions } from '../../types';
@@ -79,15 +83,24 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
     pendingChangesCount
   } = useAppContext();
 
-  const isAdmin = currentUserProfile?.role === 'Admin' || currentUserProfile?.permissions?.settings === true;
+  // Strict Admin Authority Check: Only users with role === 'Admin' have access to Admin & Access Control
+  const isAdmin = currentUserProfile?.role === 'Admin';
   const [activeTab, setActiveTab] = useState<'admin' | 'profile' | 'theme' | 'data' | 'units' | 'fields'>(() => {
-    return (currentUserProfile?.role === 'Admin' || currentUserProfile?.permissions?.settings === true) ? 'admin' : 'profile';
+    return currentUserProfile?.role === 'Admin' ? 'admin' : 'profile';
   });
   const [adminSearch, setAdminSearch] = useState('');
 
-  // Admin Section Permissions Edit Modal State
+  // Automatically ensure non-admin users cannot remain on or access the admin tab
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'admin') {
+      setActiveTab('profile');
+    }
+  }, [isAdmin, activeTab]);
+
+  // Admin Section Permissions & Password Edit Modal State
   const [editingUserProfile, setEditingUserProfile] = useState<UserProfile | null>(null);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showPasswordVisibility, setShowPasswordVisibility] = useState(false);
   const [permForm, setPermForm] = useState<UserProfile>({
     id: '',
     name: '',
@@ -99,6 +112,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
     department: 'Operations',
     initials: '',
     accessAllowed: true,
+    password: '',
     permissions: {
       activities: true,
       reports: true,
@@ -161,10 +175,12 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
   };
 
   const handleOpenEditPermissions = (profile?: UserProfile) => {
+    setShowPasswordVisibility(false);
     if (profile) {
       setEditingUserProfile(profile);
       setPermForm({
         ...profile,
+        password: profile.password || '',
         accessAllowed: profile.accessAllowed ?? true,
         permissions: {
           activities: profile.permissions?.activities ?? (profile.role === 'Admin' || profile.role === 'Manager' || profile.role === 'Engineer'),
@@ -190,6 +206,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
         department: 'Site Operations',
         initials: '',
         accessAllowed: true,
+        password: '',
         permissions: {
           activities: true,
           reports: true,
@@ -773,8 +790,17 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
                                     </Badge>
                                   )}
                                 </div>
-                                <div className="text-slate-500 dark:text-slate-400 font-mono text-[11px] truncate flex items-center gap-1">
-                                  <Mail className="h-3 w-3 text-slate-400 inline" /> {prof.email}
+                                <div className="text-slate-500 dark:text-slate-400 font-mono text-[11px] truncate flex items-center gap-2 mt-0.5">
+                                  <span><Mail className="h-3 w-3 text-slate-400 inline mr-1" />{prof.email}</span>
+                                  {prof.password ? (
+                                    <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
+                                      <Lock className="h-2.5 w-2.5" /> Password Set
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">
+                                      <Unlock className="h-2.5 w-2.5" /> No Password
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -974,12 +1000,33 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
 
           {/* Profile Switcher & Creation Column */}
           <div className="space-y-6">
+            {/* Non-Admin Role and Permissions Overview Notice */}
+            {!isAdmin && (
+              <Card className="p-4 border-blue-200 dark:border-blue-900/50 bg-blue-50/40 dark:bg-blue-950/20">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-[#0B5FFF]/10 text-[#0B5FFF] shrink-0 mt-0.5">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>Assigned Role: {currentUserProfile?.role}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Your permissions and role are centrally managed by System Administrators. Contact an Admin to request access changes.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
             <Card className="p-5 border-slate-200 dark:border-slate-800">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Available Profiles</h3>
-                <Button size="sm" onClick={() => setShowCreateModal(true)} className="gap-1.5 bg-[#0B5FFF] text-white rounded-xl text-xs">
-                  <UserPlus className="h-3.5 w-3.5" /> Add Profile
-                </Button>
+                {isAdmin && (
+                  <Button size="sm" onClick={() => setShowCreateModal(true)} className="gap-1.5 bg-[#0B5FFF] text-white rounded-xl text-xs">
+                    <UserPlus className="h-3.5 w-3.5" /> Add Profile
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -1543,6 +1590,84 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
                     />
                     <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0B5FFF]"></div>
                   </label>
+                </div>
+
+                {/* Admin-Only User Password & Authentication Configuration */}
+                <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4 text-[#0B5FFF]" />
+                      <span className="text-xs font-extrabold text-slate-900 dark:text-white">Account Password / Passcode</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded-full">
+                      Admin Only
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Only Administrators can set, update, or clear passwords for users. Leave blank if this account is allowed passwordless sign-in.
+                  </p>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={showPasswordVisibility ? "text" : "password"}
+                        placeholder="Enter password or passcode (or leave blank)..."
+                        value={permForm.password || ''}
+                        onChange={e => setPermForm({ ...permForm, password: e.target.value })}
+                        className="w-full h-9 pl-3 pr-10 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordVisibility(!showPasswordVisibility)}
+                        className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        title={showPasswordVisibility ? "Hide password" : "Show password"}
+                      >
+                        {showPasswordVisibility ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+
+                    {/* Quick Passcode Generator */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const generated = Math.floor(100000 + Math.random() * 900000).toString();
+                        setPermForm({ ...permForm, password: generated });
+                        setShowPasswordVisibility(true);
+                      }}
+                      className="h-9 px-2.5 text-[11px] font-bold rounded-xl border-blue-200 dark:border-blue-800 text-[#0B5FFF] bg-white dark:bg-slate-900 shrink-0 gap-1"
+                      title="Generate a random 6-digit passcode"
+                    >
+                      <Key className="h-3.5 w-3.5" />
+                      <span>Generate PIN</span>
+                    </Button>
+
+                    {permForm.password && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPermForm({ ...permForm, password: '' })}
+                        className="h-9 px-2 text-[11px] rounded-xl border-red-200 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 shrink-0"
+                        title="Clear password"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {permForm.password ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>This account requires this password to log in.</span>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-400 italic">
+                      No password set (User can sign in directly by email).
+                    </div>
+                  )}
                 </div>
 
                 {/* Granular Section Editing Permissions */}

@@ -51,8 +51,8 @@ interface AppContextType {
 
   // Authentication & Admission Control State
   isAuthenticated: boolean;
-  login: (passcode: string) => boolean;
-  loginWithProfile: (profileId: string) => { success: boolean; message?: string };
+  login: (email: string, password?: string) => { success: boolean; message?: string };
+  loginWithProfile: (profileId: string, password?: string) => { success: boolean; message?: string };
   logout: () => void;
   accessRequests: AccessRequest[];
   addAccessRequest: (req: Omit<AccessRequest, 'id' | 'timestamp' | 'status'>) => void;
@@ -2445,6 +2445,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addProfile = (profile: UserProfile) => {
+    // Only Admin can create or whitelist profiles
+    if (userProfiles.length > 0 && currentUserProfile?.role !== 'Admin') {
+      triggerSyncToast('Access Denied: Only System Administrators can add or whitelist new profiles.', 'error');
+      return;
+    }
+
     setUserProfiles(prev => [profile, ...prev]);
     localStorage.setItem('userProfiles', JSON.stringify([profile, ...userProfiles]));
 
@@ -2467,10 +2473,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = (profile: UserProfile) => {
     const oldProfile = userProfiles.find(p => p.id === profile.id);
-    setUserProfiles(prev => prev.map(p => p.id === profile.id ? profile : p));
+    const isCurrentUserAdmin = currentUserProfile?.role === 'Admin';
+    const isSelf = currentUserProfile?.id === profile.id;
+
+    // Security Gate: Non-admin users cannot edit other users
+    if (!isCurrentUserAdmin && !isSelf) {
+      triggerSyncToast('Access Denied: Only System Administrators can modify other user accounts.', 'error');
+      return;
+    }
+
+    // Security Gate: Non-admin users editing their own profile CANNOT alter roles, permissions, passwords or access
+    let sanitizedProfile: UserProfile = profile;
+    if (!isCurrentUserAdmin && isSelf && oldProfile) {
+      sanitizedProfile = {
+        ...profile,
+        role: oldProfile.role,
+        accessAllowed: oldProfile.accessAllowed,
+        permissions: oldProfile.permissions,
+        allowedProjectIds: oldProfile.allowedProjectIds,
+        password: oldProfile.password
+      };
+    }
+
+    setUserProfiles(prev => prev.map(p => p.id === profile.id ? sanitizedProfile : p));
     if (currentUserProfile.id === profile.id) {
-      setCurrentUserProfileState(profile);
-      setUserRole(profile.role);
+      setCurrentUserProfileState(sanitizedProfile);
+      setUserRole(sanitizedProfile.role);
     }
 
     const userName = currentUserProfile?.name || 'Current User';
@@ -2481,18 +2509,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       userId: `${userName} (${userRoleStr})`,
       userRole: userRoleStr,
       action: 'User Role/Permissions Updated',
-      details: `Updated role or permissions for "${profile.name}" (${profile.role})`,
+      details: `Updated profile "${sanitizedProfile.name}" (${sanitizedProfile.role})`,
       timestamp: new Date().toISOString(),
       entityType: 'Profile',
       entityId: profile.id,
       actionType: 'security_permission',
       previousValue: oldProfile ? `Role: ${oldProfile.role} | Access: ${oldProfile.accessAllowed ? 'Allowed' : 'Blocked'}` : undefined,
-      newValue: `Role: ${profile.role} | Access: ${profile.accessAllowed ? 'Allowed' : 'Blocked'}`
+      newValue: `Role: ${sanitizedProfile.role} | Access: ${sanitizedProfile.accessAllowed ? 'Allowed' : 'Blocked'}`
     });
   };
 
   const deleteProfile = (id: string) => {
+    // Only Admin can delete profiles
+    if (currentUserProfile?.role !== 'Admin') {
+      triggerSyncToast('Access Denied: Only System Administrators can remove profiles.', 'error');
+      return;
+    }
+
     const profToDelete = userProfiles.find(p => p.id === id);
+    if (profToDelete?.role === 'Admin' && userProfiles.filter(p => p.role === 'Admin').length <= 1) {
+      triggerSyncToast('Action Prevented: Cannot delete the sole Administrator account.', 'error');
+      return;
+    }
+
     setUserProfiles(prev => prev.filter(p => p.id !== id));
 
     const userName = currentUserProfile?.name || 'Current User';
@@ -2557,6 +2596,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
     }
 
+    // Enforce Password / Passcode Verification if set by Administrator
+    if (foundProfile.password && foundProfile.password.trim() !== '') {
+      if (!_password || _password.trim() !== foundProfile.password.trim()) {
+        return {
+          success: false,
+          message: `Incorrect Password: The passcode or password entered is invalid for ${foundProfile.name}. Please enter the password assigned by your Administrator.`
+        };
+      }
+    }
+
     setCurrentUserProfileState(foundProfile);
     setUserRole(foundProfile.role);
     setIsAuthenticated(true);
@@ -2565,7 +2614,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { success: true };
   };
 
-  const loginWithProfile = (profileId: string): { success: boolean; message?: string } => {
+  const loginWithProfile = (profileId: string, _password?: string): { success: boolean; message?: string } => {
     const foundProfile = userProfiles.find(p => p.id === profileId);
     if (!foundProfile) {
       return { success: false, message: 'Profile not found.' };
@@ -2576,6 +2625,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         message: `Admission Blocked: Access for '${foundProfile.name}' has been disabled by an Administrator.`
       };
     }
+
+    // Enforce Password check if set
+    if (foundProfile.password && foundProfile.password.trim() !== '') {
+      if (!_password || _password.trim() !== foundProfile.password.trim()) {
+        return {
+          success: false,
+          message: `Password Required: Account '${foundProfile.name}' is password-protected. Please enter your authorized password to sign in.`
+        };
+      }
+    }
+
     setCurrentUserProfile(foundProfile);
     setIsAuthenticated(true);
     localStorage.setItem('isAuthenticated', 'true');

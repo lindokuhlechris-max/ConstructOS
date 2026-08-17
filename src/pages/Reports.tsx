@@ -50,7 +50,8 @@ import { RecordActivityModal } from '../components/RecordActivityModal';
 import { WeatherWidget } from '../components/WeatherWidget';
 
 export function Reports() {
-  const { reports, projects, activities, addReport, updateReport, deleteReport, addAuditLog, userRole } = useAppContext();
+  const { reports, projects, activities, addReport, updateReport, deleteReport, addAuditLog, userRole, hasPermission } = useAppContext();
+  const canEditReports = hasPermission('reports');
 
 
   
@@ -157,15 +158,15 @@ export function Reports() {
       <div className="p-4 md:p-8">
         <ReportDetail
           report={selectedReport}
-          onSave={(updated) => {
+          onSave={canEditReports ? (updated) => {
             updateReport(updated);
             setSelectedReport(updated);
-          }}
+          } : undefined}
           onClose={() => setSelectedReport(null)}
-          onDelete={(id) => {
+          onDelete={canEditReports ? (id) => {
             deleteReport(id);
             setSelectedReport(null);
-          }}
+          } : undefined}
         />
       </div>
     );
@@ -240,9 +241,11 @@ className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             Daily Weather PDF
           </Button>
 
-          <Button onClick={() => setIsCreating(true)} className="flex items-center gap-1.5 bg-[#0B5FFF] hover:bg-blue-700 text-white font-semibold">
-            <Plus className="h-4 w-4" /> New Report
-          </Button>
+          {canEditReports && (
+            <Button onClick={() => setIsCreating(true)} className="flex items-center gap-1.5 bg-[#0B5FFF] hover:bg-blue-700 text-white font-semibold">
+              <Plus className="h-4 w-4" /> New Report
+            </Button>
+          )}
         </div>
       </div>
 

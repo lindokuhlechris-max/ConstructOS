@@ -61,8 +61,11 @@ export function Safety() {
     addPPEItem, 
     updatePPEItem,
     deletePPEItem,
-    userRole 
+    userRole,
+    hasPermission
   } = useAppContext();
+
+  const canEditSafety = hasPermission('safety');
 
   const [activeTab, setActiveTab] = useState<'incidents' | 'gallery' | 'requirements' | 'policies' | 'inspections' | 'ppe'>('incidents');
   const [selectedIncident, setSelectedIncident] = useState<SafetyIncident | null>(null);
@@ -249,15 +252,15 @@ export function Safety() {
       <div className="p-4 md:p-6 overflow-y-auto h-full w-full">
         <SafetyDetail
           incident={selectedIncident}
-          onSave={(updated) => {
+          onSave={canEditSafety ? (updated) => {
             updateSafetyIncident(updated);
             setSelectedIncident(updated);
-          }}
+          } : undefined}
           onClose={() => setSelectedIncident(null)}
-          onDelete={(id) => {
+          onDelete={canEditSafety ? (id) => {
             const inc = safetyIncidents.find(i => i.id === id);
             setDeletingItem({ type: 'incident', id, name: inc?.title || id });
-          }}
+          } : undefined}
         />
       </div>
     );
@@ -366,9 +369,11 @@ export function Safety() {
                 className="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
               />
             </div>
-            <Button onClick={() => setIsReportingIncident(!isReportingIncident)} className="gap-2 rounded-xl bg-red-600 hover:bg-red-700 text-white shrink-0">
-              {isReportingIncident ? 'Cancel' : <><Plus className="h-4 w-4" /> Report Safety Incident</>}
-            </Button>
+            {canEditSafety && (
+              <Button onClick={() => setIsReportingIncident(!isReportingIncident)} className="gap-2 rounded-xl bg-red-600 hover:bg-red-700 text-white shrink-0">
+                {isReportingIncident ? 'Cancel' : <><Plus className="h-4 w-4" /> Report Safety Incident</>}
+              </Button>
+            )}
           </div>
 
           {isReportingIncident && (

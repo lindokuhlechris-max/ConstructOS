@@ -42,8 +42,11 @@ export function Materials({ onBack }: { onBack?: () => void } = {}) {
     currency,
     setCurrency,
     employees,
-    activities
+    activities,
+    hasPermission
   } = useAppContext();
+
+  const canEditMaterials = hasPermission('materials');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
@@ -747,13 +750,13 @@ export function Materials({ onBack }: { onBack?: () => void } = {}) {
       <MaterialDetail 
         material={liveMat}
         onClose={() => setSelectedMaterial(null)}
-        onDelete={(id) => {
+        onDelete={canEditMaterials ? (id) => {
           deleteMaterial(id);
           setSelectedMaterial(null);
-        }}
-        onDuplicate={(mat) => {
+        } : undefined}
+        onDuplicate={canEditMaterials ? (mat) => {
           handleCopyMaterial(mat);
-        }}
+        } : undefined}
       />
     );
   }
@@ -826,13 +829,15 @@ export function Materials({ onBack }: { onBack?: () => void } = {}) {
             <span>Export</span>
           </Button>
 
-          <Button 
-            onClick={handleOpenAddModal} 
-            className="bg-[#0B5FFF] hover:bg-blue-600 text-white gap-1.5 rounded-xl px-4 py-2 shadow-sm font-semibold text-xs sm:text-sm"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Material</span>
-          </Button>
+          {canEditMaterials && (
+            <Button 
+              onClick={handleOpenAddModal} 
+              className="bg-[#0B5FFF] hover:bg-blue-600 text-white gap-1.5 rounded-xl px-4 py-2 shadow-sm font-semibold text-xs sm:text-sm"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Material</span>
+            </Button>
+          )}
         </div>
       </div>
 

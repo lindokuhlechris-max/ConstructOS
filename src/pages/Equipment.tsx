@@ -110,7 +110,8 @@ export const calculateEquipmentCosts = (eq: EquipmentType, logs: EquipmentLog[])
 };
 
 export function Equipment() {
-  const { equipment, equipmentLogs, addEquipment, updateEquipment, deleteEquipment, addEquipmentLog, deleteEquipmentLog } = useAppContext();
+  const { equipment, equipmentLogs, addEquipment, updateEquipment, deleteEquipment, addEquipmentLog, deleteEquipmentLog, hasPermission } = useAppContext();
+  const canEditEquipment = hasPermission('equipment');
 
   const [filter, setFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
@@ -639,20 +640,22 @@ export function Equipment() {
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{currentEq.name}</h1>
                   </div>
                 </div>
-                <div className="flex gap-2 flex-wrap">
-                  <Button onClick={(e) => openLogModal(currentEq, 'Hours', e)} className="bg-[#0B5FFF] hover:bg-blue-600 text-white gap-2 rounded-xl shadow-sm border-0 font-medium px-4">
-                    <ClipboardList className="h-4 w-4" /> Log Activity
-                  </Button>
-                  <Button onClick={(e) => openLogModal(currentEq, 'Maintenance', e)} className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-rose-700 dark:text-rose-400 gap-2 rounded-xl border border-slate-200 dark:border-slate-700 font-medium px-3">
-                    <Wrench className="h-4 w-4" /> Service / Repair
-                  </Button>
-                  <Button onClick={(e) => openEditModal(currentEq, e)} className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 gap-2 rounded-xl border border-slate-200 dark:border-slate-700 font-medium px-3">
-                    <Edit3 className="h-4 w-4 text-blue-500" /> Edit
-                  </Button>
-                  <Button onClick={() => setDeletingEqId(currentEq.id)} className="bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 gap-2 rounded-xl border border-rose-200 dark:border-rose-800/40 font-medium px-3">
-                    <Trash2 className="h-4 w-4" /> Delete
-                  </Button>
-                </div>
+                {canEditEquipment && (
+                  <div className="flex gap-2 flex-wrap">
+                    <Button onClick={(e) => openLogModal(currentEq, 'Hours', e)} className="bg-[#0B5FFF] hover:bg-blue-600 text-white gap-2 rounded-xl shadow-sm border-0 font-medium px-4">
+                      <ClipboardList className="h-4 w-4" /> Log Activity
+                    </Button>
+                    <Button onClick={(e) => openLogModal(currentEq, 'Maintenance', e)} className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-rose-700 dark:text-rose-400 gap-2 rounded-xl border border-slate-200 dark:border-slate-700 font-medium px-3">
+                      <Wrench className="h-4 w-4" /> Service / Repair
+                    </Button>
+                    <Button onClick={(e) => openEditModal(currentEq, e)} className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 gap-2 rounded-xl border border-slate-200 dark:border-slate-700 font-medium px-3">
+                      <Edit3 className="h-4 w-4 text-blue-500" /> Edit
+                    </Button>
+                    <Button onClick={() => setDeletingEqId(currentEq.id)} className="bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 gap-2 rounded-xl border border-rose-200 dark:border-rose-800/40 font-medium px-3">
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* Financial & Rental Analytics Card */}
@@ -1016,11 +1019,13 @@ export function Equipment() {
                 Track company-owned and rented machinery, operating rates (ZAR), telematic hours, and overall fleet expenditure.
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={openAddModal} className="bg-[#0B5FFF] hover:bg-blue-600 text-white gap-2 rounded-xl shadow-sm border-0 font-medium px-4">
-                <Plus className="h-4 w-4" /> Add Asset / Vehicle
-              </Button>
-            </div>
+            {canEditEquipment && (
+              <div className="flex gap-2">
+                <Button onClick={openAddModal} className="bg-[#0B5FFF] hover:bg-blue-600 text-white gap-2 rounded-xl shadow-sm border-0 font-medium px-4">
+                  <Plus className="h-4 w-4" /> Add Asset / Vehicle
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Top KPI Cards */}

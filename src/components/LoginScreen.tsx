@@ -14,7 +14,9 @@ import {
   HardHat,
   ChevronRight,
   Info,
-  Key
+  Key,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { UserRole } from '../types';
@@ -36,6 +38,7 @@ export function LoginScreen() {
   // Email Login Form
   const [emailInput, setEmailInput] = useState('');
   const [passcode, setPasscode] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
@@ -266,18 +269,25 @@ export function LoginScreen() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
-                    <span>Security Passcode / PIN (Optional)</span>
-                    <span className="text-[10px] text-slate-400 font-normal">Default: Optional for Whitelisted</span>
+                    <span>Security Password / Passcode</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Required if set by Admin</span>
                   </label>
                   <div className="relative">
                     <KeyRound className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       value={passcode}
                       onChange={(e) => setPasscode(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-white text-xs font-medium placeholder-slate-500 focus:outline-none focus:border-[#0B5FFF] focus:ring-1 focus:ring-[#0B5FFF] transition-all"
+                      placeholder="Enter password or passcode (if required)..."
+                      className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-white text-xs font-medium placeholder-slate-500 focus:outline-none focus:border-[#0B5FFF] focus:ring-1 focus:ring-[#0B5FFF] transition-all"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-200 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                 </div>
 

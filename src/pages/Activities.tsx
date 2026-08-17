@@ -69,7 +69,8 @@ import { PTSCrossDisciplineMatrix } from '../components/PTSCrossDisciplineMatrix
 import { DisciplineTrackerView } from '../components/DisciplineTrackerView';
 
 export function Activities() {
-  const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole } = useAppContext();
+  const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole, hasPermission } = useAppContext();
+  const canEditActivities = hasPermission('activities');
   const [mainScreen, setMainScreen] = useState<'activities' | 'disciplines'>('activities');
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [slideOverActivity, setSlideOverActivity] = useState<Activity | null>(null);
@@ -482,10 +483,10 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
       <div className="p-4 md:p-8">
         <ActivityDetail
           activity={selectedActivity}
-          onSave={handleSaveActivity}
+          onSave={canEditActivities ? handleSaveActivity : undefined}
           onClose={() => setSelectedActivity(null)}
-          onDelete={canManage(userRole) ? handleDeleteActivity : undefined}
-          onDuplicate={handleDuplicateActivity}
+          onDelete={canEditActivities ? handleDeleteActivity : undefined}
+          onDuplicate={canEditActivities ? handleDuplicateActivity : undefined}
         />
       </div>
     );
@@ -593,15 +594,19 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
                   Track and manage all project activities and progress across the entire site.
                 </p>
               </div>
-              <Button onClick={() => setIsAdding(true)} className="md:hidden gap-2 rounded-xl bg-[#0B5FFF]">
-                <Plus className="h-4 w-4" /> Add
-              </Button>
+              {canEditActivities && (
+                <Button onClick={() => setIsAdding(true)} className="md:hidden gap-2 rounded-xl bg-[#0B5FFF]">
+                  <Plus className="h-4 w-4" /> Add
+                </Button>
+              )}
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <Button onClick={() => setIsAdding(true)} className="hidden md:flex gap-2 rounded-xl bg-[#0B5FFF] h-10">
-                <Plus className="h-4 w-4" /> Add Activity
-              </Button>
+              {canEditActivities && (
+                <Button onClick={() => setIsAdding(true)} className="hidden md:flex gap-2 rounded-xl bg-[#0B5FFF] h-10">
+                  <Plus className="h-4 w-4" /> Add Activity
+                </Button>
+              )}
 
               {/* Search Box */}
               <div className="relative w-full md:w-56">
