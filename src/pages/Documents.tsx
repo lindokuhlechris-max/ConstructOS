@@ -28,7 +28,13 @@ import {
   FolderOpen,
   Check,
   AlertCircle,
-  Unlink
+  Unlink,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  SlidersHorizontal
 } from 'lucide-react';
 import { DocumentCategory, DocumentFileType, DocumentItem, DocumentStatus } from '../types';
 import { printDocumentsSummary } from '../lib/pdfPrint';
@@ -73,6 +79,12 @@ export function Documents() {
   const [activityFilter, setActivityFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
+  // High-volume performance & tablet navigation state
+  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'title-asc' | 'title-desc' | 'size-desc' | 'size-asc' | 'category' | 'status'>('date-desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(24);
+  const [showFiltersMobile, setShowFiltersMobile] = useState(false);
+
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Modals state
@@ -95,23 +107,16 @@ export function Documents() {
 
   const activeProject = projects[0];
 
-  // Filtered documents
-  const filteredDocuments = useMemo(() => {
-    return documents.filter(doc => {
-      // Search
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesTitle = doc.title.toLowerCase().includes(q);
-        const matchesFile = doc.fileName.toLowerCase().includes(q);
-        const matchesId = doc.id.toLowerCase().includes(q);
-        const matchesDesc = (doc.description || '').toLowerCase().includes(q);
-        const matchesAuthor = doc.uploadedBy.toLowerCase().includes(q);
-        const matchesTags = (doc.tags || []).some(t => t.toLowerCase().includes(q));
-        const matchesActivity = (doc.linkedActivityName || '').toLowerCase().includes(q);
+  // Multi-term fast search & sorting
+  const filteredAndSortedDocuments = useMemo(() => {
+    const queryTokens = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
-        if (!matchesTitle && !matchesFile && !matchesId && !matchesDesc && !matchesAuthor && !matchesTags && !matchesActivity) {
-          return false;
-        }
+    const filtered = documents.filter(doc => {
+      // Fast Tokenized Multi-Term Search
+      if (queryTokens.length > 0) {
+        const searchableText = `${doc.title} ${doc.fileName} ${doc.id} ${doc.description || ''} ${doc.uploadedBy} ${(doc.tags || []).join(' ')} ${doc.linkedActivityName || ''} ${doc.category} ${doc.status}`.toLowerCase();
+        const matchesAllTokens = queryTokens.every(token => searchableText.includes(token));
+        if (!matchesAllTokens) return false;
       }
 
       // Category
@@ -139,7 +144,49 @@ export function Documents() {
 
       return true;
     });
-  }, [documents, searchQuery, selectedCategory, selectedFileType, selectedStatus, activityFilter]);
+
+    // High-performance sorting
+    return filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'date-asc':
+          return new Date(a.uploadedAt || 0).getTime() - new Date(b.uploadedAt || 0).getTime();
+        case 'date-desc':
+          return new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime();
+        case 'title-asc':
+          return a.title.localeCompare(b.title);
+        case 'title-desc':
+          return b.title.localeCompare(a.title);
+        case 'size-desc':
+          return (b.fileSize || 0) - (a.fileSize || 0);
+        case 'size-asc':
+          return (a.fileSize || 0) - (b.fileSize || 0);
+        case 'category':
+          return a.category.localeCompare(b.category);
+        case 'status':
+          return a.status.localeCompare(b.status);
+        default:
+          return 0;
+      }
+    });
+  }, [documents, searchQuery, selectedCategory, selectedFileType, selectedStatus, activityFilter, sortBy]);
+
+  // Auto-reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, selectedFileType, selectedStatus, activityFilter, sortBy, pageSize]);
+
+  // Paginated Window for high-volume document performance
+  const totalPages = Math.max(1, Math.ceil(filteredAndSortedDocuments.length / pageSize));
+  const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedDocuments = useMemo(() => {
+    if (pageSize >= 99999) return filteredAndSortedDocuments;
+    const start = (validCurrentPage - 1) * pageSize;
+    return filteredAndSortedDocuments.slice(start, start + pageSize);
+  }, [filteredAndSortedDocuments, validCurrentPage, pageSize]);
+
+  // Backward compatibility alias for print/export
+  const filteredDocuments = filteredAndSortedDocuments;
 
   // KPI Metrics Calculation
   const totalCount = documents.length;
@@ -350,23 +397,68 @@ export function Documents() {
       <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
         
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Search Input */}
-          <div className="relative flex-1">
-            <Search className="h-4 w-4 absolute left-3.5 top-3 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search documents by title, file name, tags, author, or linked activity..."
-              className="w-full h-10 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
-            />
+          {/* Search Input & Mobile Filter Toggle */}
+          <div className="flex items-center gap-2 flex-1">
+            <div className="relative flex-1">
+              <Search className="h-4 w-4 absolute left-3.5 top-3 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by title, file name, tags, author, activity..."
+                className="w-full h-10 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold p-0.5"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Mobile / Tablet Filter Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setShowFiltersMobile(!showFiltersMobile)}
+              className={`lg:hidden flex items-center gap-1.5 px-3 h-10 rounded-xl border text-xs font-bold transition-colors shrink-0 ${
+                showFiltersMobile || selectedCategory !== 'All' || selectedFileType !== 'all' || selectedStatus !== 'all' || activityFilter !== 'all'
+                  ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-200 dark:border-blue-800 text-[#0B5FFF]'
+                  : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+              }`}
+              title="Toggle Filters"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              <span className="hidden sm:inline">Filters</span>
+            </button>
           </div>
 
-          {/* Controls: Category, File Type, Status, Activity, View Mode */}
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Controls: Sort By, Category, File Type, Status, Activity, Page Size, View Mode */}
+          <div className={`flex items-center gap-2 flex-wrap ${showFiltersMobile ? 'flex' : 'hidden lg:flex'}`}>
             
+            {/* Sort Dropdown */}
+            <div className="w-40 sm:w-44">
+              <CustomSelect
+                value={sortBy}
+                onChange={(val) => setSortBy(val as any)}
+                options={[
+                  { value: 'date-desc', label: 'Newest Uploads' },
+                  { value: 'date-asc', label: 'Oldest Uploads' },
+                  { value: 'title-asc', label: 'Title (A → Z)' },
+                  { value: 'title-desc', label: 'Title (Z → A)' },
+                  { value: 'size-desc', label: 'Size (Largest)' },
+                  { value: 'size-asc', label: 'Size (Smallest)' },
+                  { value: 'category', label: 'Category' },
+                  { value: 'status', label: 'Status' }
+                ]}
+                className="w-full"
+              />
+            </div>
+
             {/* Category Dropdown */}
-            <div className="w-44">
+            <div className="w-40 sm:w-44">
               <CustomSelect
                 value={selectedCategory}
                 onChange={(val) => setSelectedCategory(val as any)}
@@ -376,7 +468,7 @@ export function Documents() {
             </div>
 
             {/* File Type Dropdown */}
-            <div className="w-36">
+            <div className="w-32 sm:w-36">
               <CustomSelect
                 value={selectedFileType}
                 onChange={(val) => setSelectedFileType(val as any)}
@@ -393,7 +485,7 @@ export function Documents() {
             </div>
 
             {/* Activity Link Filter */}
-            <div className="w-40">
+            <div className="w-36 sm:w-40">
               <CustomSelect
                 value={activityFilter}
                 onChange={(val) => setActivityFilter(val as any)}
@@ -407,7 +499,7 @@ export function Documents() {
             </div>
 
             {/* Status Filter */}
-            <div className="w-36">
+            <div className="w-32 sm:w-36">
               <CustomSelect
                 value={selectedStatus}
                 onChange={(val) => setSelectedStatus(val)}
@@ -417,6 +509,22 @@ export function Documents() {
                   { value: 'Under Review', label: 'Under Review' },
                   { value: 'Draft', label: 'Draft' },
                   { value: 'Archived', label: 'Archived' }
+                ]}
+                className="w-full"
+              />
+            </div>
+
+            {/* Page Size Select */}
+            <div className="w-28">
+              <CustomSelect
+                value={String(pageSize)}
+                onChange={(val) => setPageSize(Number(val))}
+                options={[
+                  { value: '12', label: '12 / page' },
+                  { value: '24', label: '24 / page' },
+                  { value: '48', label: '48 / page' },
+                  { value: '96', label: '96 / page' },
+                  { value: '999999', label: 'All Items' }
                 ]}
                 className="w-full"
               />
@@ -454,7 +562,7 @@ export function Documents() {
         </div>
 
         {/* Active Filter Chips */}
-        {(selectedCategory !== 'All' || selectedFileType !== 'all' || selectedStatus !== 'all' || activityFilter !== 'all' || searchQuery) && (
+        {(selectedCategory !== 'All' || selectedFileType !== 'all' || selectedStatus !== 'all' || activityFilter !== 'all' || searchQuery || sortBy !== 'date-desc') && (
           <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
             <span className="text-slate-400 font-semibold">Active filters:</span>
             {searchQuery && (
@@ -481,6 +589,12 @@ export function Documents() {
                 <button onClick={() => setActivityFilter('all')} className="hover:text-red-500">×</button>
               </span>
             )}
+            {sortBy !== 'date-desc' && (
+              <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium flex items-center gap-1">
+                Sorted
+                <button onClick={() => setSortBy('date-desc')} className="hover:text-red-500">×</button>
+              </span>
+            )}
             <button
               onClick={() => {
                 setSearchQuery('');
@@ -488,6 +602,7 @@ export function Documents() {
                 setSelectedFileType('all');
                 setSelectedStatus('all');
                 setActivityFilter('all');
+                setSortBy('date-desc');
               }}
               className="text-[#0B5FFF] hover:underline font-bold ml-1"
             >
@@ -498,8 +613,8 @@ export function Documents() {
 
       </div>
 
-      {/* Main Content Area: Grid View or Table View */}
-      {filteredDocuments.length === 0 ? (
+      {/* Main Content Area: Grid View or Table View with Paginated Window */}
+      {filteredAndSortedDocuments.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center">
           <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-900/20 text-[#0B5FFF] inline-block mb-3">
             <FolderOpen className="h-8 w-8" />
@@ -518,163 +633,165 @@ export function Documents() {
         </div>
       ) : viewMode === 'grid' ? (
         
-        /* Grid Layout */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredDocuments.map((doc) => {
-            const hasActivity = !!doc.linkedActivityId;
+        /* Grid Layout: Responsive across Phones, 7-10" Tablets, and Desktops */
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {paginatedDocuments.map((doc) => {
+              const hasActivity = !!doc.linkedActivityId;
 
-            return (
-              <div
-                key={doc.id}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
-              >
-                <div className="p-4.5 space-y-3">
-                  
-                  {/* Card Header Top */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      {getFormatBadge(doc.fileType, doc.fileExtension)}
-                      <span className="text-[10px] font-mono text-slate-400 font-bold">{doc.id}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
-                        {doc.version}
-                      </span>
+              return (
+                <div
+                  key={doc.id}
+                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
+                >
+                  <div className="p-4 space-y-3">
+                    
+                    {/* Card Header Top */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {getFormatBadge(doc.fileType, doc.fileExtension)}
+                        <span className="text-[10px] font-mono text-slate-400 font-bold">{doc.id}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
+                          {doc.version}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        {getStatusBadge(doc.status)}
+                        {doc.confidential && (
+                          <span title="Confidential" className="p-1 text-red-500">
+                            <ShieldAlert className="h-3.5 w-3.5" />
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Title & File Name */}
+                    <div>
+                      <h3
+                        onClick={() => setPreviewDoc(doc)}
+                        className="text-sm font-bold text-slate-900 dark:text-slate-100 hover:text-[#0B5FFF] dark:hover:text-blue-400 cursor-pointer line-clamp-1 transition-colors"
+                        title={doc.title}
+                      >
+                        {doc.title}
+                      </h3>
+                      <div className="text-xs text-slate-500 font-mono truncate mt-0.5 flex items-center gap-1.5">
+                        <span>{doc.fileName}</span>
+                        <span>•</span>
+                        <span>{doc.fileSizeFormatted || '1.2 MB'}</span>
+                      </div>
+                    </div>
+
+                    {/* Category Pill */}
+                    <div className="text-xs text-slate-500 font-medium">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{doc.category}</span>
+                    </div>
+
+                    {/* Linked Activity Badge / Button */}
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                          <LinkIcon className="h-3 w-3 text-blue-500" />
+                          Activity
+                        </span>
+                        <button
+                          onClick={() => setAssignDoc(doc)}
+                          className="text-[11px] text-[#0B5FFF] hover:underline font-bold"
+                        >
+                          {hasActivity ? 'Change' : '+ Assign'}
+                        </button>
+                      </div>
+
+                      {hasActivity ? (
+                        <div
+                          onClick={() => setAssignDoc(doc)}
+                          className="mt-1 p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 cursor-pointer hover:border-blue-300 transition-colors flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-blue-900 dark:text-blue-200 truncate">
+                              {doc.linkedActivityName}
+                            </div>
+                            <div className="text-[10px] text-blue-600 dark:text-blue-400 font-mono">
+                              {doc.linkedActivityId}
+                            </div>
+                          </div>
+                          <LinkIcon className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => setAssignDoc(doc)}
+                          className="mt-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-center cursor-pointer hover:border-[#0B5FFF] transition-colors"
+                        >
+                          <span className="text-[11px] text-slate-400 italic">
+                            Click to link this document to an activity
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tags */}
+                    {doc.tags && doc.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {doc.tags.slice(0, 3).map(t => (
+                          <span
+                            key={t}
+                            className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-semibold"
+                          >
+                            #{t}
+                          </span>
+                        ))}
+                        {doc.tags.length > 3 && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-400 text-[10px]">
+                            +{doc.tags.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                  </div>
+
+                  {/* Card Action Footer */}
+                  <div className="px-4 py-2.5 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                    <div className="text-[11px] text-slate-400 truncate max-w-[110px]">
+                      {doc.uploadedBy.split(' ')[0]} • {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('en-GB') : '-'}
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {getStatusBadge(doc.status)}
-                      {doc.confidential && (
-                        <span title="Confidential" className="p-1 text-red-500">
-                          <ShieldAlert className="h-3.5 w-3.5" />
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Title & File Name */}
-                  <div>
-                    <h3
-                      onClick={() => setPreviewDoc(doc)}
-                      className="text-sm font-bold text-slate-900 dark:text-slate-100 hover:text-[#0B5FFF] dark:hover:text-blue-400 cursor-pointer line-clamp-1 transition-colors"
-                      title={doc.title}
-                    >
-                      {doc.title}
-                    </h3>
-                    <div className="text-xs text-slate-500 font-mono truncate mt-0.5 flex items-center gap-1.5">
-                      <span>{doc.fileName}</span>
-                      <span>•</span>
-                      <span>{doc.fileSizeFormatted || '1.2 MB'}</span>
-                    </div>
-                  </div>
-
-                  {/* Category Pill */}
-                  <div className="text-xs text-slate-500 font-medium">
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">{doc.category}</span>
-                  </div>
-
-                  {/* Linked Activity Badge / Button */}
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                        <LinkIcon className="h-3 w-3 text-blue-500" />
-                        Activity
-                      </span>
                       <button
-                        onClick={() => setAssignDoc(doc)}
-                        className="text-[11px] text-[#0B5FFF] hover:underline font-bold"
+                        onClick={() => setPreviewDoc(doc)}
+                        className="p-2 rounded-lg text-slate-500 hover:text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                        title="Preview Document"
                       >
-                        {hasActivity ? 'Change' : '+ Assign'}
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDownloadSingle(doc)}
+                        className="p-2 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                        title="Download Document"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setEditDoc(doc)}
+                        className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700 transition-colors"
+                        title="Edit Document"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmId(doc.id)}
+                        className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                        title="Delete Document"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-
-                    {hasActivity ? (
-                      <div
-                        onClick={() => setAssignDoc(doc)}
-                        className="mt-1 p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 cursor-pointer hover:border-blue-300 transition-colors flex items-center justify-between gap-2"
-                      >
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-blue-900 dark:text-blue-200 truncate">
-                            {doc.linkedActivityName}
-                          </div>
-                          <div className="text-[10px] text-blue-600 dark:text-blue-400 font-mono">
-                            {doc.linkedActivityId}
-                          </div>
-                        </div>
-                        <LinkIcon className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                      </div>
-                    ) : (
-                      <div
-                        onClick={() => setAssignDoc(doc)}
-                        className="mt-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-center cursor-pointer hover:border-[#0B5FFF] transition-colors"
-                      >
-                        <span className="text-[11px] text-slate-400 italic">
-                          Click to link this document to an activity
-                        </span>
-                      </div>
-                    )}
                   </div>
-
-                  {/* Tags */}
-                  {doc.tags && doc.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {doc.tags.slice(0, 3).map(t => (
-                        <span
-                          key={t}
-                          className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-semibold"
-                        >
-                          #{t}
-                        </span>
-                      ))}
-                      {doc.tags.length > 3 && (
-                        <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-400 text-[10px]">
-                          +{doc.tags.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  )}
 
                 </div>
-
-                {/* Card Action Footer */}
-                <div className="px-4.5 py-2.5 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                  <div className="text-[11px] text-slate-400 truncate max-w-[120px]">
-                    {doc.uploadedBy.split(' ')[0]} • {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('en-GB') : '-'}
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setPreviewDoc(doc)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
-                      title="Preview Document"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDownloadSingle(doc)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
-                      title="Download Document"
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => setEditDoc(doc)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700 transition-colors"
-                      title="Edit Document"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirmId(doc.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                      title="Delete Document"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       ) : (
         
@@ -695,7 +812,7 @@ export function Documents() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredDocuments.map((doc) => (
+                {paginatedDocuments.map((doc) => (
                   <tr key={doc.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="p-3.5 whitespace-nowrap">
                       <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{doc.id}</div>
@@ -755,28 +872,28 @@ export function Documents() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => setPreviewDoc(doc)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                          className="p-2 rounded-lg text-slate-500 hover:text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-900/30"
                           title="Preview"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleDownloadSingle(doc)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                          className="p-2 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
                           title="Download"
                         >
                           <Download className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => setEditDoc(doc)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                           title="Edit"
                         >
                           <Edit3 className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => setDeleteConfirmId(doc.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                          className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
                           title="Delete"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -787,6 +904,86 @@ export function Documents() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Touch-Friendly High-Volume Pagination Controls Bar */}
+      {filteredAndSortedDocuments.length > 0 && totalPages > 1 && (
+        <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          
+          {/* Pagination Counter Info */}
+          <div className="text-slate-500 dark:text-slate-400 text-center sm:text-left">
+            Showing <span className="font-bold text-slate-900 dark:text-white">{(validCurrentPage - 1) * pageSize + 1}</span>–<span className="font-bold text-slate-900 dark:text-white">{Math.min(validCurrentPage * pageSize, filteredAndSortedDocuments.length)}</span> of <span className="font-bold text-slate-900 dark:text-white">{filteredAndSortedDocuments.length}</span> documents • Page <span className="font-bold text-[#0B5FFF]">{validCurrentPage}</span> of <span className="font-bold">{totalPages}</span>
+          </div>
+
+          {/* Navigation Pill Buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap justify-center">
+            {/* First Page */}
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={validCurrentPage === 1}
+              className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              title="First Page"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+
+            {/* Previous Page */}
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={validCurrentPage === 1}
+              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Prev</span>
+            </button>
+
+            {/* Numbered Page Buttons with Smart Ellipsis */}
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(p => p === 1 || p === totalPages || (p >= validCurrentPage - 2 && p <= validCurrentPage + 2))
+              .map((pageNum, idx, arr) => {
+                const prevPage = arr[idx - 1];
+                const showEllipsis = prevPage && pageNum - prevPage > 1;
+
+                return (
+                  <React.Fragment key={pageNum}>
+                    {showEllipsis && (
+                      <span className="px-2 text-slate-400 font-bold select-none">...</span>
+                    )}
+                    <button
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-9 h-9 rounded-xl font-bold text-xs transition-colors flex items-center justify-center ${
+                        pageNum === validCurrentPage
+                          ? 'bg-[#0B5FFF] text-white shadow-xs'
+                          : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+
+            {/* Next Page */}
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={validCurrentPage === totalPages}
+              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-1"
+            >
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+
+            {/* Last Page */}
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={validCurrentPage === totalPages}
+              className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              title="Last Page"
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}
