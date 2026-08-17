@@ -522,6 +522,7 @@ export function exportAccommodationsToExcel(
     'Utility ID': u.id,
     'Facility ID': u.accommodationId,
     'Facility Name': u.accommodationName,
+    'Room / Area': u.roomNumber || 'Entire Facility / General',
     'Date Logged': u.date,
     'Expense Category': u.utilityType,
     'Amount (ZAR)': u.amountZAR,
@@ -535,7 +536,7 @@ export function exportAccommodationsToExcel(
   }));
   const wsUtilities = XLSX.utils.json_to_sheet(utilitiesData.length > 0 ? utilitiesData : [{ 'Notice': 'No utility records found.' }]);
   wsUtilities['!cols'] = [
-    { wch: 6 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 14 }, { wch: 28 }, { wch: 15 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 25 }
+    { wch: 6 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 14 }, { wch: 28 }, { wch: 15 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 25 }
   ];
   XLSX.utils.book_append_sheet(wb, wsUtilities, 'Utilities Ledger');
 

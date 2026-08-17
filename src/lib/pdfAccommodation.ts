@@ -226,6 +226,7 @@ export const generateAccommodationMonthlyPDF = (
   } else {
     const utilityRows = utilities.map(u => [
       u.date,
+      u.roomNumber || 'Entire Facility',
       u.utilityType,
       u.unitsConsumed ? `${u.unitsConsumed} ${u.unitLabel || 'Units'}` : '—',
       u.vendorOrProvider || '—',
@@ -236,7 +237,7 @@ export const generateAccommodationMonthlyPDF = (
 
     doc.autoTable({
       startY: currentY,
-      head: [['Date', 'Utility Category', 'Units / Consumed', 'Vendor / Supplier', 'Receipt / Token #', 'Amount (ZAR)', 'Status']],
+      head: [['Date', 'Room / Area', 'Utility Category', 'Units / Consumed', 'Vendor / Supplier', 'Receipt / Token #', 'Amount (ZAR)', 'Status']],
       body: utilityRows,
       theme: 'grid',
       headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },

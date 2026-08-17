@@ -84,6 +84,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
 
   // Utility Form state
   const [utilAccId, setUtilAccId] = useState('');
+  const [utilRoomNumber, setUtilRoomNumber] = useState('');
   const [utilType, setUtilType] = useState<UtilityType>('Electricity / Eskom Tokens');
   const [utilDate, setUtilDate] = useState(new Date().toISOString().split('T')[0]);
   const [utilAmount, setUtilAmount] = useState<number | ''>('');
@@ -370,6 +371,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
   const handleOpenLogUtility = (unit?: AccommodationUnit) => {
     setUtilityTargetUnit(unit || null);
     setUtilAccId(unit ? unit.id : (accommodations[0]?.id || ''));
+    setUtilRoomNumber('');
     setUtilType('Electricity / Eskom Tokens');
     setUtilDate(new Date().toISOString().split('T')[0]);
     setUtilAmount('');
@@ -394,6 +396,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
       id: `ACC-UTL-${Math.floor(1000 + Math.random() * 9000)}`,
       accommodationId: utilAccId,
       accommodationName: target ? target.name : '',
+      roomNumber: utilRoomNumber.trim() || undefined,
       utilityType: utilType,
       date: utilDate,
       amountZAR: Number(utilAmount),
@@ -1082,6 +1085,111 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
             </button>
           </div>
 
+          {/* Room-by-Room Utility Cost Tracking Widget */}
+          {accommodationUtilities.length > 0 && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50/70 via-orange-50/40 to-amber-50/70 dark:from-amber-950/20 dark:via-orange-950/10 dark:to-amber-950/20 border border-amber-200/80 dark:border-amber-900/40 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-600 text-white shadow-2xs">
+                    <DoorClosed className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-amber-900 dark:text-amber-200 tracking-wider">
+                      Room & Area Utility Cost Allocation
+                    </h4>
+                    <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
+                      Breakdown of electricity tokens and utility spend allocated to individual rooms vs camp common areas.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-mono font-bold text-amber-900 dark:text-amber-200 bg-white dark:bg-slate-900 px-3 py-1 rounded-xl border border-amber-200 dark:border-amber-800/80 shadow-2xs">
+                  <span>Total Logged Utilities:</span>
+                  <span className="font-extrabold text-amber-700 dark:text-amber-400">
+                    {formatZAR(accommodationUtilities.reduce((sum, u) => sum + (u.amountZAR || 0), 0))}
+                  </span>
+                </div>
+              </div>
+
+              {/* Room Cards Grid */}
+              {(() => {
+                const roomMap: Record<string, {
+                  roomKey: string;
+                  roomName: string;
+                  facilityName: string;
+                  totalAmount: number;
+                  count: number;
+                  types: Set<string>;
+                  occupantNames: string[];
+                }> = {};
+
+                accommodationUtilities.forEach(u => {
+                  const rKey = `${u.accommodationId}__${u.roomNumber || 'General'}`;
+                  const rName = u.roomNumber || 'Entire Facility / Common Area';
+                  if (!roomMap[rKey]) {
+                    // Find occupants of this room
+                    const occupants = employees
+                      .filter(e => e.accommodationDetails?.campId === u.accommodationId && (
+                        (u.roomNumber && e.accommodationDetails?.roomNumber === u.roomNumber) ||
+                        (!u.roomNumber && !e.accommodationDetails?.roomNumber)
+                      ))
+                      .map(e => getEmpDisplayName(e));
+
+                    roomMap[rKey] = {
+                      roomKey: rKey,
+                      roomName: rName,
+                      facilityName: u.accommodationName,
+                      totalAmount: 0,
+                      count: 0,
+                      types: new Set(),
+                      occupantNames: occupants
+                    };
+                  }
+                  roomMap[rKey].totalAmount += u.amountZAR;
+                  roomMap[rKey].count += 1;
+                  roomMap[rKey].types.add(u.utilityType.split('/')[0].trim());
+                });
+
+                const roomList = Object.values(roomMap).sort((a, b) => b.totalAmount - a.totalAmount);
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {roomList.map(r => (
+                      <div
+                        key={r.roomKey}
+                        className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-200/70 dark:border-slate-800 shadow-2xs flex flex-col justify-between gap-2"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1 truncate">
+                              <DoorClosed className="w-3 h-3 text-amber-600 shrink-0" />
+                              <span className="truncate">{r.roomName}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono shrink-0">{r.count} bill{r.count > 1 ? 's' : ''}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                            {r.facilityName}
+                          </div>
+                          {r.occupantNames.length > 0 && (
+                            <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium truncate mt-1">
+                              👥 {r.occupantNames.join(', ')}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                          <span className="text-[10px] text-slate-400">{Array.from(r.types).join(', ')}</span>
+                          <span className="font-mono font-extrabold text-xs text-amber-700 dark:text-amber-400">
+                            {formatZAR(r.totalAmount)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Utility Ledger Table */}
           {accommodationUtilities.length === 0 ? (
             <div className="text-center py-16 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/50">
@@ -1100,6 +1208,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                     <tr>
                       <th className="px-4 py-3.5">Date</th>
                       <th className="px-4 py-3.5">Facility / Camp</th>
+                      <th className="px-4 py-3.5">Room / Area</th>
                       <th className="px-4 py-3.5">Utility Category</th>
                       <th className="px-4 py-3.5">Units / Consumed</th>
                       <th className="px-4 py-3.5">Cost (ZAR)</th>
@@ -1118,6 +1227,15 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
                         <td className="px-4 py-3.5">
                           <div className="font-bold text-slate-900 dark:text-white text-xs">{util.accommodationName}</div>
                           <div className="text-[10px] text-slate-400 font-mono">{util.accommodationId}</div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {util.roomNumber ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 text-[11px] font-bold">
+                              <DoorClosed className="w-3 h-3 text-amber-600" /> {util.roomNumber}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 font-medium">🏢 Whole Facility</span>
+                          )}
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2">
@@ -1962,22 +2080,72 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
             </div>
 
             <form onSubmit={handleSaveUtility} className="p-6 space-y-4 overflow-y-auto flex-1 text-slate-900 dark:text-slate-100">
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">
-                  Target Facility / Camp *
-                </label>
-                <select
-                  required
-                  value={utilAccId}
-                  onChange={(e) => setUtilAccId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
-                >
-                  {accommodations.map(acc => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} ({acc.ownership} • {acc.location})
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    Target Facility / Camp *
+                  </label>
+                  <select
+                    required
+                    value={utilAccId}
+                    onChange={(e) => setUtilAccId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                  >
+                    {accommodations.map(acc => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.ownership} • {acc.location})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    Target Room / Unit (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Room 1, Unit 4B, or leave blank for Entire Facility"
+                    value={utilRoomNumber}
+                    onChange={(e) => setUtilRoomNumber(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                  />
+                  {/* Quick Select Room Pills */}
+                  {(() => {
+                    const selAcc = accommodations.find(a => a.id === utilAccId);
+                    if (!selAcc) return null;
+                    const rCount = selAcc.totalRooms || 0;
+                    return (
+                      <div className="flex items-center gap-1 flex-wrap mt-1.5">
+                        <span className="text-[10px] text-slate-400">Quick Select:</span>
+                        <button
+                          type="button"
+                          onClick={() => setUtilRoomNumber('')}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                            !utilRoomNumber ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                          }`}
+                        >
+                          Whole Camp
+                        </button>
+                        {Array.from({ length: Math.min(10, rCount) }).map((_, idx) => {
+                          const rName = `Room ${idx + 1}`;
+                          return (
+                            <button
+                              key={rName}
+                              type="button"
+                              onClick={() => setUtilRoomNumber(rName)}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                                utilRoomNumber === rName ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                              }`}
+                            >
+                              {rName}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

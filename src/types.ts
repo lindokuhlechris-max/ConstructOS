@@ -1119,6 +1119,7 @@ export interface AccommodationUtilityLog {
   id: string; // e.g. ACC-UTL-001
   accommodationId: string;
   accommodationName: string;
+  roomNumber?: string; // Optional Room ID/Number e.g. "Room 1", "Room 101", "Entire Facility / General"
   utilityType: UtilityType;
   date: string;
   amountZAR: number; // Cost in ZAR
