@@ -20,6 +20,8 @@ import {
   Filter
 } from 'lucide-react';
 
+import { detectSubtaskDiscipline } from './DisciplineTrackerView';
+
 interface PTSCrossDisciplineMatrixProps {
   activities: Activity[];
   onSelectActivity: (activity: Activity) => void;
@@ -116,7 +118,9 @@ export function PTSCrossDisciplineMatrix({
 
         if (subSpan) {
           const s = getSpan(subSpan);
-          if (st.category === 'Surveying & Set-out' || st.surveyData || st.isLinkedDiscipline) {
+          const disc = detectSubtaskDiscipline(st, act);
+
+          if (disc === 'SURVEYING') {
             s.surveyItems.push({
               title: st.title,
               status: st.status,
@@ -125,8 +129,7 @@ export function PTSCrossDisciplineMatrix({
               subtask: st,
               activity: act
             });
-          }
-          if (st.isHoldPoint || st.category === 'Quality Control & Hold Points') {
+          } else if (disc === 'QA_QC') {
             s.qaItems.push({
               title: st.title,
               status: st.holdPointSignOff?.approved ? 'Completed' : st.status,
@@ -135,9 +138,22 @@ export function PTSCrossDisciplineMatrix({
               subtask: st,
               activity: act
             });
-          }
-          if (st.category === 'Duct Installation & Bedding' || (st.assignments && st.assignments.length > 0)) {
+          } else if (disc === 'MATERIALS') {
             s.materialItems.push({
+              title: st.title,
+              status: st.status,
+              subtask: st,
+              activity: act
+            });
+          } else if (disc === 'SAFETY') {
+            s.safetyItems.push({
+              title: st.title,
+              status: st.status,
+              subtask: st,
+              activity: act
+            });
+          } else if (disc === 'COMMISSIONING') {
+            s.commissioningItems.push({
               title: st.title,
               status: st.status,
               subtask: st,
