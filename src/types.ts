@@ -260,7 +260,25 @@ export type WorkstreamType =
   | 'QA_QC'             // Hold Points, Compaction Tests, Non-Conformance, Sign-Offs
   | 'MATERIALS'         // Batch Procurement, Delivery Tracking, Mill Certs, Material Allocation
   | 'SAFETY'            // Daily Risk Assessments, Trench Permits, Tool Box Talks
-  | 'COMMISSIONING';    // Cable Splicing, Jointing, Pressure Testing, Energization
+  | 'COMMISSIONING'     // Cable Splicing, Jointing, Pressure Testing, Energization
+  | string;
+
+export interface CustomDisciplineConfig {
+  id: string; // e.g. "DISC_ENV", "DISC_GEOTECH", or custom string
+  name: string; // e.g. "Environmental & Ecology"
+  shortName: string; // e.g. "Environment"
+  description: string;
+  categoryKeywords: string[]; // categories or keywords used to auto-match subtasks
+  measurementType: SubTaskMeasurementType;
+  defaultUnit?: string;
+  targetDeliverableLabel?: string; // e.g. "Total Linear Set-Out", "Total Quality Inspections", "Material Deliveries"
+  icon?: string; // 'Compass' | 'ShieldCheck' | 'Package' | 'ShieldAlert' | 'Zap' | 'Leaf' | 'Layers' | 'FileText' | 'HardHat' | 'Wrench'
+  color?: string;
+  bgLight?: string;
+  borderLight?: string;
+  badgeClass?: string;
+  createdAt?: string;
+}
 
 export interface WorkstreamConfig {
   id: WorkstreamType;

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Activity, 
   ActivityStatus, 
@@ -6,11 +6,11 @@ import {
   WORKSTREAMS, 
   WorkstreamType, 
   SubTaskCategory,
-  SubTaskMeasurementType 
+  SubTaskMeasurementType,
+  CustomDisciplineConfig 
 } from '../types';
 import { Badge, ProgressBar, Button } from './ui';
 import { PTSCrossDisciplineMatrix } from './PTSCrossDisciplineMatrix';
-import { SurveyTrackerView } from './SurveyTrackerView';
 import { useAppContext } from '../context/AppContext';
 import { 
   Compass, 
@@ -40,7 +40,16 @@ import {
   X,
   CheckSquare,
   Flag,
-  FileText
+  FileText,
+  Layers,
+  Leaf,
+  Wrench,
+  HardHat,
+  Target,
+  Sliders,
+  TrendingUp,
+  Award,
+  Trash2
 } from 'lucide-react';
 
 interface DisciplineTrackerViewProps {
@@ -52,14 +61,13 @@ interface DisciplineTrackerViewProps {
   onUpdateStatus: (activityId: string, newStatus: ActivityStatus) => void;
 }
 
-type DisciplineTab = WorkstreamType | 'MATRIX' | 'SURVEY_SPANS';
-
 export interface DisciplineWorkItem {
   id: string; // unique item id (subtask id or activity id)
   subtaskId?: string;
   isSubtask: boolean;
   title: string;
   discipline: WorkstreamType;
+  disciplineName?: string;
   category: string;
   status: ActivityStatus;
   progress: number;
@@ -90,16 +98,32 @@ export interface DisciplineWorkItem {
   subtaskRef?: SubTask;
 }
 
+const DEFAULT_CUSTOM_DISCIPLINES: CustomDisciplineConfig[] = [];
+
 // Deterministic mapping of SubTask Category & Title to Project Discipline
-export function detectSubtaskDiscipline(subtask: SubTask, activity: Activity): WorkstreamType {
+export function detectSubtaskDiscipline(
+  subtask: SubTask, 
+  activity: Activity,
+  customDisciplines: CustomDisciplineConfig[] = []
+): WorkstreamType {
   const cat = (subtask.category || '').toLowerCase();
   const title = (subtask.title || '').toLowerCase();
 
+  // 1. Check custom user-defined disciplines first
+  for (const custom of customDisciplines) {
+    const matchesKeyword = custom.categoryKeywords.some(kw => {
+      const k = kw.trim().toLowerCase();
+      return k && (cat.includes(k) || title.includes(k));
+    });
+    if (matchesKeyword) return custom.id;
+  }
+
+  // 2. Activity explicit workstream override
   if (activity.workstream && activity.workstream !== 'PTS_CONSTRUCTION') {
     return activity.workstream;
   }
 
-  // 1. Surveying & Set-out
+  // 3. Surveying & Set-out
   if (
     cat.includes('survey') || 
     cat.includes('set-out') || 
@@ -112,7 +136,7 @@ export function detectSubtaskDiscipline(subtask: SubTask, activity: Activity): W
     return 'SURVEYING';
   }
 
-  // 2. QA/QC & Inspections
+  // 4. QA/QC & Inspections
   if (
     subtask.isHoldPoint || 
     cat.includes('quality') || 
@@ -128,7 +152,7 @@ export function detectSubtaskDiscipline(subtask: SubTask, activity: Activity): W
     return 'QA_QC';
   }
 
-  // 3. Materials & Supply Chain
+  // 5. Materials & Supply Chain
   if (
     (subtask.assignments && subtask.assignments.length > 0) || 
     cat.includes('material') || 
@@ -142,7 +166,7 @@ export function detectSubtaskDiscipline(subtask: SubTask, activity: Activity): W
     return 'MATERIALS';
   }
 
-  // 4. Safety & HSE Compliance
+  // 6. Safety & HSE Compliance
   if (
     cat.includes('safety') || 
     cat.includes('hse') || 
@@ -156,7 +180,7 @@ export function detectSubtaskDiscipline(subtask: SubTask, activity: Activity): W
     return 'SAFETY';
   }
 
-  // 5. Electrical & Commissioning
+  // 7. Electrical & Commissioning
   if (
     cat.includes('electrical') || 
     title.includes('commissioning') || 
@@ -182,10 +206,30 @@ export function DisciplineTrackerView({
   onUpdateStatus
 }: DisciplineTrackerViewProps) {
   const { updateActivity, addAuditLog, userRole } = useAppContext();
-  const [activeTab, setActiveTab] = useState<DisciplineTab>('SURVEYING');
+  
+  // Custom Disciplines state with localStorage persistence
+  const [customDisciplines, setCustomDisciplines] = useState<CustomDisciplineConfig[]>(() => {
+    try {
+      const saved = localStorage.getItem('constructfield_custom_disciplines');
+      return saved ? JSON.parse(saved) : DEFAULT_CUSTOM_DISCIPLINES;
+    } catch {
+      return DEFAULT_CUSTOM_DISCIPLINES;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('constructfield_custom_disciplines', JSON.stringify(customDisciplines));
+    } catch (e) {
+      console.error('Failed to save custom disciplines', e);
+    }
+  }, [customDisciplines]);
+
+  const [activeTab, setActiveTab] = useState<string>('SURVEYING');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'board' | 'table' | 'grid'>('board');
   const [editingItem, setEditingItem] = useState<DisciplineWorkItem | null>(null);
+  const [isCreatingCustomDiscipline, setIsCreatingCustomDiscipline] = useState(false);
 
   // Extract all discipline work items from Activities and their Subtasks
   const allDisciplineItems: DisciplineWorkItem[] = useMemo(() => {
@@ -195,7 +239,7 @@ export function DisciplineTrackerView({
       // 1. Process Subtasks within this Activity
       const subtasks = activity.subtasks || [];
       subtasks.forEach(st => {
-        const disc = detectSubtaskDiscipline(st, activity);
+        const disc = detectSubtaskDiscipline(st, activity, customDisciplines);
         
         let progressPct = 0;
         if (st.status === 'Completed') progressPct = 100;
@@ -208,12 +252,16 @@ export function DisciplineTrackerView({
         const isLinkedToParent = !st.linkedActivityId || st.linkedActivityId === activity.id;
         const linkedAct = st.linkedActivityId ? activities.find(a => a.id === st.linkedActivityId) : activity;
 
+        const customCfg = customDisciplines.find(c => c.id === disc);
+        const discName = customCfg ? customCfg.name : (WORKSTREAMS[disc as WorkstreamType]?.name || disc);
+
         items.push({
           id: `${activity.id}__st__${st.id}`,
           subtaskId: st.id,
           isSubtask: true,
           title: st.title,
           discipline: disc,
+          disciplineName: discName,
           category: st.category,
           status: st.status as ActivityStatus,
           progress: progressPct,
@@ -243,11 +291,15 @@ export function DisciplineTrackerView({
 
       // 2. Standalone Discipline Activities (if configured with workstream)
       if (activity.workstream && activity.workstream !== 'PTS_CONSTRUCTION' && (!subtasks || subtasks.length === 0)) {
+        const customCfg = customDisciplines.find(c => c.id === activity.workstream);
+        const discName = customCfg ? customCfg.name : (WORKSTREAMS[activity.workstream]?.name || activity.workstream);
+
         items.push({
           id: activity.id,
           isSubtask: false,
           title: activity.name,
           discipline: activity.workstream,
+          disciplineName: discName,
           category: activity.discipline || activity.workPackage || 'General',
           status: activity.status,
           progress: activity.progress || 0,
@@ -273,22 +325,26 @@ export function DisciplineTrackerView({
     });
 
     return items;
-  }, [activities]);
+  }, [activities, customDisciplines]);
 
-  // Discipline Counts
+  // Dynamic Discipline Counts map
   const counts = useMemo(() => {
-    return {
+    const cMap: Record<string, number> = {
       SURVEYING: allDisciplineItems.filter(i => i.discipline === 'SURVEYING').length,
       QA_QC: allDisciplineItems.filter(i => i.discipline === 'QA_QC').length,
       MATERIALS: allDisciplineItems.filter(i => i.discipline === 'MATERIALS').length,
       SAFETY: allDisciplineItems.filter(i => i.discipline === 'SAFETY').length,
       COMMISSIONING: allDisciplineItems.filter(i => i.discipline === 'COMMISSIONING').length,
     };
-  }, [allDisciplineItems]);
+    customDisciplines.forEach(custom => {
+      cMap[custom.id] = allDisciplineItems.filter(i => i.discipline === custom.id).length;
+    });
+    return cMap;
+  }, [allDisciplineItems, customDisciplines]);
 
   // Filtered items for active tab
   const activeDisciplineItems = useMemo(() => {
-    if (activeTab === 'MATRIX' || activeTab === 'SURVEY_SPANS') return [];
+    if (activeTab === 'MATRIX') return [];
     return allDisciplineItems.filter(i => {
       if (i.discipline !== activeTab) return false;
       if (!searchTerm) return true;
@@ -302,7 +358,53 @@ export function DisciplineTrackerView({
     });
   }, [allDisciplineItems, activeTab, searchTerm]);
 
-  // Save changes to edited discipline item (bi-directional update to parent Activity / SubTask)
+  // Smart Header Calculations for current active discipline
+  const activeDisciplineMetrics = useMemo(() => {
+    const items = activeDisciplineItems;
+    const totalItems = items.length;
+    const completedItems = items.filter(i => i.status === 'Completed').length;
+    const inProgressItems = items.filter(i => i.status === 'In Progress').length;
+    const blockedItems = items.filter(i => i.status === 'Blocked' || (i.isHoldPoint && i.status !== 'Completed')).length;
+    const linkedCount = items.filter(i => i.isLinked).length;
+
+    // Linear / Quantity targets calculation
+    let totalTargetQty = 0;
+    let totalCompletedQty = 0;
+    let mainUnit = 'units';
+
+    items.forEach(i => {
+      if (i.targetQuantity && i.targetQuantity > 0) {
+        totalTargetQty += i.targetQuantity;
+        totalCompletedQty += (i.completedQuantity || 0);
+        if (i.unit) mainUnit = i.unit;
+      }
+    });
+
+    // Fallback if quantities not explicitly set: use item counts or corridor span standard
+    if (totalTargetQty === 0) {
+      totalTargetQty = totalItems > 0 ? totalItems : 1;
+      totalCompletedQty = completedItems;
+      mainUnit = 'items';
+    }
+
+    const percentage = totalTargetQty > 0 ? Math.min(100, Math.round((totalCompletedQty / totalTargetQty) * 100)) : 0;
+    const remainingQty = Math.max(0, totalTargetQty - totalCompletedQty);
+
+    return {
+      totalItems,
+      completedItems,
+      inProgressItems,
+      blockedItems,
+      linkedCount,
+      totalTargetQty,
+      totalCompletedQty,
+      remainingQty,
+      percentage,
+      mainUnit
+    };
+  }, [activeDisciplineItems]);
+
+  // Save changes to edited discipline item
   const handleSaveDisciplineItem = (updatedItem: DisciplineWorkItem) => {
     const parentAct = activities.find(a => a.id === updatedItem.parentActivityId);
     if (!parentAct) return;
@@ -350,7 +452,7 @@ export function DisciplineTrackerView({
         projectId: parentAct.projectId,
         userId: userRole || 'Engineer',
         action: 'Discipline Work Item Updated',
-        details: `Updated ${updatedItem.discipline} subtask "${updatedItem.title}" on Activity "${parentAct.name}"`,
+        details: `Updated ${updatedItem.disciplineName || updatedItem.discipline} subtask "${updatedItem.title}" on Activity "${parentAct.name}"`,
         timestamp: new Date().toISOString()
       });
     } else {
@@ -451,9 +553,30 @@ export function DisciplineTrackerView({
     }
   };
 
+  // Create custom discipline handler
+  const handleCreateCustomDiscipline = (config: CustomDisciplineConfig) => {
+    setCustomDisciplines(prev => [...prev, config]);
+    setActiveTab(config.id);
+    setIsCreatingCustomDiscipline(false);
+  };
+
+  // Delete custom discipline handler
+  const handleDeleteCustomDiscipline = (discId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('Are you sure you want to remove this custom discipline tracker?')) {
+      setCustomDisciplines(prev => prev.filter(c => c.id !== discId));
+      if (activeTab === discId) {
+        setActiveTab('SURVEYING');
+      }
+    }
+  };
+
+  // Find active custom discipline config if selected
+  const activeCustomConfig = customDisciplines.find(c => c.id === activeTab);
+
   return (
     <div className="flex flex-col gap-5">
-      {/* Top Discipline Switcher Tabs */}
+      {/* Top Discipline Switcher Tabs Ribbon */}
       <div className="flex items-center justify-between gap-3 flex-wrap pb-1 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
           {/* 1. Master Matrix */}
@@ -470,21 +593,7 @@ export function DisciplineTrackerView({
             <span>Cross-Discipline PTS Matrix</span>
           </button>
 
-          {/* 2. Survey Spans Hub */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('SURVEY_SPANS')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 flex items-center gap-2 transition-all ${
-              activeTab === 'SURVEY_SPANS'
-                ? 'bg-sky-600 text-white shadow-xs'
-                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300'
-            }`}
-          >
-            <Compass className="h-4 w-4" />
-            <span>Survey Spans Hub</span>
-          </button>
-
-          {/* 3. Surveying */}
+          {/* 2. Surveying */}
           <button
             type="button"
             onClick={() => setActiveTab('SURVEYING')}
@@ -495,10 +604,10 @@ export function DisciplineTrackerView({
             }`}
           >
             <Compass className="h-4 w-4 text-sky-600" />
-            <span>Surveying ({counts.SURVEYING})</span>
+            <span>Surveying ({counts.SURVEYING || 0})</span>
           </button>
 
-          {/* 4. QA/QC */}
+          {/* 3. QA/QC */}
           <button
             type="button"
             onClick={() => setActiveTab('QA_QC')}
@@ -509,10 +618,10 @@ export function DisciplineTrackerView({
             }`}
           >
             <ShieldCheck className="h-4 w-4 text-rose-600" />
-            <span>QA/QC ({counts.QA_QC})</span>
+            <span>QA/QC ({counts.QA_QC || 0})</span>
           </button>
 
-          {/* 5. Materials */}
+          {/* 4. Materials */}
           <button
             type="button"
             onClick={() => setActiveTab('MATERIALS')}
@@ -523,10 +632,10 @@ export function DisciplineTrackerView({
             }`}
           >
             <Package className="h-4 w-4 text-amber-600" />
-            <span>Materials ({counts.MATERIALS})</span>
+            <span>Materials ({counts.MATERIALS || 0})</span>
           </button>
 
-          {/* 6. Safety */}
+          {/* 5. Safety */}
           <button
             type="button"
             onClick={() => setActiveTab('SAFETY')}
@@ -537,10 +646,10 @@ export function DisciplineTrackerView({
             }`}
           >
             <ShieldAlert className="h-4 w-4 text-emerald-600" />
-            <span>Safety / HSE ({counts.SAFETY})</span>
+            <span>Safety / HSE ({counts.SAFETY || 0})</span>
           </button>
 
-          {/* 7. Commissioning */}
+          {/* 6. Commissioning */}
           <button
             type="button"
             onClick={() => setActiveTab('COMMISSIONING')}
@@ -551,20 +660,64 @@ export function DisciplineTrackerView({
             }`}
           >
             <Zap className="h-4 w-4 text-purple-600" />
-            <span>Commissioning ({counts.COMMISSIONING})</span>
+            <span>Commissioning ({counts.COMMISSIONING || 0})</span>
           </button>
+
+          {/* 7. Custom User-Defined Disciplines */}
+          {customDisciplines.map(custom => {
+            const isSelected = activeTab === custom.id;
+            return (
+              <div key={custom.id} className="relative flex items-center group">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(custom.id)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 flex items-center gap-2 transition-all ${
+                    isSelected
+                      ? (custom.badgeClass || 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 ring-2 ring-indigo-500/40 shadow-xs font-black')
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <Layers className="h-4 w-4 text-indigo-600" />
+                  <span>{custom.name} ({counts[custom.id] || 0})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleDeleteCustomDiscipline(custom.id, e)}
+                  className="hidden group-hover:flex absolute -top-1.5 -right-1.5 bg-rose-500 text-white rounded-full p-0.5 shadow-sm hover:scale-110 transition-transform"
+                  title="Delete Custom Discipline"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            );
+          })}
         </div>
 
-        {/* Action Button */}
-        {activeTab !== 'MATRIX' && activeTab !== 'SURVEY_SPANS' && (
+        {/* Action Buttons: Add Item & Create Custom Discipline */}
+        <div className="flex items-center gap-2">
           <Button
-            onClick={() => onAddNewDisciplineItem(activeTab as WorkstreamType)}
-            className="gap-1.5 rounded-xl bg-[#0B5FFF] text-white font-bold h-9 text-xs shrink-0 shadow-xs"
+            type="button"
+            variant="outline"
+            onClick={() => setIsCreatingCustomDiscipline(true)}
+            className="gap-1.5 rounded-xl border-dashed border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-bold h-9 text-xs shrink-0 shadow-2xs"
+            title="Define and configure a new custom discipline tracker"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span>Add {WORKSTREAMS[activeTab as WorkstreamType]?.shortName || 'Item'}</span>
+            <span>New Custom Discipline</span>
           </Button>
-        )}
+
+          {activeTab !== 'MATRIX' && (
+            <Button
+              onClick={() => onAddNewDisciplineItem(activeTab as WorkstreamType)}
+              className="gap-1.5 rounded-xl bg-[#0B5FFF] text-white font-bold h-9 text-xs shrink-0 shadow-xs"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>
+                Add {activeCustomConfig?.shortName || WORKSTREAMS[activeTab as WorkstreamType]?.shortName || 'Item'}
+              </span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Render Selected View */}
@@ -574,33 +727,121 @@ export function DisciplineTrackerView({
           onSelectActivity={onSelectActivity}
           onOpenSlideOver={onOpenSlideOver}
         />
-      ) : activeTab === 'SURVEY_SPANS' ? (
-        <SurveyTrackerView
-          onOpenActivity={(actId) => {
-            const found = activities.find(a => a.id === actId);
-            if (found) onSelectActivity(found);
-          }}
-        />
       ) : (
         <div className="flex flex-col gap-4">
-          {/* Discipline Subheader & View Controls */}
-          <div className="flex items-center justify-between gap-3 flex-wrap bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-            <div>
+          {/* Smart Deliverable & Corridor Calculation Banner */}
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className={`p-3 rounded-xl ${
+                  activeTab === 'SURVEYING' ? 'bg-sky-50 dark:bg-sky-950/60 text-sky-600' :
+                  activeTab === 'QA_QC' ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600' :
+                  activeTab === 'MATERIALS' ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600' :
+                  activeTab === 'SAFETY' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600' :
+                  activeTab === 'COMMISSIONING' ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-600' :
+                  'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600'
+                }`}>
+                  {activeTab === 'SURVEYING' && <Compass className="h-6 w-6" />}
+                  {activeTab === 'QA_QC' && <ShieldCheck className="h-6 w-6" />}
+                  {activeTab === 'MATERIALS' && <Package className="h-6 w-6" />}
+                  {activeTab === 'SAFETY' && <ShieldAlert className="h-6 w-6" />}
+                  {activeTab === 'COMMISSIONING' && <Zap className="h-6 w-6" />}
+                  {activeCustomConfig && <Layers className="h-6 w-6" />}
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+                      {activeCustomConfig?.name || WORKSTREAMS[activeTab as WorkstreamType]?.name || activeTab}
+                    </h2>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-[#0B5FFF] dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-900/40">
+                      Scope of Work Hub
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {activeCustomConfig?.description || WORKSTREAMS[activeTab as WorkstreamType]?.description || 'Live cross-activity discipline tracker and deliverable progress calculation.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress Summary Pill */}
               <div className="flex items-center gap-2">
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                  {WORKSTREAMS[activeTab as WorkstreamType]?.name}
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
-                  {activeDisciplineItems.length} active subtasks & scope items
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Total Deliverable Progress:</span>
+                <span className="font-mono text-sm font-black text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                  {activeDisciplineMetrics.totalCompletedQty.toLocaleString()} / {activeDisciplineMetrics.totalTargetQty.toLocaleString()} {activeDisciplineMetrics.mainUnit} ({activeDisciplineMetrics.percentage}%)
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Aggregated live from all created activities. Edit subtasks directly or re-link to civil construction spans.
-              </p>
+            </div>
+
+            {/* Live Progress Bar & Sub-Metrics */}
+            <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <Target className="h-3.5 w-3.5 text-[#0B5FFF]" />
+                  <span>
+                    {activeCustomConfig?.targetDeliverableLabel || (
+                      activeTab === 'SURVEYING' ? 'Total Linear Corridor Set-Out' :
+                      activeTab === 'QA_QC' ? 'Total Quality Inspections & Hold Points' :
+                      activeTab === 'MATERIALS' ? 'Total Material Deliveries & Allocations' :
+                      activeTab === 'SAFETY' ? 'Daily Safety & Trench Permits Cleared' :
+                      activeTab === 'COMMISSIONING' ? 'Total Cable Jointing & Energization Tests' :
+                      'Discipline Deliverables Completed'
+                    )}
+                  </span>
+                </span>
+                <span className="font-mono font-black text-slate-900 dark:text-white">
+                  {activeDisciplineMetrics.percentage}%
+                </span>
+              </div>
+
+              <ProgressBar progress={activeDisciplineMetrics.percentage} size="md" />
+
+              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+                <span>Remaining to Deliver: <strong>{activeDisciplineMetrics.remainingQty.toLocaleString()} {activeDisciplineMetrics.mainUnit}</strong></span>
+                {activeTab === 'SURVEYING' && activeDisciplineMetrics.completedItems > 0 && (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                    ✓ {activeDisciplineMetrics.completedItems} section spans ready for civil earthworks
+                  </span>
+                )}
+                {activeTab === 'QA_QC' && (
+                  <span className="text-rose-600 dark:text-rose-400 font-bold">
+                    {activeDisciplineMetrics.blockedItems > 0 ? `🛑 ${activeDisciplineMetrics.blockedItems} Hold Points requiring engineer sign-off` : '✓ All inspection gates cleared'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 3 Metric Breakdown Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Total Work Items</span>
+                <span className="text-base font-black text-slate-900 dark:text-white mt-1">{activeDisciplineMetrics.totalItems} items</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">In Progress / Active</span>
+                <span className="text-base font-black text-[#0B5FFF] mt-1">{activeDisciplineMetrics.inProgressItems} active</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Completed & Signed Off</span>
+                <span className="text-base font-black text-emerald-600 mt-1">{activeDisciplineMetrics.completedItems} / {activeDisciplineMetrics.totalItems}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Linked to Civil Activities</span>
+                <span className="text-base font-black text-indigo-600 mt-1">{activeDisciplineMetrics.linkedCount} linked</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Subheader & View Controls */}
+          <div className="flex items-center justify-between gap-3 flex-wrap bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Displaying {activeDisciplineItems.length} correlating subtasks & scope items
+              </span>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Search */}
+              {/* Search Box */}
               <div className="relative w-48 sm:w-60">
                 <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                 <input
@@ -650,7 +891,7 @@ export function DisciplineTrackerView({
             </div>
           </div>
 
-          {/* Discipline Work Items Board View */}
+          {/* Board View */}
           {viewMode === 'board' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
               {(['Not Started', 'In Progress', 'Blocked', 'Completed'] as ActivityStatus[]).map(statusCol => {
@@ -829,6 +1070,14 @@ export function DisciplineTrackerView({
         </div>
       )}
 
+      {/* Modal: Create Custom Discipline Tracker */}
+      {isCreatingCustomDiscipline && (
+        <CreateCustomDisciplineModal
+          onClose={() => setIsCreatingCustomDiscipline(false)}
+          onCreate={handleCreateCustomDiscipline}
+        />
+      )}
+
       {/* Interactive Modal: Edit Discipline Subtask / Work Item */}
       {editingItem && (
         <EditDisciplineItemModal
@@ -870,7 +1119,7 @@ function DisciplineCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-            {item.category || WORKSTREAMS[item.discipline]?.shortName}
+            {item.category || WORKSTREAMS[item.discipline as WorkstreamType]?.shortName || item.disciplineName}
           </span>
           {item.isHoldPoint && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
@@ -1006,6 +1255,180 @@ function DisciplineCard({
   );
 }
 
+// Sub-component: Create Custom Discipline Modal
+function CreateCustomDisciplineModal({
+  onClose,
+  onCreate
+}: {
+  onClose: () => void;
+  onCreate: (config: CustomDisciplineConfig) => void;
+}) {
+  const [name, setName] = useState('');
+  const [shortName, setShortName] = useState('');
+  const [description, setDescription] = useState('');
+  const [measurementType, setMeasurementType] = useState<SubTaskMeasurementType>('Length');
+  const [defaultUnit, setDefaultUnit] = useState('m');
+  const [categoryKeywords, setCategoryKeywords] = useState('');
+  const [targetDeliverableLabel, setTargetDeliverableLabel] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    const id = `DISC_${name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_')}_${Date.now().toString(36)}`;
+    const keywords = categoryKeywords
+      .split(',')
+      .map(k => k.trim())
+      .filter(Boolean);
+
+    // If keywords empty, use the name as keyword
+    if (keywords.length === 0) {
+      keywords.push(name.trim().toLowerCase());
+    }
+
+    onCreate({
+      id,
+      name: name.trim(),
+      shortName: shortName.trim() || name.trim().split(' ')[0],
+      description: description.trim() || `Custom discipline tracker for ${name.trim()}`,
+      categoryKeywords: keywords,
+      measurementType,
+      defaultUnit: defaultUnit.trim() || 'units',
+      targetDeliverableLabel: targetDeliverableLabel.trim() || `Total ${name.trim()} Deliverables`,
+      createdAt: new Date().toISOString()
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+        <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/80">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600">
+              <Layers className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                Create Custom Discipline Tracker
+              </h2>
+              <p className="text-xs text-slate-500">Define a new specialized discipline based on your project scope of work.</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-700">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Discipline Name *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Geotechnical & Drilling"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold focus:ring-2 focus:ring-[#0B5FFF] outline-none"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Short Name</label>
+              <input
+                type="text"
+                placeholder="e.g. Geotech"
+                value={shortName}
+                onChange={e => setShortName(e.target.value)}
+                className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Scope Description</label>
+            <input
+              type="text"
+              placeholder="e.g. Soil sampling, borehole drilling, and soil compaction verification"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Measurement Type</label>
+              <select
+                value={measurementType}
+                onChange={e => setMeasurementType(e.target.value as SubTaskMeasurementType)}
+                className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold"
+              >
+                <option value="Length">Length (m / km)</option>
+                <option value="Quantity">Quantity (numerical units)</option>
+                <option value="Volume">Volume (m³)</option>
+                <option value="Area">Area (m²)</option>
+                <option value="Weight">Weight (tons / kg)</option>
+                <option value="Checklist">Checklist / Sign-off</option>
+                <option value="Percentage">Percentage (%)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Default Measurement Unit</label>
+              <input
+                type="text"
+                placeholder="e.g. m, boreholes, tests, m³"
+                value={defaultUnit}
+                onChange={e => setDefaultUnit(e.target.value)}
+                className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              Correlating Subtask Keywords (comma separated)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. geotech, soil, borehole, drilling, core sample"
+              value={categoryKeywords}
+              onChange={e => setCategoryKeywords(e.target.value)}
+              className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs"
+            />
+            <p className="text-[10px] text-slate-400">
+              Any activity subtask matching these category names or keywords will be automatically aggregated into this discipline hub.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              Target Deliverable Metric Title
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Total Borehole Drilling Depth"
+              value={targetDeliverableLabel}
+              onChange={e => setTargetDeliverableLabel(e.target.value)}
+              className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <Button type="button" variant="outline" onClick={onClose} className="rounded-xl h-9 text-xs">
+              Cancel
+            </Button>
+            <Button type="submit" className="rounded-xl bg-[#0B5FFF] text-white font-bold h-9 text-xs">
+              Create Discipline Tracker
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // Sub-component: Edit Discipline Subtask / Work Item Modal
 function EditDisciplineItemModal({
   item,
@@ -1071,8 +1494,8 @@ function EditDisciplineItemModal({
         <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/80 sticky top-0 z-10">
           <div>
             <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${WORKSTREAMS[item.discipline]?.badgeClass}`}>
-                {WORKSTREAMS[item.discipline]?.name}
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                {item.disciplineName || WORKSTREAMS[item.discipline as WorkstreamType]?.name || item.discipline}
               </span>
               <span className="text-xs text-slate-400">
                 {item.isSubtask ? 'Activity Subtask' : 'Discipline Activity'}

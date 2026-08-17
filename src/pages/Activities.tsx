@@ -9,7 +9,6 @@ import { RecordActivityModal } from '../components/RecordActivityModal';
 import { ActivitySlideOver } from '../components/ActivitySlideOver';
 import { ActivityTimeline } from '../components/ActivityTimeline';
 import { ActivityAuditScreen } from '../components/ActivityAuditScreen';
-import { SurveyTrackerView } from '../components/SurveyTrackerView';
 import { 
   Search, 
   Filter, 
