@@ -69,12 +69,13 @@ import { ActivityDataTable } from '../components/ActivityDataTable';
 import { PTSCrossDisciplineMatrix } from '../components/PTSCrossDisciplineMatrix';
 import { DisciplineTrackerView } from '../components/DisciplineTrackerView';
 import { DailyLogsTrackerView } from '../components/DailyLogsTrackerView';
+import { ActivityNotesTrackerView } from '../components/ActivityNotesTrackerView';
 import { ActivitiesPdfModal } from '../components/ActivitiesPdfModal';
 
 export function Activities() {
-  const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole, currentUserProfile, hasPermission } = useAppContext();
+  const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole, currentUserProfile, hasPermission, notes } = useAppContext();
   const canEditActivities = hasPermission('activities');
-  const [mainScreen, setMainScreen] = useState<'activities' | 'disciplines' | 'daily_logs'>('activities');
+  const [mainScreen, setMainScreen] = useState<'activities' | 'disciplines' | 'daily_logs' | 'notes'>('activities');
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [slideOverActivity, setSlideOverActivity] = useState<Activity | null>(null);
@@ -589,6 +590,22 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
               Site Diary
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setMainScreen('notes')}
+            className={`px-5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all ${
+              mainScreen === 'notes'
+                ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <FileText className="h-4 w-4 text-amber-600" />
+            <span>Notes</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold">
+              {notes.length}
+            </span>
+          </button>
         </div>
 
         {/* Global Audit & Export Actions */}
@@ -625,8 +642,12 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
         </div>
       </div>
 
-      {/* Screen 3: Dedicated Daily Shift Logs */}
-      {mainScreen === 'daily_logs' ? (
+      {/* Screen 4: Dedicated Field & Engineering Notes */}
+      {mainScreen === 'notes' ? (
+        <ActivityNotesTrackerView
+          onOpenActivityDetail={setSelectedActivity}
+        />
+      ) : mainScreen === 'daily_logs' ? (
         <DailyLogsTrackerView
           onOpenActivityDetail={setSelectedActivity}
         />

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -44,6 +44,10 @@ interface AppContextType {
   batchGenerateSurveySections: (records: SurveySectionRecord[]) => void;
   linkSurveyRecordToActivity: (surveyRecordId: string, activityId: string, subtaskId?: string) => void;
   unlinkSurveyRecordFromActivity: (surveyRecordId: string) => void;
+  notes: ActivityNote[];
+  addNote: (note: ActivityNote) => void;
+  updateNote: (note: ActivityNote) => void;
+  deleteNote: (id: string) => void;
   theme: 'light' | 'dark';
   units: 'metric' | 'imperial';
   currency: import('../types').CurrencyCode;
@@ -330,6 +334,76 @@ const DEFAULT_INITIAL_SURVEY_RECORDS: SurveySectionRecord[] = Array.from({ lengt
   };
 });
 
+const DEFAULT_INITIAL_NOTES: ActivityNote[] = [
+  {
+    id: 'NOTE-101',
+    activityId: 'ACT-1179',
+    activityName: 'PTS08 TO PTS15',
+    subtaskId: 'ST-001',
+    subtaskTitle: 'Trench set-out',
+    subtaskSeq: '1.0',
+    title: 'Topographic setting-out & benchmark verification',
+    content: 'Surveyor team confirmed pegging coordinates from PTS08 to PTS12. Verified benchmark elevation at BM-4 (433m). Minor offset detected on western boundary; adjusted alignment accordingly.',
+    category: 'Technical Memo',
+    priority: 'High',
+    tags: ['Survey', 'Benchmark', 'PTS08-15'],
+    isPinned: true,
+    isResolved: false,
+    author: 'Dimi Maphanga',
+    authorRole: 'Lead Surveyor',
+    authorInitials: 'DM',
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 86400000).toISOString(),
+    checklists: [
+      { id: 'c1', text: 'Verify benchmark BM-4 elevation (433m)', completed: true },
+      { id: 'c2', text: 'Confirm pegging coordinates on western bend', completed: true },
+      { id: 'c3', text: 'Issue revised setting-out sheet to civil foreman', completed: false }
+    ],
+    color: 'blue'
+  },
+  {
+    id: 'NOTE-102',
+    activityId: 'ACT-1179',
+    activityName: 'PTS08 TO PTS15',
+    subtaskId: 'ST-003',
+    subtaskTitle: 'Trench marking inspection',
+    subtaskSeq: '3.0',
+    title: 'QA Bedding Sand Compaction Hold Point',
+    content: 'Mandatory Hold Point 3.0 cleared. Nuclear density gauge test confirmed compaction rate of 98.4% Mod AASHTO. Approved to proceed with cable laying.',
+    category: 'QA & Inspection',
+    priority: 'Urgent',
+    tags: ['QA', 'Compaction', 'HoldPoint'],
+    isPinned: true,
+    isResolved: true,
+    author: 'Lindokuhle Chris',
+    authorRole: 'QA/QC Engineer',
+    authorInitials: 'LC',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    checklists: [
+      { id: 'c4', text: 'Compaction test > 98% Mod AASHTO', completed: true },
+      { id: 'c5', text: 'Verify trench depth 1.2m minimum', completed: true }
+    ],
+    color: 'rose'
+  },
+  {
+    id: 'NOTE-103',
+    title: 'Heavy Plant Routine Maintenance Schedule',
+    content: 'All plant operators to complete daily 10-point machine inspection pre-shift. CAT 320 excavator hydraulic fluid top-up scheduled for Friday afternoon.',
+    category: 'Site Observation',
+    priority: 'Medium',
+    tags: ['Plant', 'Maintenance', 'DailyCheck'],
+    isPinned: false,
+    isResolved: false,
+    author: 'Site Supervisor',
+    authorRole: 'Site Operations',
+    authorInitials: 'SS',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    color: 'amber'
+  }
+];
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -377,6 +451,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [accommodationUtilities, setAccommodationUtilities] = useState<AccommodationUtilityLog[]>([]);
   const [accommodationPayments, setAccommodationPayments] = useState<AccommodationPaymentLog[]>([]);
   const [surveyRecords, setSurveyRecords] = useState<SurveySectionRecord[]>(DEFAULT_INITIAL_SURVEY_RECORDS);
+  const [notes, setNotes] = useState<ActivityNote[]>(() => {
+    try {
+      const saved = localStorage.getItem('constructos_notes');
+      return saved ? JSON.parse(saved) : DEFAULT_INITIAL_NOTES;
+    } catch {
+      return DEFAULT_INITIAL_NOTES;
+    }
+  });
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [currentUserProfile, setCurrentUserProfileState] = useState<UserProfile>({
     id: 'USR-001',
@@ -2423,6 +2505,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     triggerSyncToast(`Unlinked Survey "${surveyRec.spanName}"`, 'info');
   };
 
+  const addNote = (newNote: ActivityNote) => {
+    setNotes(prev => {
+      const updated = [newNote, ...prev];
+      localStorage.setItem('constructos_notes', JSON.stringify(updated));
+      return updated;
+    });
+    setHasPendingChanges(true);
+    triggerSyncToast(`Note "${newNote.title}" created`, 'success');
+  };
+
+  const updateNote = (updatedNote: ActivityNote) => {
+    setNotes(prev => {
+      const updated = prev.map(n => n.id === updatedNote.id ? updatedNote : n);
+      localStorage.setItem('constructos_notes', JSON.stringify(updated));
+      return updated;
+    });
+    setHasPendingChanges(true);
+    triggerSyncToast(`Note updated`, 'info');
+  };
+
+  const deleteNote = (id: string) => {
+    setNotes(prev => {
+      const updated = prev.filter(n => n.id !== id);
+      localStorage.setItem('constructos_notes', JSON.stringify(updated));
+      return updated;
+    });
+    setHasPendingChanges(true);
+    triggerSyncToast(`Note removed`, 'info');
+  };
+
   const setTheme = (newTheme: 'light' | 'dark') => {
     setThemeState(newTheme);
     localStorage.setItem('theme', newTheme);
@@ -2746,7 +2858,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addAccommodationUtility, deleteAccommodationUtility,
       addAccommodationPayment, updateAccommodationPayment, deleteAccommodationPayment,
       surveyRecords, addSurveyRecord, updateSurveyRecord, deleteSurveyRecord,
-      batchGenerateSurveySections, linkSurveyRecordToActivity, unlinkSurveyRecordFromActivity
+      batchGenerateSurveySections, linkSurveyRecordToActivity, unlinkSurveyRecordFromActivity,
+      notes, addNote, updateNote, deleteNote
     }}>
       {children}
       <SyncNotificationToast />

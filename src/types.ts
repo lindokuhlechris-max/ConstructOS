@@ -1160,3 +1160,52 @@ export interface AccommodationPaymentLog {
   createdAt?: string;
 }
 
+// -------------------------------------------------------------------
+// Activity & Field Notes Architecture
+// -------------------------------------------------------------------
+
+export interface NoteChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+export type NoteCategory = 
+  | 'Site Observation'
+  | 'Technical Memo'
+  | 'QA & Inspection'
+  | 'Safety & Risk'
+  | 'Materials & Delivery'
+  | 'Engineering Query'
+  | 'General';
+
+export type NotePriority = 'Low' | 'Medium' | 'High' | 'Urgent';
+
+export interface ActivityNote {
+  id: string;
+  projectId?: string;
+  activityId?: string;       // Linked Activity ID (e.g. "ACT-1179")
+  activityName?: string;     // Linked Activity Name (e.g. "PTS08 TO PTS15")
+  subtaskId?: string;        // Linked Subtask ID
+  subtaskTitle?: string;     // Linked Subtask Title
+  subtaskSeq?: string;       // Progression sequence e.g. "1.0", "2.1"
+  title: string;
+  content: string;
+  category: NoteCategory;
+  priority: NotePriority;
+  tags?: string[];
+  isPinned?: boolean;
+  isResolved?: boolean;
+  author: string;
+  authorRole?: string;
+  authorInitials?: string;
+  createdAt: string;
+  updatedAt: string;
+  checklists?: NoteChecklistItem[];
+  photos?: string[];
+  voiceNotes?: string[];
+  location?: string;
+  chainage?: string;
+  color?: 'blue' | 'amber' | 'emerald' | 'rose' | 'purple' | 'slate';
+}
+
