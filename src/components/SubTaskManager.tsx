@@ -15,6 +15,7 @@ import {
 import { useAppContext } from '../context/AppContext';
 import { getPersonInitials, getSubtaskProgressionNumber, inferSubtaskMeasurementType } from '../lib/labourUtils';
 import { MeasurementPresetsModal } from './MeasurementPresetsModal';
+import { WorkflowTemplatesModal } from './WorkflowTemplatesModal';
 
 export const MEASUREMENT_TYPES: {
   type: SubTaskMeasurementType;
@@ -570,6 +571,16 @@ export function SubTaskManager({
   const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState(false);
+  const [isWorkflowTemplatesModalOpen, setIsWorkflowTemplatesModalOpen] = useState(false);
+  const [workflowModalTab, setWorkflowModalTab] = useState<'browse' | 'saveCurrent'>('browse');
+
+  const handleApplyWorkflowTemplate = (newSubtasks: SubTask[], mode: 'append' | 'replace') => {
+    if (mode === 'replace') {
+      handleSubtasksChange(newSubtasks);
+    } else {
+      handleSubtasksChange([...subtasks, ...newSubtasks]);
+    }
+  };
 
   // Retrieve current active activity and its measurement presets
   const currentActivity = React.useMemo(() => {
@@ -1786,6 +1797,15 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
 
   return (
     <div className="space-y-4 bg-white dark:bg-slate-900/60 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      {/* WBS Workflow Templates Modal */}
+      <WorkflowTemplatesModal
+        isOpen={isWorkflowTemplatesModalOpen}
+        onClose={() => setIsWorkflowTemplatesModalOpen(false)}
+        onApplyTemplate={handleApplyWorkflowTemplate}
+        currentSubtasks={subtasks}
+        activityName={currentActivity?.name || ''}
+        defaultTab={workflowModalTab}
+      />
       {/* Header & Progress Summary */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
         <div>
@@ -1847,6 +1867,21 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                 <LayoutGrid className="h-4 w-4" />
               </button>
             </div>
+          )}
+
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => {
+                setWorkflowModalTab('browse');
+                setIsWorkflowTemplatesModalOpen(true);
+              }}
+              className="p-2 rounded-xl text-xs font-bold flex items-center justify-center transition-all border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-indigo-600 hover:border-indigo-400 shadow-2xs"
+              title="WBS Workflow Templates (Apply or Save)"
+              aria-label="WBS Workflow Templates"
+            >
+              <Sparkles className="h-4 w-4 text-indigo-600" />
+            </button>
           )}
 
           {!readOnly && (
@@ -2472,12 +2507,36 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
 
           {/* Subtasks List */}
           {subtasks.length === 0 ? (
-            <div className="text-center py-8 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
-              <Layers className="h-8 w-8 text-slate-400 mx-auto mb-2 opacity-60" />
+            <div className="text-center py-8 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+              <Layers className="h-8 w-8 text-slate-400 mx-auto opacity-60" />
               <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">No detailed subtasks added yet.</p>
-              <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
+              <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
                 Break down this activity into detailed subtasks, milestones, and deliverables.
               </p>
+              {!readOnly && (
+                <div className="pt-2 flex items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setWorkflowModalTab('browse');
+                      setIsWorkflowTemplatesModalOpen(true);
+                    }}
+                    className="h-7 text-xs rounded-xl gap-1 border-indigo-200 text-indigo-700 dark:text-indigo-300"
+                  >
+                    <Sparkles className="h-3 w-3 text-indigo-600" /> Use Workflow Template
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsAdding(true)}
+                    className="h-7 text-xs font-bold rounded-xl gap-1 bg-[#0B5FFF] text-white"
+                  >
+                    <Plus className="h-3 w-3" /> Add Custom
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <DragDropContext onDragEnd={onDragEnd}>

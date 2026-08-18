@@ -21,11 +21,13 @@ import {
   Clock, 
   UserCheck, 
   CheckCircle2,
-  ListChecks
+  ListChecks,
+  BookmarkPlus
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from './ui';
 import { Activity, ActivityChecklistItem } from '../types';
 import { useAppContext } from '../context/AppContext';
+import { ChecklistTemplatesModal } from './ChecklistTemplatesModal';
 
 export interface ActivityChecklistPanelProps {
   activity: Activity;
@@ -66,49 +68,6 @@ const CATEGORY_STYLES: Record<string, { bg: string; text: string; border: string
   }
 };
 
-const PRESET_TEMPLATES = [
-  {
-    title: 'Safety & Site Permits Pre-Start',
-    category: 'Permit & Safety' as const,
-    items: [
-      'Permit to Work (PTW) & Hot Work / Excavation Permit signed & displayed',
-      'Daily Pre-Shift Risk Assessment & Toolbox Talk conducted with crew',
-      'Mandatory PPE compliance checked (Hi-Vis, Hard Hat, Steel Toes, Eye Protection)',
-      'Site First-Aider & Emergency assembly point identified'
-    ]
-  },
-  {
-    title: 'Civil & Survey Setting-Out',
-    category: 'Survey & Location' as const,
-    items: [
-      'Pegging coordinates & survey pegs verified against approved construction drawings',
-      'Benchmark reference elevation (AMSL) verified with survey team',
-      'Underground services & buried utilities scanned (CAT & Genny clearance)',
-      'Trench center-line & boundary offset chalked out'
-    ]
-  },
-  {
-    title: 'Plant, Machinery & Tools Pre-Start',
-    category: 'Materials & Plant' as const,
-    items: [
-      'Plant & excavator 10-point daily pre-start inspection checklist completed',
-      'Plant operator license & competency certification verified',
-      'Audible reverse alarms, flashing beacon, and emergency stop operational',
-      'Trench shoring boxes / trench shields staged on site'
-    ]
-  },
-  {
-    title: 'Quality & Technical Method Statement',
-    category: 'QA & Method Statement' as const,
-    items: [
-      'Approved Method Statement & Inspection Test Plan (ITP) briefed to foreman',
-      'Bedding sand gradation & delivery batch approval certificate verified',
-      'Compaction density test equipment (nuclear gauge / DCP) scheduled for hold point',
-      'Environmental dust suppression & spill kit accessible'
-    ]
-  }
-];
-
 export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly = false }: ActivityChecklistPanelProps) {
   const { currentUserProfile } = useAppContext();
   const checklists = useMemo(() => activity.checklists || [], [activity.checklists]);
@@ -116,7 +75,8 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
   const [isAddingInline, setIsAddingInline] = useState(false);
   const [newItemText, setNewItemText] = useState('');
   const [newItemCategory, setNewItemCategory] = useState<'Permit & Safety' | 'Survey & Location' | 'Materials & Plant' | 'QA & Method Statement' | 'General'>('Permit & Safety');
-  const [isPresetsOpen, setIsPresetsOpen] = useState(false);
+  const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
+  const [modalDefaultTab, setModalDefaultTab] = useState<'browse' | 'saveCurrent'>('browse');
 
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingItemText, setEditingItemText] = useState('');
@@ -166,17 +126,25 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
     setIsAddingInline(false);
   };
 
-  // Add items from preset bundle
-  const handleAddPresetBundle = (preset: typeof PRESET_TEMPLATES[0]) => {
-    const newItems: ActivityChecklistItem[] = preset.items.map(text => ({
-      id: `CHK-${Date.now().toString().slice(-5)}-${Math.random().toString(36).substr(2, 4)}`,
-      text,
-      category: preset.category,
-      completed: false
-    }));
+  // Apply template items from modal
+  const handleApplyTemplate = (items: ActivityChecklistItem[], mode: 'append' | 'replace') => {
+    if (mode === 'replace') {
+      onUpdateChecklists(items);
+    } else {
+      onUpdateChecklists([...checklists, ...items]);
+    }
+  };
 
-    onUpdateChecklists([...checklists, ...newItems]);
-    setIsPresetsOpen(false);
+  // Open modal in browse mode
+  const openBrowseTemplates = () => {
+    setModalDefaultTab('browse');
+    setIsTemplatesModalOpen(true);
+  };
+
+  // Open modal in save current mode
+  const openSaveCurrentTemplate = () => {
+    setModalDefaultTab('saveCurrent');
+    setIsTemplatesModalOpen(true);
   };
 
   // Delete single item
@@ -219,6 +187,16 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
 
   return (
     <Card className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+      {/* Template Management Modal */}
+      <ChecklistTemplatesModal
+        isOpen={isTemplatesModalOpen}
+        onClose={() => setIsTemplatesModalOpen(false)}
+        onApplyTemplate={handleApplyTemplate}
+        currentChecklists={checklists}
+        activityName={activity.name}
+        defaultTab={modalDefaultTab}
+      />
+
       {/* 1. Header with Badge & Actions */}
       <CardHeader className="py-4 px-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -247,13 +225,27 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setIsPresetsOpen(!isPresetsOpen)}
+                onClick={openBrowseTemplates}
                 className="h-8 text-xs rounded-xl gap-1 border-indigo-200 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/30 hover:bg-indigo-100"
-                title="Add standard pre-start checklist templates"
+                title="Browse standard and custom saved checklist templates"
               >
                 <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
                 <span className="hidden sm:inline">Quick Templates</span>
               </Button>
+
+              {checklists.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={openSaveCurrentTemplate}
+                  className="h-8 text-xs rounded-xl gap-1 border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/30 hover:bg-emerald-100"
+                  title="Save current checklist items as a reusable template"
+                >
+                  <BookmarkPlus className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="hidden sm:inline">Save Template</span>
+                </Button>
+              )}
 
               <Button
                 type="button"
@@ -301,61 +293,7 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
       </CardHeader>
 
       <CardContent className="p-4 sm:p-5 space-y-4">
-        {/* 3. Quick Templates Accordion Box */}
-        {isPresetsOpen && !readOnly && (
-          <div className="p-4 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-900/60 space-y-3 animate-in fade-in">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-indigo-600" />
-                <h4 className="text-xs font-bold text-indigo-950 dark:text-indigo-200">
-                  Standard Pre-Start Checklist Bundles
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsPresetsOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {PRESET_TEMPLATES.map((preset, idx) => {
-                const style = CATEGORY_STYLES[preset.category];
-                const IconComp = style.icon;
-                return (
-                  <div 
-                    key={idx}
-                    className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all flex flex-col justify-between gap-2 shadow-2xs"
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <IconComp className="h-3.5 w-3.5 text-indigo-600" />
-                        <span className="text-xs font-bold text-slate-900 dark:text-white">{preset.title}</span>
-                      </div>
-                      <p className="text-[10px] text-slate-500 line-clamp-2">
-                        {preset.items.join(' • ')}
-                      </p>
-                    </div>
-
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleAddPresetBundle(preset)}
-                      className="h-7 text-[11px] font-bold rounded-lg gap-1 border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-300 self-start"
-                    >
-                      <Plus className="h-3 w-3" /> Add {preset.items.length} Items
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 4. Inline Add Item Form */}
+        {/* 2. Inline Add Item Form */}
         {isAddingInline && !readOnly && (
           <form onSubmit={handleAddItem} className="p-3 rounded-2xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2.5 animate-in fade-in">
             <div className="flex items-center justify-between">
@@ -417,7 +355,7 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
           </form>
         )}
 
-        {/* 5. Category Filter Pills */}
+        {/* 3. Category Filter Pills */}
         {totalCount > 4 && (
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">Filter:</span>
@@ -438,7 +376,7 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
           </div>
         )}
 
-        {/* 6. Checklist Items List */}
+        {/* 4. Checklist Items List */}
         {checklists.length === 0 ? (
           <div className="text-center py-8 px-4 rounded-2xl bg-slate-50/50 dark:bg-slate-900/40 border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
             <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF] flex items-center justify-center mx-auto">
@@ -456,7 +394,7 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setIsPresetsOpen(true)}
+                  onClick={openBrowseTemplates}
                   className="h-7 text-xs rounded-xl gap-1 border-indigo-200 text-indigo-700 dark:text-indigo-300"
                 >
                   <Sparkles className="h-3 w-3" /> Use Template
@@ -589,10 +527,10 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
           </div>
         )}
 
-        {/* 7. Footer Utility Buttons */}
+        {/* 5. Footer Utility Buttons */}
         {totalCount > 0 && !readOnly && (
-          <div className="pt-2 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-2">
+          <div className="pt-2 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <button
                 type="button"
                 onClick={() => handleCheckAll(true)}
@@ -607,6 +545,15 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                 className="text-[11px] font-semibold text-slate-500 hover:underline"
               >
                 Reset All
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={openSaveCurrentTemplate}
+                className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
+              >
+                <BookmarkPlus className="h-3 w-3" />
+                <span>Save as Template</span>
               </button>
             </div>
 

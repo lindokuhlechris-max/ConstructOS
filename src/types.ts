@@ -230,6 +230,19 @@ export interface ActivityChecklistItem {
   completedBy?: string;
 }
 
+export interface ChecklistTemplate {
+  id: string;
+  title: string;
+  category: 'Permit & Safety' | 'Survey & Location' | 'Materials & Plant' | 'QA & Method Statement' | 'General';
+  discipline?: string;
+  description?: string;
+  items: string[];
+  createdAt?: string;
+  updatedAt?: string;
+  isCustom?: boolean;
+  authorName?: string;
+}
+
 export interface Activity {
   id: string;
   projectId: string;
