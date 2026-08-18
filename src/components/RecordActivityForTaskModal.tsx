@@ -391,7 +391,7 @@ export function RecordActivityForTaskModal({ activity, onClose, onActivityUpdate
       filename,
       blob,
       title: `Activity Report: ${activity.name}`,
-      text: `Constructfield Activity Daily Report - ${activity.name}`
+      text: `Scedih Activity Daily Report - ${activity.name}`
     });
   };
 

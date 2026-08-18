@@ -603,7 +603,7 @@ export function exportSingleReportPDF(report: DailyReport, projectName: string) 
       doc.setFontSize(7.5);
       doc.setTextColor(...textMuted);
       doc.setFont('helvetica', 'normal');
-      doc.text(`Constructfield • Site Daily Report (${report.id})  |  ${projectName}`, 14, 10);
+      doc.text(`Scedih • Site Daily Report (${report.id})  |  ${projectName}`, 14, 10);
       doc.setDrawColor(...borderGray);
       doc.line(14, 12, 196, 12);
     }
@@ -615,7 +615,7 @@ export function exportSingleReportPDF(report: DailyReport, projectName: string) 
     doc.setFontSize(7.5);
     doc.setTextColor(...textMuted);
     doc.setFont('helvetica', 'normal');
-    doc.text('Constructfield Enterprise Construction Operations  •  Official Site Record  •  Confidential', 14, 289);
+    doc.text('Scedih Enterprise Construction Operations  •  Official Site Record  •  Confidential', 14, 289);
     doc.text(`Page ${i} of ${totalPages}   |   Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, 196, 289, { align: 'right' });
   }
 
@@ -625,7 +625,7 @@ export function exportSingleReportPDF(report: DailyReport, projectName: string) 
     filename,
     blob,
     title: `Daily Report ${report.id}`,
-    text: `Constructfield Daily Site Report: ${report.id}`
+    text: `Scedih Daily Site Report: ${report.id}`
   });
 }
 
@@ -744,7 +744,7 @@ export function exportMultipleReportsPDF(reports: DailyReport[], projects: Proje
     doc.setFontSize(7.5);
     doc.setTextColor(...textMuted);
     doc.setFont('helvetica', 'normal');
-    doc.text('Constructfield Enterprise Operations  •  Official Export Record  •  Confidential', 14, 289);
+    doc.text('Scedih Enterprise Operations  •  Official Export Record  •  Confidential', 14, 289);
     doc.text(`Page ${i} of ${totalPages}   |   Exported: ${new Date().toLocaleDateString()}`, 196, 289, { align: 'right' });
   }
 
@@ -754,7 +754,7 @@ export function exportMultipleReportsPDF(reports: DailyReport[], projects: Proje
     filename,
     blob,
     title: 'Daily Activity Reports Export',
-    text: `Constructfield Daily Activity Reports Export`
+    text: `Scedih Daily Activity Reports Export`
   });
 }
 
@@ -805,7 +805,7 @@ export function exportConsolidatedActivityLogsPDF({
   doc.setFontSize(14);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.text('CONSTRUCTFIELD  |  CONSOLIDATED ACTIVITY LOGS', 14, 13);
+  doc.text('SCEDIH  |  CONSOLIDATED ACTIVITY LOGS', 14, 13);
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
@@ -989,7 +989,7 @@ export function exportConsolidatedActivityLogsPDF({
     doc.setPage(i);
     doc.setFontSize(7.5);
     doc.setTextColor(150);
-    doc.text(`Constructfield  |  Consolidated Daily Activity Logs Report  •  Page ${i} of ${totalPages}`, 14, 288);
+    doc.text(`Scedih  |  Consolidated Daily Activity Logs Report  •  Page ${i} of ${totalPages}`, 14, 288);
     doc.text(`Confidential • Project Audit Trail`, 145, 288);
   }
 
@@ -1000,6 +1000,6 @@ export function exportConsolidatedActivityLogsPDF({
     filename,
     blob,
     title: 'Consolidated Activity Logs',
-    text: `Constructfield Consolidated Activity Logs Report - ${reportDate}`
+    text: `Scedih Consolidated Activity Logs Report - ${reportDate}`
   });
 }

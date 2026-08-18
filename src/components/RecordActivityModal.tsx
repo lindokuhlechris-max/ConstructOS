@@ -169,7 +169,7 @@ export function RecordActivityModal({ onClose, onReportGenerated, projectId }: R
       filename,
       blob,
       title: `Daily Report: ${report.id}`,
-      text: `Constructfield Daily Activity Report - ${report.date}`
+      text: `Scedih Daily Activity Report - ${report.date}`
     });
   };
 

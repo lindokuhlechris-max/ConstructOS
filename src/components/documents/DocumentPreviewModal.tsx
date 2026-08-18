@@ -338,6 +338,28 @@ export function DocumentPreviewModal({
                 )}
               </div>
 
+              {/* Linked QA/QC Inspection Ribbon */}
+              {doc.linkedQAInspectionId && (
+                <div className="p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/40 dark:bg-emerald-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start sm:items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 shrink-0">
+                      <FileCheck className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                        Linked QA/QC Inspection
+                      </div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2 flex-wrap mt-0.5">
+                        <span>{doc.linkedQAInspectionTitle || 'Quality Inspection Record'}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-mono">
+                          {doc.linkedQAInspectionId}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Dedicated In-Browser Viewer Container */}
               {isLoadingBlob ? (
                 <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-12 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col items-center justify-center text-center min-h-[300px]">

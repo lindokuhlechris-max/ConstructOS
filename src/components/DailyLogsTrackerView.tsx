@@ -527,13 +527,13 @@ export function DailyLogsTrackerView({ onOpenActivityDetail }: DailyLogsTrackerV
       const margin = 36;
       const contentWidth = pageWidth - margin * 2;
 
-      const brandBlue = [11, 95, 255];     // #0B5FFF
-      const darkNavy = [15, 23, 42];       // slate-900
-      const slateMuted = [100, 116, 139];   // slate-500
-      const cardBg = [248, 250, 252];       // slate-50
-      const borderColor = [226, 232, 240]; // slate-200
-      const emeraldColor = [5, 150, 105];  // emerald-600
-      const roseColor = [225, 29, 72];     // rose-600
+      const brandBlue: [number, number, number] = [11, 95, 255];     // #0B5FFF
+      const darkNavy: [number, number, number] = [15, 23, 42];       // slate-900
+      const slateMuted: [number, number, number] = [100, 116, 139];   // slate-500
+      const cardBg: [number, number, number] = [248, 250, 252];       // slate-50
+      const borderColor: [number, number, number] = [226, 232, 240]; // slate-200
+      const emeraldColor: [number, number, number] = [5, 150, 105];  // emerald-600
+      const roseColor: [number, number, number] = [225, 29, 72];     // rose-600
 
       // Corporate Header Banner
       doc.setFillColor(brandBlue[0], brandBlue[1], brandBlue[2]);
@@ -542,7 +542,7 @@ export function DailyLogsTrackerView({ onOpenActivityDetail }: DailyLogsTrackerV
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(15);
-      doc.text('CONSTRUCTFIELD ENTERPRISE', margin, 24);
+      doc.text('SCEDIH ENTERPRISE', margin, 24);
 
       doc.setFontSize(9.5);
       doc.setFont('helvetica', 'normal');
@@ -704,7 +704,7 @@ export function DailyLogsTrackerView({ onOpenActivityDetail }: DailyLogsTrackerV
         doc.setFontSize(7);
         doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
         doc.text(
-          `Constructfield Enterprise Site Diary  |  Shift Date: ${selectedDate}  |  Generated ${new Date().toLocaleDateString()}`,
+          `Scedih Enterprise Site Diary  |  Shift Date: ${selectedDate}  |  Generated ${new Date().toLocaleDateString()}`,
           margin,
           doc.internal.pageSize.getHeight() - 15
         );
@@ -716,7 +716,7 @@ export function DailyLogsTrackerView({ onOpenActivityDetail }: DailyLogsTrackerV
         filename: `daily_shift_log_${selectedDate}.pdf`,
         blob,
         title: `Daily Shift Log - ${selectedDate}`,
-        text: `Constructfield Daily Shift Log for ${selectedDate}`
+        text: `Scedih Daily Shift Log for ${selectedDate}`
       });
     } catch (err) {
       console.error('Failed to export daily shift PDF:', err);

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { SubTask, SubTaskCategory, SubTaskMeasurementType, SubTaskChecklistItem, SurveySectionRecord } from '../types';
+import { SubTask, SubTaskCategory, SubTaskMeasurementType, SubTaskChecklistItem, SurveySectionRecord, SubTaskHoldPointSignOff, ActivityMeasurementPresets } from '../types';
 import { WORKFLOW_TEMPLATES } from '../data/activityTemplates';
 import { Button, Badge } from './ui';
 import { 
@@ -10,10 +10,11 @@ import {
   CornerDownRight, CheckSquare, Sparkle, Info, Search, Users, UserCheck,
   Compass, Link2, Unlink, ExternalLink, Scale, Ruler, Square, Box, Hash,
   Percent, ToggleLeft, ToggleRight, ListChecks, ListTodo,
-  LayoutGrid, ListOrdered, List
+  LayoutGrid, ListOrdered, List, SlidersHorizontal
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { getPersonInitials, getSubtaskProgressionNumber } from '../lib/labourUtils';
+import { getPersonInitials, getSubtaskProgressionNumber, inferSubtaskMeasurementType } from '../lib/labourUtils';
+import { MeasurementPresetsModal } from './MeasurementPresetsModal';
 
 export const MEASUREMENT_TYPES: {
   type: SubTaskMeasurementType;
@@ -23,6 +24,8 @@ export const MEASUREMENT_TYPES: {
   presetUnits: string[];
   placeholder: string;
   description: string;
+  defaultTarget?: number;
+  defaultStep: number;
 }[] = [
   {
     type: 'Quantity',
@@ -31,16 +34,20 @@ export const MEASUREMENT_TYPES: {
     defaultUnit: 'units',
     presetUnits: ['units', 'items', 'batches', 'sets', 'loads'],
     placeholder: 'e.g. 100',
-    description: 'General quantified or numerical deliverables'
+    description: 'General quantified or numerical deliverables',
+    defaultTarget: 100,
+    defaultStep: 1
   },
   {
     type: 'Length',
     label: 'Length',
     emoji: '📏',
     defaultUnit: 'm',
-    presetUnits: ['m', 'km', 'cm', 'mm', 'ft', 'yd'],
+    presetUnits: ['m', 'km', 'cm', 'mm', 'ft', 'yd', 'lin.m'],
     placeholder: 'e.g. 433',
-    description: 'Linear trenching, conduit, piping, or corridor distance'
+    description: 'Linear trenching, conduit, piping, or corridor distance',
+    defaultTarget: 433,
+    defaultStep: 10
   },
   {
     type: 'Area',
@@ -49,7 +56,9 @@ export const MEASUREMENT_TYPES: {
     defaultUnit: 'm²',
     presetUnits: ['m²', 'ha', 'sq ft', 'sq yd', 'acres'],
     placeholder: 'e.g. 250',
-    description: 'Surface paving, clearing, excavation footprint or painting'
+    description: 'Surface paving, clearing, excavation footprint or painting',
+    defaultTarget: 250,
+    defaultStep: 25
   },
   {
     type: 'Volume',
@@ -58,7 +67,9 @@ export const MEASUREMENT_TYPES: {
     defaultUnit: 'm³',
     presetUnits: ['m³', 'L', 'cu yd', 'cu ft', 'gallons'],
     placeholder: 'e.g. 500',
-    description: 'Bedding sand, concrete pour, aggregate, or bulk earthworks'
+    description: 'Bedding sand, concrete pour, aggregate, or bulk earthworks',
+    defaultTarget: 100,
+    defaultStep: 5
   },
   {
     type: 'Weight',
@@ -67,7 +78,9 @@ export const MEASUREMENT_TYPES: {
     defaultUnit: 'tons',
     presetUnits: ['tons', 't', 'kg', 'lbs'],
     placeholder: 'e.g. 25',
-    description: 'Steel rebar, asphalt, gravel, or structural tonnage'
+    description: 'Steel rebar, asphalt, gravel, or structural tonnage',
+    defaultTarget: 25,
+    defaultStep: 1
   },
   {
     type: 'Count',
@@ -76,7 +89,9 @@ export const MEASUREMENT_TYPES: {
     defaultUnit: 'items',
     presetUnits: ['poles', 'panels', 'fixtures', 'joints', 'pipes', 'items', 'units'],
     placeholder: 'e.g. 16',
-    description: 'Number of individual component installations'
+    description: 'Number of individual component installations',
+    defaultTarget: 10,
+    defaultStep: 1
   },
   {
     type: 'Percentage',
@@ -85,7 +100,9 @@ export const MEASUREMENT_TYPES: {
     defaultUnit: '%',
     presetUnits: ['%'],
     placeholder: '0 - 100%',
-    description: 'Track progress as an overall percentage from 0% to 100%'
+    description: 'Track progress as an overall percentage from 0% to 100%',
+    defaultTarget: 100,
+    defaultStep: 5
   },
   {
     type: 'Checklist',
@@ -94,7 +111,9 @@ export const MEASUREMENT_TYPES: {
     defaultUnit: 'items',
     presetUnits: ['items'],
     placeholder: 'Add steps...',
-    description: 'Break down subtask into interactive multi-step quality items'
+    description: 'Break down subtask into interactive multi-step quality items',
+    defaultTarget: 5,
+    defaultStep: 1
   },
   {
     type: 'Sign-off',
@@ -103,7 +122,9 @@ export const MEASUREMENT_TYPES: {
     defaultUnit: 'sign-off',
     presetUnits: ['sign-off'],
     placeholder: 'QA Gate',
-    description: 'Mandatory QA Inspection Hold Point requiring formal authorization'
+    description: 'Mandatory QA Inspection Hold Point requiring formal authorization',
+    defaultTarget: 1,
+    defaultStep: 1
   },
   {
     type: 'Milestone',
@@ -112,7 +133,9 @@ export const MEASUREMENT_TYPES: {
     defaultUnit: 'checkpoint',
     presetUnits: ['checkpoint'],
     placeholder: 'Target date',
-    description: 'Key contractual delivery milestone or stage gate date'
+    description: 'Key contractual delivery milestone or stage gate date',
+    defaultTarget: 1,
+    defaultStep: 1
   },
   {
     type: 'Yes/No',
@@ -121,7 +144,9 @@ export const MEASUREMENT_TYPES: {
     defaultUnit: 'done',
     presetUnits: ['done'],
     placeholder: 'Completed / Pending',
-    description: 'Fast binary Done or Pending state'
+    description: 'Fast binary Done or Pending state',
+    defaultTarget: 1,
+    defaultStep: 1
   },
 ];
 
@@ -544,6 +569,123 @@ export function SubTaskManager({
   const [isAdding, setIsAdding] = useState(false);
   const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
+  const [isPresetsModalOpen, setIsPresetsModalOpen] = useState(false);
+
+  // Retrieve current active activity and its measurement presets
+  const currentActivity = React.useMemo(() => {
+    return (activities || []).find(a => a.id === activityId);
+  }, [activities, activityId]);
+
+  const activityPresets: ActivityMeasurementPresets = React.useMemo(() => {
+    return currentActivity?.measurementPresets || {};
+  }, [currentActivity]);
+
+  // Save presets handler with smart, type-aware bulk propagation
+  const handleSavePresets = (newPresets: ActivityMeasurementPresets, propagateToExisting: boolean) => {
+    if (currentActivity) {
+      updateActivity({
+        ...currentActivity,
+        measurementPresets: newPresets
+      });
+    }
+
+    if (propagateToExisting && subtasks.length > 0) {
+      const updated: SubTask[] = subtasks.map(st => {
+        const mType: SubTaskMeasurementType = inferSubtaskMeasurementType(st);
+        const preset = newPresets[mType];
+
+        if (mType === 'Sign-off') {
+          return {
+            ...st,
+            measurementType: 'Sign-off',
+            isHoldPoint: true,
+            unit: 'sign-off',
+            targetQuantity: 1,
+            stepIncrement: 1
+          };
+        }
+
+        if (mType === 'Milestone') {
+          return {
+            ...st,
+            measurementType: 'Milestone',
+            isMilestone: true,
+            unit: 'checkpoint',
+            targetQuantity: 1,
+            stepIncrement: 1
+          };
+        }
+
+        if (mType === 'Percentage') {
+          return {
+            ...st,
+            measurementType: 'Percentage',
+            unit: '%',
+            targetQuantity: 100,
+            stepIncrement: preset?.stepIncrement || 5
+          };
+        }
+
+        if (mType === 'Yes/No') {
+          return {
+            ...st,
+            measurementType: 'Yes/No',
+            unit: 'done',
+            targetQuantity: 1,
+            stepIncrement: 1
+          };
+        }
+
+        if (mType === 'Checklist') {
+          const stepCount = st.checklist?.length || preset?.targetQuantity || 5;
+          return {
+            ...st,
+            measurementType: 'Checklist',
+            unit: 'items',
+            targetQuantity: stepCount,
+            stepIncrement: 1
+          };
+        }
+
+        // For Length, Area, Volume, Weight, Count, Quantity:
+        if (preset && preset.targetQuantity !== undefined && preset.targetQuantity > 0) {
+          const newTarget = preset.targetQuantity;
+          const defaultFallbackUnit = mType === 'Length' ? 'm' : mType === 'Area' ? 'm²' : mType === 'Volume' ? 'm³' : mType === 'Weight' ? 'tons' : mType === 'Count' ? 'items' : 'units';
+          const newUnit = preset.unit || defaultFallbackUnit;
+          const newStep = preset.stepIncrement || (mType === 'Length' ? 10 : mType === 'Area' ? 50 : mType === 'Volume' ? 5 : 1);
+          
+          let compQ = st.completedQuantity ?? 0;
+          let newStatus = st.status;
+
+          if (st.status === 'Completed') {
+            // Keep completed and align completedQuantity to the new target
+            compQ = newTarget;
+          } else if (compQ >= newTarget) {
+            newStatus = 'Completed';
+          } else if (compQ > 0) {
+            newStatus = 'In Progress';
+          }
+
+          return {
+            ...st,
+            measurementType: mType,
+            targetQuantity: newTarget,
+            completedQuantity: compQ,
+            unit: newUnit,
+            stepIncrement: newStep,
+            status: newStatus
+          };
+        }
+
+        return {
+          ...st,
+          measurementType: mType
+        };
+      });
+
+      handleSubtasksChange(updated);
+    }
+  };
   
   // Cross-Activity Linking Memos: group other activities by discipline/workPackage/category
   const otherActivities = React.useMemo(() => {
@@ -575,6 +717,7 @@ export function SubTaskManager({
   const [newChecklistItemText, setNewChecklistItemText] = useState('');
   const [targetQuantity, setTargetQuantity] = useState<number | ''>('');
   const [unit, setUnit] = useState('units');
+  const [stepIncrement, setStepIncrement] = useState<number | undefined>(undefined);
   const [assignedWorkers, setAssignedWorkers] = useState<string[]>([]);
   const [assignedEquipmentList, setAssignedEquipmentList] = useState<string[]>([]);
   const [assignedTeams, setAssignedTeams] = useState<string[]>([]);
@@ -599,6 +742,7 @@ export function SubTaskManager({
   const [editTargetQty, setEditTargetQty] = useState<number | ''>('');
   const [editCompletedQty, setEditCompletedQty] = useState<number | ''>('');
   const [editUnit, setEditUnit] = useState('units');
+  const [editStepIncrement, setEditStepIncrement] = useState<number | undefined>(undefined);
   const [editAssignedWorkers, setEditAssignedWorkers] = useState<string[]>([]);
   const [editAssignedEquipmentList, setEditAssignedEquipmentList] = useState<string[]>([]);
   const [editAssignedTeams, setEditAssignedTeams] = useState<string[]>([]);
@@ -615,48 +759,46 @@ export function SubTaskManager({
   const [editRequiresSupervisorSignOff, setEditRequiresSupervisorSignOff] = useState(false);
   const [editLinkedActivityId, setEditLinkedActivityId] = useState<string>('');
 
-  // Measurement Type change helper
+  // Measurement Type change helper with Smart Preset Auto-fill
   const handleMeasurementTypeChange = (newType: SubTaskMeasurementType, isEdit = false) => {
     const config = MEASUREMENT_TYPES.find(m => m.type === newType);
     if (!config) return;
 
+    const preset = activityPresets[newType];
+    const defaultQty = preset?.targetQuantity ?? (
+      newType === 'Percentage' ? 100 :
+      (newType === 'Yes/No' || newType === 'Sign-off' || newType === 'Milestone') ? 1 :
+      config.defaultTarget ?? ''
+    );
+    const defaultU = preset?.unit ?? (
+      newType === 'Percentage' ? '%' :
+      newType === 'Checklist' ? 'items' :
+      newType === 'Sign-off' ? 'sign-off' :
+      newType === 'Milestone' ? 'checkpoint' :
+      newType === 'Yes/No' ? 'done' :
+      config.defaultUnit
+    );
+    const defaultS = preset?.stepIncrement ?? config.defaultStep ?? 1;
+
     if (isEdit) {
       setEditMeasurementType(newType);
-      if (newType === 'Percentage') {
-        setEditUnit('%');
-        setEditTargetQty(100);
-      } else if (newType === 'Checklist') {
-        setEditUnit('items');
-      } else if (newType === 'Sign-off') {
-        setEditUnit('sign-off');
+      setEditUnit(defaultU);
+      setEditTargetQty(defaultQty);
+      setEditStepIncrement(defaultS);
+      if (newType === 'Sign-off') {
         setEditIsHoldPoint(true);
       } else if (newType === 'Milestone') {
-        setEditUnit('checkpoint');
         setEditIsMilestone(true);
-      } else if (newType === 'Yes/No') {
-        setEditUnit('done');
-        setEditTargetQty(1);
-      } else {
-        setEditUnit(config.defaultUnit);
       }
     } else {
       setMeasurementType(newType);
-      if (newType === 'Percentage') {
-        setUnit('%');
-        setTargetQuantity(100);
-      } else if (newType === 'Checklist') {
-        setUnit('items');
-      } else if (newType === 'Sign-off') {
-        setUnit('sign-off');
+      setUnit(defaultU);
+      setTargetQuantity(defaultQty);
+      setStepIncrement(defaultS);
+      if (newType === 'Sign-off') {
         setIsHoldPoint(true);
       } else if (newType === 'Milestone') {
-        setUnit('checkpoint');
         setIsMilestone(true);
-      } else if (newType === 'Yes/No') {
-        setUnit('done');
-        setTargetQuantity(1);
-      } else {
-        setUnit(config.defaultUnit);
       }
     }
   };
@@ -1337,6 +1479,7 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
       targetQuantity: targetQ,
       completedQuantity: 0,
       unit: measurementType === 'Percentage' ? '%' : (unit || 'units'),
+      stepIncrement: stepIncrement || (activityPresets[measurementType]?.stepIncrement) || undefined,
       assignedWorkers: assignedWorkers.length > 0 ? assignedWorkers : undefined,
       assignedPerson: assignedWorkers.length > 0 ? assignedWorkers.join(', ') : undefined,
       assignedEquipmentList: assignedEquipmentList.length > 0 ? assignedEquipmentList : undefined,
@@ -1390,6 +1533,7 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
     setNewChecklistItemText('');
     setTargetQuantity('');
     setUnit('units');
+    setStepIncrement(undefined);
     setAssignedWorkers([]);
     setAssignedEquipmentList([]);
     setAssignedTeams([]);
@@ -1413,19 +1557,14 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
     setEditTitle(st.title);
     setEditCategory(st.category);
     
-    const parsedMeasurementType: SubTaskMeasurementType = st.measurementType || (
-      st.isMilestone ? 'Milestone' :
-      st.isHoldPoint ? 'Sign-off' :
-      st.unit === '%' ? 'Percentage' :
-      (st.checklist && st.checklist.length > 0) ? 'Checklist' :
-      'Quantity'
-    );
+    const parsedMeasurementType: SubTaskMeasurementType = inferSubtaskMeasurementType(st);
     setEditMeasurementType(parsedMeasurementType);
     setEditChecklist(st.checklist ? [...st.checklist] : []);
     setEditNewChecklistItemText('');
     setEditTargetQty(st.targetQuantity ?? '');
     setEditCompletedQty(st.completedQuantity ?? 0);
-    setEditUnit(st.unit || 'units');
+    setEditUnit(st.unit || (parsedMeasurementType === 'Length' ? 'm' : parsedMeasurementType === 'Area' ? 'm²' : parsedMeasurementType === 'Volume' ? 'm³' : parsedMeasurementType === 'Weight' ? 'tons' : parsedMeasurementType === 'Count' ? 'items' : parsedMeasurementType === 'Percentage' ? '%' : parsedMeasurementType === 'Sign-off' ? 'sign-off' : parsedMeasurementType === 'Milestone' ? 'checkpoint' : 'units'));
+    setEditStepIncrement(st.stepIncrement ?? activityPresets[parsedMeasurementType]?.stepIncrement);
     
     const parsedWorkers = st.assignedWorkers || (st.assignedPerson ? st.assignedPerson.split(',').map(s => s.trim()).filter(Boolean) : []);
     const parsedEquipment = st.assignedEquipmentList || (st.assignedEquipment ? st.assignedEquipment.split(',').map(s => s.trim()).filter(Boolean) : []);
@@ -1516,6 +1655,7 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
       targetQuantity: targetQ,
       completedQuantity: compQ,
       unit: editMeasurementType === 'Percentage' ? '%' : (editUnit || 'units'),
+      stepIncrement: editStepIncrement !== undefined ? editStepIncrement : currentSub?.stepIncrement,
       assignedWorkers: editAssignedWorkers.length > 0 ? editAssignedWorkers : undefined,
       assignedPerson: editAssignedWorkers.length > 0 ? editAssignedWorkers.join(', ') : undefined,
       assignedEquipmentList: editAssignedEquipmentList.length > 0 ? editAssignedEquipmentList : undefined,
@@ -1677,36 +1817,48 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
           </p>
         </div>
         <div className="flex gap-2 shrink-0 items-center flex-wrap">
-          {/* View Mode Toggle: Clean Progression List vs Cards View */}
+          {/* View Mode Toggle: Clean Progression List vs Cards View (Icons Only) */}
           {totalCount > 0 && (
             <div className="inline-flex p-0.5 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                className={`p-2 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
                   viewMode === 'list'
                     ? 'bg-white dark:bg-slate-900 text-[#0B5FFF] shadow-xs'
                     : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                 }`}
-                title="Clean Progression List View (Numbered Sequence)"
+                title="Progression List View"
+                aria-label="Progression List View"
               >
-                <ListOrdered className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Progression List</span>
+                <ListOrdered className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('cards')}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                className={`p-2 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
                   viewMode === 'cards'
                     ? 'bg-white dark:bg-slate-900 text-[#0B5FFF] shadow-xs'
                     : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                 }`}
-                title="Detailed Cards View"
+                title="Card View"
+                aria-label="Card View"
               >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Card View</span>
+                <LayoutGrid className="h-4 w-4" />
               </button>
             </div>
+          )}
+
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setIsPresetsModalOpen(true)}
+              className="p-2 rounded-xl text-xs font-bold flex items-center justify-center transition-all border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-[#0B5FFF] hover:border-[#0B5FFF]/40 shadow-2xs"
+              title="Subtask Measurement Presets"
+              aria-label="Subtask Measurement Presets"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-[#0B5FFF]" />
+            </button>
           )}
 
           <button
@@ -3164,49 +3316,137 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                                           <div className="flex items-center gap-2.5 shrink-0 self-end lg:self-center flex-wrap sm:flex-nowrap">
                                             {/* Stepper / Deliverable Controls */}
                                             <div className="flex items-center gap-1.5">
-                                              {st.targetQuantity ? (
-                                                <div className="flex items-center gap-1">
-                                                  {!readOnly && (
+                                              {(() => {
+                                                const mType = inferSubtaskMeasurementType(st);
+                                                
+                                                if (mType === 'Sign-off' || st.isHoldPoint) {
+                                                  return st.holdPointSignOff?.approved ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300">
+                                                      <ShieldCheck className="h-3 w-3 text-emerald-600" /> Signed Off
+                                                    </span>
+                                                  ) : (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200">
+                                                      <Lock className="h-2.5 w-2.5 text-rose-500" /> QA Hold Gate
+                                                    </span>
+                                                  );
+                                                }
+
+                                                if (mType === 'Percentage') {
+                                                  const step = st.stepIncrement || 5;
+                                                  return (
+                                                    <div className="flex items-center gap-1">
+                                                      {!readOnly && (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleUpdateSubtaskQuantity(st.id, Math.max(0, (st.completedQuantity || 0) - step))}
+                                                          className="w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-[10px]"
+                                                          title={`Decrease (-${step}%)`}
+                                                        >
+                                                          <Minus className="h-2.5 w-2.5" />
+                                                        </button>
+                                                      )}
+                                                      <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        disabled={readOnly}
+                                                        value={st.completedQuantity ?? (st.status === 'Completed' ? 100 : 0)}
+                                                        onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
+                                                        className="w-12 h-6 text-center font-bold text-[11px] border border-indigo-200 dark:border-indigo-800 rounded bg-white dark:bg-slate-900 text-indigo-600"
+                                                      />
+                                                      <span className="text-[10px] text-indigo-600 font-bold">%</span>
+                                                      {!readOnly && (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleUpdateSubtaskQuantity(st.id, Math.min(100, (st.completedQuantity || 0) + step))}
+                                                          className="w-5 h-5 rounded bg-indigo-100 dark:bg-indigo-950 hover:bg-indigo-200 text-indigo-600 flex items-center justify-center font-bold text-[10px]"
+                                                          title={`Increase (+${step}%)`}
+                                                        >
+                                                          <Plus className="h-2.5 w-2.5" />
+                                                        </button>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                }
+
+                                                if (mType === 'Yes/No') {
+                                                  return (
                                                     <button
                                                       type="button"
-                                                      onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) - 1)}
-                                                      className="w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-[10px]"
-                                                      title="Decrease Quantity"
+                                                      disabled={readOnly}
+                                                      onClick={() => handleToggleStatus(st.id)}
+                                                      className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${
+                                                        st.status === 'Completed'
+                                                          ? 'bg-emerald-600 text-white shadow-xs'
+                                                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                                                      }`}
                                                     >
-                                                      <Minus className="h-2.5 w-2.5" />
+                                                      {st.status === 'Completed' ? <Check className="h-2.5 w-2.5" /> : <X className="h-2.5 w-2.5" />}
+                                                      {st.status === 'Completed' ? 'Done' : 'Pending'}
                                                     </button>
-                                                  )}
-                                                  <input
-                                                    type="number"
-                                                    min="0"
-                                                    max={st.targetQuantity}
-                                                    disabled={readOnly}
-                                                    value={st.completedQuantity || 0}
-                                                    onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
-                                                    className="w-12 h-6 text-center font-bold text-[11px] border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-[#0B5FFF]"
-                                                  />
-                                                  <span className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
-                                                    / {st.targetQuantity} {st.unit}
-                                                  </span>
-                                                  {!readOnly && (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) + 1)}
-                                                      className="w-5 h-5 rounded bg-blue-100 dark:bg-blue-900/60 hover:bg-blue-200 text-[#0B5FFF] flex items-center justify-center font-bold text-[10px]"
-                                                      title="Increase Quantity"
-                                                    >
-                                                      <Plus className="h-2.5 w-2.5" />
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              ) : st.measurementType === 'Checklist' && st.checklist && st.checklist.length > 0 ? (
-                                                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
-                                                  <ListChecks className="h-3 w-3 text-emerald-600" />
-                                                  {st.checklist.filter(c => c.completed).length}/{st.checklist.length} Steps
-                                                </span>
-                                              ) : (
-                                                <span className="text-[10px] text-slate-400 font-medium">{st.status}</span>
-                                              )}
+                                                  );
+                                                }
+
+                                                if (mType === 'Checklist' && st.checklist && st.checklist.length > 0) {
+                                                  return (
+                                                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                                                      <ListChecks className="h-3 w-3 text-emerald-600" />
+                                                      {st.checklist.filter(c => c.completed).length}/{st.checklist.length} Steps
+                                                    </span>
+                                                  );
+                                                }
+
+                                                if (mType === 'Milestone' || st.isMilestone) {
+                                                  return (
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200">
+                                                      <Flag className="h-2.5 w-2.5 text-purple-600" /> Checkpoint
+                                                    </span>
+                                                  );
+                                                }
+
+                                                // Quantified / Length / Area / Volume / Weight / Count / Quantity:
+                                                if (st.targetQuantity) {
+                                                  const step = st.stepIncrement || (mType === 'Length' ? 10 : mType === 'Area' ? 50 : mType === 'Volume' ? 5 : 1);
+                                                  return (
+                                                    <div className="flex items-center gap-1">
+                                                      {!readOnly && (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) - step)}
+                                                          className="w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-[10px]"
+                                                          title={`Decrease Quantity (-${step} ${st.unit || ''})`}
+                                                        >
+                                                          <Minus className="h-2.5 w-2.5" />
+                                                        </button>
+                                                      )}
+                                                      <input
+                                                        type="number"
+                                                        min="0"
+                                                        max={st.targetQuantity}
+                                                        disabled={readOnly}
+                                                        value={st.completedQuantity || 0}
+                                                        onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
+                                                        className="w-12 h-6 text-center font-bold text-[11px] border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-[#0B5FFF]"
+                                                      />
+                                                      <span className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
+                                                        / {st.targetQuantity} {st.unit}
+                                                      </span>
+                                                      {!readOnly && (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) + step)}
+                                                          className="w-5 h-5 rounded bg-blue-100 dark:bg-blue-900/60 hover:bg-blue-200 text-[#0B5FFF] flex items-center justify-center font-bold text-[10px]"
+                                                          title={`Increase Quantity (+${step} ${st.unit || ''})`}
+                                                        >
+                                                          <Plus className="h-2.5 w-2.5" />
+                                                        </button>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                }
+
+                                                return <span className="text-[10px] text-slate-400 font-medium">{st.status}</span>;
+                                              })()}
 
                                               {/* Mini Progress Bar */}
                                               <div className="w-14 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden shrink-0 hidden sm:block">
@@ -3585,80 +3825,154 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                                             <span className="text-xs font-bold text-slate-600 dark:text-slate-300 shrink-0">
                                               Progress:
                                             </span>
-                                            {hasChildren ? (
-                                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                                {completedChildrenCount} / {childTasks.length} child tasks completed
-                                              </span>
-                                            ) : st.measurementType === 'Checklist' && st.checklist ? (
-                                              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
-                                                <ListChecks className="h-3.5 w-3.5 text-emerald-600" />
-                                                {st.checklist.filter(c => c.completed).length} / {st.checklist.length} steps checked
-                                              </span>
-                                            ) : st.measurementType === 'Percentage' ? (
-                                              <div className="flex items-center gap-1.5">
-                                                <input
-                                                  type="number"
-                                                  min="0"
-                                                  max="100"
-                                                  disabled={readOnly}
-                                                  value={st.completedQuantity ?? (st.status === 'Completed' ? 100 : 0)}
-                                                  onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
-                                                  className="w-14 h-7 text-center font-bold text-xs border border-indigo-300 dark:border-indigo-700 rounded bg-white dark:bg-slate-900 text-indigo-600"
-                                                />
-                                                <span className="text-xs font-bold text-indigo-600">%</span>
-                                              </div>
-                                            ) : st.measurementType === 'Yes/No' ? (
-                                              <button
-                                                type="button"
-                                                disabled={readOnly}
-                                                onClick={() => handleToggleStatus(st.id)}
-                                                className={`px-2.5 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all ${
-                                                  st.status === 'Completed'
-                                                    ? 'bg-emerald-600 text-white shadow-xs'
-                                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300'
-                                                }`}
-                                              >
-                                                {st.status === 'Completed' ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                                                {st.status === 'Completed' ? 'Yes (Done)' : 'No (Pending)'}
-                                              </button>
-                                            ) : st.targetQuantity ? (
-                                              <div className="flex items-center gap-1">
-                                                {!readOnly && (
+                                            {(() => {
+                                              const mType = inferSubtaskMeasurementType(st);
+
+                                              if (hasChildren) {
+                                                return (
+                                                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                    {completedChildrenCount} / {childTasks.length} child tasks completed
+                                                  </span>
+                                                );
+                                              }
+
+                                              if (mType === 'Sign-off' || st.isHoldPoint) {
+                                                return st.holdPointSignOff?.approved ? (
+                                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300">
+                                                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> QA Approved
+                                                  </span>
+                                                ) : (
                                                   <button
                                                     type="button"
-                                                    onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) - 1)}
-                                                    className="w-6 h-6 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold hover:bg-slate-300 text-xs"
-                                                    title="Decrease Completed Quantity"
+                                                    disabled={readOnly}
+                                                    onClick={() => {
+                                                      setSignOffSubtask(st);
+                                                      setSignOffInspectorName('Site QA/QC Engineer');
+                                                      setSignOffNotes('');
+                                                      setSignOffPhotoUrl('');
+                                                    }}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 hover:bg-rose-100 transition-colors"
                                                   >
-                                                    <Minus className="h-3 w-3" />
+                                                    <Lock className="h-3.5 w-3.5 text-rose-600" /> Sign-Off QA Gate
                                                   </button>
-                                                )}
-                                                <input
-                                                  type="number"
-                                                  min="0"
-                                                  max={st.targetQuantity}
-                                                  disabled={readOnly}
-                                                  value={st.completedQuantity || 0}
-                                                  onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
-                                                  className="w-14 h-7 text-center font-bold text-xs border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-[#0B5FFF]"
-                                                />
-                                                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                                                  / {st.targetQuantity} {st.unit}
-                                                </span>
-                                                {!readOnly && (
+                                                );
+                                              }
+
+                                              if (mType === 'Checklist' && st.checklist) {
+                                                return (
+                                                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                                                    <ListChecks className="h-3.5 w-3.5 text-emerald-600" />
+                                                    {st.checklist.filter(c => c.completed).length} / {st.checklist.length} steps checked
+                                                  </span>
+                                                );
+                                              }
+
+                                              if (mType === 'Percentage') {
+                                                const step = st.stepIncrement || 5;
+                                                return (
+                                                  <div className="flex items-center gap-1.5">
+                                                    {!readOnly && (
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleUpdateSubtaskQuantity(st.id, Math.max(0, (st.completedQuantity || 0) - step))}
+                                                        className="w-6 h-6 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold hover:bg-slate-300 text-xs"
+                                                        title={`Decrease (-${step}%)`}
+                                                      >
+                                                        <Minus className="h-3 w-3" />
+                                                      </button>
+                                                    )}
+                                                    <input
+                                                      type="number"
+                                                      min="0"
+                                                      max="100"
+                                                      disabled={readOnly}
+                                                      value={st.completedQuantity ?? (st.status === 'Completed' ? 100 : 0)}
+                                                      onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
+                                                      className="w-14 h-7 text-center font-bold text-xs border border-indigo-300 dark:border-indigo-700 rounded bg-white dark:bg-slate-900 text-indigo-600"
+                                                    />
+                                                    <span className="text-xs font-bold text-indigo-600">%</span>
+                                                    {!readOnly && (
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleUpdateSubtaskQuantity(st.id, Math.min(100, (st.completedQuantity || 0) + step))}
+                                                        className="w-6 h-6 rounded bg-indigo-100 dark:bg-indigo-950 hover:bg-indigo-200 text-indigo-600 flex items-center justify-center font-bold text-xs"
+                                                        title={`Increase (+${step}%)`}
+                                                      >
+                                                        <Plus className="h-3 w-3" />
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                );
+                                              }
+
+                                              if (mType === 'Yes/No') {
+                                                return (
                                                   <button
                                                     type="button"
-                                                    onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) + 1)}
-                                                    className="w-6 h-6 rounded bg-blue-100 dark:bg-blue-900/60 text-[#0B5FFF] dark:text-blue-300 flex items-center justify-center font-bold hover:bg-blue-200 text-xs"
-                                                    title="Increase Completed Quantity"
+                                                    disabled={readOnly}
+                                                    onClick={() => handleToggleStatus(st.id)}
+                                                    className={`px-2.5 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all ${
+                                                      st.status === 'Completed'
+                                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300'
+                                                    }`}
                                                   >
-                                                    <Plus className="h-3 w-3" />
+                                                    {st.status === 'Completed' ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                                                    {st.status === 'Completed' ? 'Yes (Done)' : 'No (Pending)'}
                                                   </button>
-                                                )}
-                                              </div>
-                                            ) : (
-                                              <span className="text-xs text-slate-500 font-medium">{st.status}</span>
-                                            )}
+                                                );
+                                              }
+
+                                              if (mType === 'Milestone' || st.isMilestone) {
+                                                return (
+                                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200">
+                                                    <Flag className="h-3 w-3 text-purple-600" /> Milestone Checkpoint
+                                                  </span>
+                                                );
+                                              }
+
+                                              if (st.targetQuantity) {
+                                                const step = st.stepIncrement || (mType === 'Length' ? 10 : mType === 'Area' ? 50 : mType === 'Volume' ? 5 : 1);
+                                                return (
+                                                  <div className="flex items-center gap-1">
+                                                    {!readOnly && (
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) - step)}
+                                                        className="w-6 h-6 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold hover:bg-slate-300 text-xs"
+                                                        title={`Decrease Completed Quantity (-${step} ${st.unit || ''})`}
+                                                      >
+                                                        <Minus className="h-3 w-3" />
+                                                      </button>
+                                                    )}
+                                                    <input
+                                                      type="number"
+                                                      min="0"
+                                                      max={st.targetQuantity}
+                                                      disabled={readOnly}
+                                                      value={st.completedQuantity || 0}
+                                                      onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
+                                                      className="w-14 h-7 text-center font-bold text-xs border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-[#0B5FFF]"
+                                                    />
+                                                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                                      / {st.targetQuantity} {st.unit}
+                                                    </span>
+                                                    {!readOnly && (
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) + step)}
+                                                        className="w-6 h-6 rounded bg-blue-100 dark:bg-blue-900/60 hover:bg-blue-200 text-[#0B5FFF] flex items-center justify-center font-bold text-xs"
+                                                        title={`Increase Completed Quantity (+${step} ${st.unit || ''})`}
+                                                      >
+                                                        <Plus className="h-3 w-3" />
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                );
+                                              }
+
+                                              return <span className="text-xs text-slate-500 font-medium">{st.status}</span>;
+                                            })()}
                                           </div>
 
                                           {/* Mini Progress Visual Bar & Quick Complete */}
@@ -3859,6 +4173,18 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
           </div>
         </div>
       )}
+
+      {/* Measurement Presets Configuration Modal */}
+      <MeasurementPresetsModal
+        isOpen={isPresetsModalOpen}
+        onClose={() => setIsPresetsModalOpen(false)}
+        activityId={activityId}
+        activityName={activityName || currentActivity?.name}
+        activityTargetQuantity={currentActivity?.targetQuantity}
+        activityUnit={currentActivity?.unit}
+        currentPresets={activityPresets}
+        onSavePresets={handleSavePresets}
+      />
     </div>
   );
 }

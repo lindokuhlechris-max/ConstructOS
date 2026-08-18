@@ -34,7 +34,8 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  SlidersHorizontal
+  SlidersHorizontal,
+  FileCheck
 } from 'lucide-react';
 import { DocumentCategory, DocumentFileType, DocumentItem, DocumentStatus } from '../types';
 import { printDocumentsSummary } from '../lib/pdfPrint';
@@ -96,7 +97,7 @@ export function Documents() {
   const [assignDoc, setAssignDoc] = useState<DocumentItem | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Auto-open document from URL search param ?id=DOC-...
+  // Auto-open document from URL search param ?id=DOC-... or filter by category ?category=...
   useEffect(() => {
     const docId = searchParams.get('id');
     if (docId && documents.length > 0) {
@@ -104,6 +105,14 @@ export function Documents() {
       if (match) {
         setPreviewDoc(match);
       }
+    }
+    const cat = searchParams.get('category');
+    if (cat && (CATEGORIES as string[]).includes(cat)) {
+      setSelectedCategory(cat as any);
+    }
+    const qa = searchParams.get('qaId');
+    if (qa) {
+      setSearchQuery(qa);
     }
   }, [searchParams, documents]);
 
@@ -736,6 +745,24 @@ export function Documents() {
                         </div>
                       )}
                     </div>
+
+                    {/* Linked QA/QC Inspection Badge */}
+                    {doc.linkedQAInspectionId && (
+                      <div className="p-2 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1 uppercase tracking-wider">
+                            <FileCheck className="h-3 w-3 text-emerald-600" />
+                            QA/QC Inspection
+                          </div>
+                          <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                            {doc.linkedQAInspectionTitle || 'Quality Inspection'}
+                          </div>
+                          <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono">
+                            {doc.linkedQAInspectionId}
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Tags */}
                     {doc.tags && doc.tags.length > 0 && (

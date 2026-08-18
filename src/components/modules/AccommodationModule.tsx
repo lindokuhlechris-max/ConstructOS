@@ -12,6 +12,7 @@ import {
   AccommodationOwnership, AccommodationStatus, UtilityType, Employee, RentalRateType 
 } from '../../types';
 import { AccommodationDetail } from '../AccommodationDetail';
+import { AccommodationPdfModal } from '../AccommodationPdfModal';
 import { calculateAccommodationMonthlyCost, getAccommodationRateDescription, generateAllAccommodationsSummaryPDF } from '../../lib/pdfAccommodation';
 import { exportAccommodationsToExcel } from '../../lib/csvExport';
 
@@ -34,7 +35,8 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     addAccommodationUtility, 
     deleteAccommodationUtility,
     deleteAccommodationPayment,
-    hasPermission
+    hasPermission,
+    currentUserProfile
   } = useAppContext();
 
   const canEditAccommodation = hasPermission('labour') || hasPermission('settings');
@@ -47,6 +49,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
   const [statusFilter, setStatusFilter] = useState<string>('All');
 
   // Modals
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState<AccommodationUnit | null>(null);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -455,7 +458,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Constructfield_Accommodation_Utilities_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `Scedih_Accommodation_Utilities_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -490,7 +493,7 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Constructfield_Staff_Housing_Roster_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `Scedih_Staff_Housing_Roster_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -551,9 +554,9 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           <button
-            onClick={() => generateAllAccommodationsSummaryPDF(accommodations, accommodationUtilities, employees)}
+            onClick={() => setIsPdfModalOpen(true)}
             className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 rounded-xl transition-colors text-xs font-bold shadow-sm"
-            title="Download Executive Accommodations Portfolio Summary PDF"
+            title="Open Interactive Accommodation Print Engine & PDF Builder"
           >
             <Printer className="h-4 w-4 text-indigo-600 dark:text-indigo-400" /> Print Summary
           </button>
@@ -2358,6 +2361,22 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 6: INTERACTIVE PRINT ENGINE & PDF REPORT BUILDER                     */}
+      {/* ========================================================================= */}
+      {isPdfModalOpen && (
+        <AccommodationPdfModal
+          isOpen={isPdfModalOpen}
+          onClose={() => setIsPdfModalOpen(false)}
+          accommodations={accommodations}
+          utilities={accommodationUtilities}
+          employees={employees}
+          payments={accommodationPayments}
+          currentUserProfile={currentUserProfile}
+          defaultFilterLabel={searchTerm ? `Search query: "${searchTerm}"` : typeFilter !== 'All' ? `Type: ${typeFilter}` : 'All Accommodation Facilities'}
+        />
       )}
     </div>
   );

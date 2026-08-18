@@ -51,7 +51,7 @@ export async function downloadDocumentFile(fileUrl?: string, fileName?: string, 
   }
 
   // If we only have textContent or plain data
-  const content = textContent || `Constructfield Project Transmittal Document: ${fileName || 'Document'}\nGenerated at ${new Date().toISOString()}`;
+  const content = textContent || `Scedih Project Transmittal Document: ${fileName || 'Document'}\nGenerated at ${new Date().toISOString()}`;
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   await saveOrShareFile({
     filename: fileName || 'document.txt',

@@ -13,6 +13,10 @@ interface DocumentUploadModalProps {
   currentUser: string;
   projectId?: string;
   defaultActivityId?: string;
+  defaultCategory?: DocumentCategory;
+  defaultQAInspectionId?: string;
+  defaultQAInspectionTitle?: string;
+  lockCategory?: boolean;
 }
 
 const CATEGORIES: DocumentCategory[] = [
@@ -35,20 +39,30 @@ export function DocumentUploadModal({
   activities,
   currentUser,
   projectId = 'PRJ-9348',
-  defaultActivityId
+  defaultActivityId,
+  defaultCategory,
+  defaultQAInspectionId,
+  defaultQAInspectionTitle,
+  lockCategory = false
 }: DocumentUploadModalProps) {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<DocumentCategory>('Specifications & Specs');
+  const [category, setCategory] = useState<DocumentCategory>(defaultCategory || 'Specifications & Specs');
   const [status, setStatus] = useState<DocumentStatus>('Approved');
   const [version, setVersion] = useState('v1.0');
   const [linkedActivityId, setLinkedActivityId] = useState<string>(defaultActivityId || '');
   const [description, setDescription] = useState('');
   const [confidential, setConfidential] = useState(false);
   const [tagInput, setTagInput] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>(() => {
+    const initialTags: string[] = [];
+    if (defaultQAInspectionId) {
+      initialTags.push('QA-QC', defaultQAInspectionId);
+    }
+    return initialTags;
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgressText, setUploadProgressText] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -189,6 +203,8 @@ export function DocumentUploadModal({
         status,
         linkedActivityId: linkedActivity ? linkedActivity.id : undefined,
         linkedActivityName: linkedActivity ? linkedActivity.name : undefined,
+        linkedQAInspectionId: defaultQAInspectionId || undefined,
+        linkedQAInspectionTitle: defaultQAInspectionTitle || undefined,
         uploadedBy: currentUser || 'Site Engineer',
         uploadedAt: new Date().toISOString(),
         lastModified: new Date().toISOString(),
@@ -217,8 +233,14 @@ export function DocumentUploadModal({
               <UploadCloud className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Upload Project Document</h2>
-              <p className="text-xs text-slate-500">Attach blueprints, spreadsheets, specs, or contracts with activity linking.</p>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                {defaultQAInspectionId ? 'Attach Quality & QA/QC Document' : 'Upload Project Document'}
+              </h2>
+              <p className="text-xs text-slate-500">
+                {defaultQAInspectionId 
+                  ? 'Attach test certificates, lab reports, NDT results, or QA specs to this inspection.'
+                  : 'Attach blueprints, spreadsheets, specs, or contracts with activity linking.'}
+              </p>
             </div>
           </div>
           <button
@@ -232,6 +254,16 @@ export function DocumentUploadModal({
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4.5 max-h-[80vh] overflow-y-auto">
           
+          {defaultQAInspectionId && (
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>Linking to QA/QC Inspection: <strong>{defaultQAInspectionId}</strong> {defaultQAInspectionTitle ? `(${defaultQAInspectionTitle})` : ''}</span>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/50 rounded-md">Document Hub Sync</span>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 flex items-center gap-2.5 text-xs text-red-600 dark:text-red-400">
               <AlertCircle className="h-4 w-4 shrink-0" />

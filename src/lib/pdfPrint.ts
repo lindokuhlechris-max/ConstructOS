@@ -75,7 +75,7 @@ export async function printActivitiesSummary({
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
-    doc.text('CONSTRUCTFIELD — Activities Summary Report', 36, 30);
+    doc.text('SCEDIH — Activities Summary Report', 36, 30);
 
     // Subheader metadata
     doc.setTextColor(51, 65, 85);
@@ -162,22 +162,22 @@ export async function printActivitiesSummary({
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(148, 163, 184);
         doc.text(
-          `Constructfield Enterprise Field Management  •  Page ${data.pageNumber}`,
+          `Scedih Enterprise Field Management  •  Page ${data.pageNumber}`,
           36,
-          doc.internal.pageSize.getHeight() - 14
+          doc.internal.pageSize.getHeight() - 16
         );
       }
     });
 
     const dateStr = new Date().toISOString().split('T')[0];
-    const filename = `constructfield_activities_summary_${dateStr}.pdf`;
+    const filename = `scedih_activities_summary_${dateStr}.pdf`;
     const blob = doc.output('blob');
 
     await saveOrShareFile({
       filename,
       blob,
-      title: 'Activities Summary Report PDF',
-      text: `Constructfield Activities Summary Report - ${currentDate}`
+      title: 'Scedih Activities Summary PDF',
+      text: `Scedih Activities Summary Report - ${currentDate}`
     });
 
     return true;
@@ -251,7 +251,7 @@ export async function printMaterialsSummary({
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
-    doc.text('CONSTRUCTFIELD — Material Inventory & Reorder Report', 36, 30);
+    doc.text('SCEDIH — Material Inventory & Reorder Report', 36, 30);
 
     // Subheader
     doc.setTextColor(51, 65, 85);
@@ -321,6 +321,9 @@ export async function printMaterialsSummary({
       ];
     });
 
+    const margin = 36;
+    const pageHeight = doc.internal.pageSize.getHeight();
+
     autoTable(doc, {
       head: tableHeaders,
       body: tableData,
@@ -356,22 +359,22 @@ export async function printMaterialsSummary({
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(148, 163, 184);
         doc.text(
-          `Constructfield Enterprise Materials Inventory  •  Page ${data.pageNumber}`,
-          36,
-          doc.internal.pageSize.getHeight() - 14
+          `Scedih Enterprise Materials Inventory  •  Page ${data.pageNumber}`,
+          margin,
+          pageHeight - 16
         );
       }
     });
 
     const dateStr = new Date().toISOString().split('T')[0];
-    const filename = `constructfield_materials_inventory_${dateStr}.pdf`;
+    const filename = `scedih_materials_inventory_${dateStr}.pdf`;
     const blob = doc.output('blob');
 
     await saveOrShareFile({
       filename,
       blob,
-      title: 'Materials Inventory Report PDF',
-      text: `Constructfield Materials Inventory Report - ${currentDate}`
+      title: 'Scedih Materials Inventory PDF',
+      text: `Scedih Materials Inventory Report - ${currentDate}`
     });
 
     return true;
@@ -425,7 +428,7 @@ export async function printDocumentsSummary({
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
-    doc.text('CONSTRUCTFIELD — Document Register & Transmittal Report', 36, 30);
+    doc.text('SCEDIH — Document Register & Transmittal Report', 36, 30);
 
     // Subheader
     doc.setTextColor(51, 65, 85);
@@ -478,6 +481,9 @@ export async function printDocumentsSummary({
       `${d.uploadedBy || 'System'}\n${d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString('en-GB') : '-'}`
     ]);
 
+    const margin = 36;
+    const pageHeight = doc.internal.pageSize.getHeight();
+
     autoTable(doc, {
       head: tableHeaders,
       body: tableData,
@@ -510,22 +516,22 @@ export async function printDocumentsSummary({
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(148, 163, 184);
         doc.text(
-          `Constructfield Enterprise Document Management  •  Page ${data.pageNumber}`,
-          36,
-          doc.internal.pageSize.getHeight() - 14
+          `Scedih Enterprise Document Management  •  Page ${data.pageNumber}`,
+          margin,
+          pageHeight - 16
         );
       }
     });
 
     const dateStr = new Date().toISOString().split('T')[0];
-    const filename = `constructfield_documents_register_${dateStr}.pdf`;
+    const filename = `scedih_documents_register_${dateStr}.pdf`;
     const blob = doc.output('blob');
 
     await saveOrShareFile({
       filename,
       blob,
-      title: 'Documents Register Report PDF',
-      text: `Constructfield Documents Register Report - ${currentDate}`
+      title: 'Scedih Documents Register PDF',
+      text: `Scedih Documents Register Report - ${currentDate}`
     });
 
     return true;
@@ -587,7 +593,7 @@ export async function printActivityAuditSummary({
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
-    doc.text('CONSTRUCTFIELD — Activity Audit Trail & Compliance Ledger', 36, 30);
+    doc.text('SCEDIH — Activity Audit Trail & Compliance Ledger', 36, 30);
 
     // Subheader
     doc.setTextColor(51, 65, 85);
@@ -638,6 +644,9 @@ export async function printActivityAuditSummary({
       l.id || '-'
     ]);
 
+    const margin = 36;
+    const pageHeight = doc.internal.pageSize.getHeight();
+
     autoTable(doc, {
       head: tableHeaders,
       body: tableData,
@@ -669,22 +678,22 @@ export async function printActivityAuditSummary({
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(148, 163, 184);
         doc.text(
-          `Constructfield Enterprise Field Governance & Audit Trail  •  Page ${data.pageNumber}`,
-          36,
-          doc.internal.pageSize.getHeight() - 14
+          `Scedih Enterprise Field Governance & Audit Trail  •  Page ${data.pageNumber}`,
+          margin,
+          pageHeight - 16
         );
       }
     });
 
     const dateStr = new Date().toISOString().split('T')[0];
-    const filename = `constructfield_activity_audit_trail_${dateStr}.pdf`;
+    const filename = `scedih_activity_audit_trail_${dateStr}.pdf`;
     const blob = doc.output('blob');
 
     await saveOrShareFile({
       filename,
       blob,
-      title: 'Activity Audit Trail PDF',
-      text: `Constructfield Activity Audit Trail Report - ${currentDate}`
+      title: 'Scedih Activity Audit Trail PDF',
+      text: `Scedih Activity Audit Trail Report - ${currentDate}`
     });
 
     return true;

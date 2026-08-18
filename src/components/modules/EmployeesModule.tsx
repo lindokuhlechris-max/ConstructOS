@@ -364,6 +364,14 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
     });
   };
 
+  const handleSelectAllMembers = () => {
+    setTeamForm(prev => ({ ...prev, memberIds: employees.map(emp => emp.id) }));
+  };
+
+  const handleDeselectAllMembers = () => {
+    setTeamForm(prev => ({ ...prev, memberIds: [] }));
+  };
+
   // HR LEAVE & HOURS LOGGING HANDLERS
   const allLeaveRecords: (LeaveRecord & { employeeName: string; employeeObj: Employee })[] = employees.flatMap(emp => 
     (emp.leaveRecords || []).map(lr => ({
@@ -2803,9 +2811,30 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
 
               {/* Members Selection Checklist */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                  <span>Select Team Members ({teamForm.memberIds.length} selected)</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Select Team Members ({teamForm.memberIds.length} of {employees.length} selected)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSelectAllMembers}
+                      disabled={teamForm.memberIds.length === employees.length}
+                      className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-xs text-slate-300 dark:text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={handleDeselectAllMembers}
+                      disabled={teamForm.memberIds.length === 0}
+                      className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
                 <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 p-2 bg-slate-50/50 dark:bg-slate-900/50">
                   {employees.map(emp => {
                     const isSelected = teamForm.memberIds.includes(emp.id);
@@ -2908,9 +2937,30 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
 
               {/* Members Selection Checklist */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                  <span>Assigned Team Members ({teamForm.memberIds.length} selected)</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Assigned Team Members ({teamForm.memberIds.length} of {employees.length} selected)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSelectAllMembers}
+                      disabled={teamForm.memberIds.length === employees.length}
+                      className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-xs text-slate-300 dark:text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={handleDeselectAllMembers}
+                      disabled={teamForm.memberIds.length === 0}
+                      className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
                 <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 p-2 bg-slate-50/50 dark:bg-slate-900/50">
                   {employees.map(emp => {
                     const isSelected = teamForm.memberIds.includes(emp.id);

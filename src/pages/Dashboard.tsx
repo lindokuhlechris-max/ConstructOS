@@ -11,6 +11,9 @@ import {
   Truck, 
   ChevronDown, 
   ChevronRight, 
+  ChevronLeft,
+  PanelRight,
+  PanelRightClose,
   PanelRightOpen, 
   Layers, 
   MapPin, 
@@ -68,6 +71,18 @@ export function Dashboard() {
   const [slideOverActivity, setSlideOverActivity] = useState<ActivityType | null>(null);
   const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(new Set());
   const [isTableMaximized, setIsTableMaximized] = useState<boolean>(false);
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState<boolean>(() => {
+    const saved = localStorage.getItem('constructos_dashboard_right_panel_open');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const toggleRightPanel = () => {
+    setIsRightPanelOpen(prev => {
+      const next = !prev;
+      localStorage.setItem('constructos_dashboard_right_panel_open', String(next));
+      return next;
+    });
+  };
   const [selectedKpi, setSelectedKpi] = useState<KPIMetric | null>(null);
   const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -263,7 +278,7 @@ export function Dashboard() {
         />
       )}
       {/* Left Column: Dashboards & Activities */}
-      <div className="flex-[3] flex flex-col gap-5 min-w-0">
+      <div className={`flex flex-col gap-5 min-w-0 transition-all duration-300 ease-in-out ${isRightPanelOpen ? 'flex-1 lg:flex-[3]' : 'w-full flex-1'}`}>
         {/* KPI Row */}
         <KPIGrid metrics={kpiMetrics} onMetricClick={(metric) => setSelectedKpi(metric)} />
 
@@ -453,6 +468,33 @@ export function Dashboard() {
                     <Maximize2 className="h-3.5 w-3.5 shrink-0" />
                     <span className="max-w-0 opacity-0 group-hover:max-w-[80px] group-hover:opacity-100 transition-all duration-300 ease-in-out whitespace-nowrap text-xs overflow-hidden">
                       Expand
+                    </span>
+                  </>
+                )}
+              </button>
+
+              {/* Slide Side Panels Toggle Button - Expands on hover */}
+              <button
+                onClick={toggleRightPanel}
+                className={`group h-8 px-2.5 rounded-lg border text-xs font-bold transition-all duration-300 flex items-center gap-1.5 overflow-hidden shadow-2xs ${
+                  !isRightPanelOpen
+                    ? 'bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-[#0B5FFF] dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                    : 'bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                }`}
+                title={isRightPanelOpen ? "Slide panels away to the right (Hide side panels)" : "Expand side panels (Show side panels)"}
+              >
+                {isRightPanelOpen ? (
+                  <>
+                    <PanelRightClose className="h-3.5 w-3.5 shrink-0 text-slate-600 dark:text-slate-300 group-hover:text-[#0B5FFF]" />
+                    <span className="max-w-0 opacity-0 group-hover:max-w-[90px] group-hover:opacity-100 transition-all duration-300 ease-in-out whitespace-nowrap text-xs overflow-hidden">
+                      Hide Panels
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <PanelRightOpen className="h-3.5 w-3.5 shrink-0 text-[#0B5FFF]" />
+                    <span className="max-w-0 opacity-0 group-hover:max-w-[90px] group-hover:opacity-100 transition-all duration-300 ease-in-out whitespace-nowrap text-xs overflow-hidden">
+                      Show Panels
                     </span>
                   </>
                 )}
@@ -729,8 +771,30 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* Right Column: Health & AI */}
-      <div className="flex-1 flex flex-col gap-4 min-h-0">
+      {/* Right Column: Quick Access & Calendar Panels (Slide Expand / Collapse) */}
+      <div 
+        className={`transition-all duration-300 ease-in-out flex flex-col gap-4 min-h-0 ${
+          isRightPanelOpen
+            ? 'w-full lg:w-80 xl:w-96 2xl:w-[380px] shrink-0 opacity-100 translate-x-0'
+            : 'hidden lg:flex lg:w-0 lg:opacity-0 lg:pointer-events-none lg:overflow-hidden lg:translate-x-12 lg:p-0 lg:m-0'
+        }`}
+      >
+        {/* Slide-Collapse Action Header */}
+        <div className="flex items-center justify-between px-1 py-0.5 shrink-0">
+          <div className="flex items-center gap-2">
+            <PanelRight className="h-4 w-4 text-[#0B5FFF]" />
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Side Panels</span>
+          </div>
+          <button
+            onClick={toggleRightPanel}
+            className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 px-2.5 py-1 rounded-lg transition-all group cursor-pointer"
+            title="Slide away to the right (Hide panels)"
+          >
+            <span>Hide</span>
+            <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-white transition-transform group-hover:translate-x-0.5" />
+          </button>
+        </div>
+
         {userRole === 'Worker' && (
           <SiteCheckIn />
         )}
@@ -741,6 +805,22 @@ export function Dashboard() {
         {/* Quick Access Panel */}
         <QuickAccessPanel />
       </div>
+
+      {/* Floating Edge Trigger when panels are hidden (Slide Open) */}
+      {!isRightPanelOpen && (
+        <button
+          onClick={toggleRightPanel}
+          className="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex items-center gap-1.5 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 pl-3 pr-2.5 py-3.5 rounded-l-2xl border-l border-y border-slate-200 dark:border-slate-800 shadow-xl hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:text-[#0B5FFF] dark:hover:text-blue-400 hover:border-[#0B5FFF]/40 transition-all duration-300 group cursor-pointer animate-in slide-in-from-right-4"
+          title="Expand Quick Access & Calendar (Slide open)"
+        >
+          <div className="flex flex-col items-center gap-2">
+            <ChevronLeft className="h-4 w-4 text-[#0B5FFF] transition-transform duration-300 group-hover:-translate-x-1" />
+            <span className="text-[10px] font-bold uppercase tracking-wider [writing-mode:vertical-rl] rotate-180 text-slate-500 group-hover:text-[#0B5FFF]">
+              Quick Access
+            </span>
+          </div>
+        </button>
+      )}
 
       {/* Slide-over Metadata Panel Drawer */}
       <ActivitySlideOver

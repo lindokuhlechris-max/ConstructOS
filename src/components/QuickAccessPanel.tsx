@@ -1,12 +1,24 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from './ui';
-import { Users, Truck, CheckSquare, Calendar, Plus, Trash2, Edit2, X, Check, Square } from 'lucide-react';
+import { Users, Truck, CheckSquare, Calendar, Plus, Trash2, Edit2, X, Check, Square, ChevronDown, ChevronUp, Layers } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Reminder } from '../types';
 
-export function QuickAccessPanel() {
+export function QuickAccessPanel({ defaultCollapsed = false }: { defaultCollapsed?: boolean }) {
   const { employees = [], equipment = [], reminders = [], addReminder, updateReminder, deleteReminder } = useAppContext();
   const [activeTab, setActiveTab] = useState<'employees' | 'equipment' | 'reminders'>('employees');
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    const saved = localStorage.getItem('constructos_quickaccess_collapsed');
+    return saved !== null ? saved === 'true' : defaultCollapsed;
+  });
+
+  const toggleCollapse = () => {
+    setIsCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('constructos_quickaccess_collapsed', String(next));
+      return next;
+    });
+  };
   
   // To-Do state
   const [isAddingTodo, setIsAddingTodo] = useState(false);
@@ -79,47 +91,76 @@ export function QuickAccessPanel() {
   };
 
   return (
-    <Card className="flex flex-col h-[655px] shrink-0 overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl bg-white dark:bg-slate-900">
+    <Card className={`flex flex-col shrink-0 overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl bg-white dark:bg-slate-900 transition-all duration-300 ${
+      isCollapsed ? 'h-auto pb-1' : 'h-[655px]'
+    }`}>
       {/* Header & Tabs */}
       <div className="flex flex-col border-b border-slate-100 dark:border-slate-800 shrink-0">
-        <div className="px-4 py-3 pb-0 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Quick Access</h3>
-        </div>
-        <div className="flex px-4 pt-3 gap-4 overflow-x-auto no-scrollbar relative">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-[#0B5FFF]" />
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Quick Access</h3>
+            {isCollapsed && (
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
+                <span className="px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF]">
+                  {activeEmployees.length} Team
+                </span>
+                <span className="px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-600">
+                  {activeEquipment.length} Equip
+                </span>
+                <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
+                  {pendingReminders.length} To-Do
+                </span>
+              </div>
+            )}
+          </div>
           <button 
-            onClick={() => setActiveTab('employees')}
-            className={`flex items-center gap-2 pb-2.5 text-xs font-bold transition-all whitespace-nowrap border-b-2 ${
-              activeTab === 'employees' 
-                ? 'border-[#0B5FFF] text-[#0B5FFF] dark:text-blue-400' 
-                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-            }`}
+            onClick={toggleCollapse} 
+            className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors"
+            title={isCollapsed ? "Expand Quick Access" : "Collapse Quick Access"}
           >
-            <Users className="w-3.5 h-3.5" /> Team ({activeEmployees.length})
-          </button>
-          <button 
-            onClick={() => setActiveTab('equipment')}
-            className={`flex items-center gap-2 pb-2.5 text-xs font-bold transition-all whitespace-nowrap border-b-2 ${
-              activeTab === 'equipment' 
-                ? 'border-amber-500 text-amber-600 dark:text-amber-400' 
-                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-            }`}
-          >
-            <Truck className="w-3.5 h-3.5" /> Equipment ({activeEquipment.length})
-          </button>
-          <button 
-            onClick={() => setActiveTab('reminders')}
-            className={`flex items-center gap-2 pb-2.5 text-xs font-bold transition-all whitespace-nowrap border-b-2 ${
-              activeTab === 'reminders' 
-                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' 
-                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-            }`}
-          >
-            <CheckSquare className="w-3.5 h-3.5" /> To-Do ({pendingReminders.length})
+            {isCollapsed ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronUp className="w-4 h-4 text-slate-500" />}
           </button>
         </div>
+
+        {!isCollapsed && (
+          <div className="flex px-4 pt-1 gap-4 overflow-x-auto no-scrollbar relative border-t border-slate-100 dark:border-slate-800/60">
+            <button 
+              onClick={() => setActiveTab('employees')}
+              className={`flex items-center gap-2 pb-2.5 pt-2 text-xs font-bold transition-all whitespace-nowrap border-b-2 ${
+                activeTab === 'employees' 
+                  ? 'border-[#0B5FFF] text-[#0B5FFF] dark:text-blue-400' 
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" /> Team ({activeEmployees.length})
+            </button>
+            <button 
+              onClick={() => setActiveTab('equipment')}
+              className={`flex items-center gap-2 pb-2.5 pt-2 text-xs font-bold transition-all whitespace-nowrap border-b-2 ${
+                activeTab === 'equipment' 
+                  ? 'border-amber-500 text-amber-600 dark:text-amber-400' 
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5" /> Equipment ({activeEquipment.length})
+            </button>
+            <button 
+              onClick={() => setActiveTab('reminders')}
+              className={`flex items-center gap-2 pb-2.5 pt-2 text-xs font-bold transition-all whitespace-nowrap border-b-2 ${
+                activeTab === 'reminders' 
+                  ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' 
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <CheckSquare className="w-3.5 h-3.5" /> To-Do ({pendingReminders.length})
+            </button>
+          </div>
+        )}
       </div>
 
-      <CardContent className="flex-1 p-0 overflow-y-auto no-scrollbar relative flex flex-col">
+      {!isCollapsed && (
+        <CardContent className="flex-1 p-0 overflow-y-auto no-scrollbar relative flex flex-col animate-in fade-in duration-200">
         {activeTab === 'employees' && (
           <div className="flex flex-col divide-y divide-slate-100 dark:divide-slate-800/50">
             {activeEmployees.length > 0 ? activeEmployees.map((emp, index) => (
@@ -335,6 +376,7 @@ export function QuickAccessPanel() {
           </div>
         )}
       </CardContent>
+      )}
     </Card>
   );
 }

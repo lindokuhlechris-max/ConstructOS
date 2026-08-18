@@ -14,7 +14,7 @@ interface PrintPreviewProps {
   brandName?: string;
 }
 
-export function PrintPreview({ isOpen, onClose, title, children, onDownloadPdf, brandName = "Constructfield" }: PrintPreviewProps) {
+export function PrintPreview({ isOpen, onClose, title, children, onDownloadPdf, brandName = "Scedih" }: PrintPreviewProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 

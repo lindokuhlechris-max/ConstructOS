@@ -321,7 +321,12 @@ export function SurveyTrackerView({ onOpenActivity }: SurveyTrackerViewProps) {
       status: 'In Progress',
       progress: initialProgress,
       startDate: launchStartDate,
+      finishDate: launchEndDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
       endDate: launchEndDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      assignedTo: launchingRecord.surveyors?.[0] || 'Civil Construction Team',
+      supervisor: 'Site Supervisor',
+      plannedHours: 80,
+      actualHours: 8,
       subtasks: defaultSubtasks,
       assignedLabour: (launchingRecord.surveyors || []).map((s, idx) => ({
         id: `TLA-SURV-${Date.now()}-${idx}`,

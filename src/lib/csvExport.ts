@@ -28,7 +28,7 @@ export function downloadCSVFile(filename: string, csvContent: string) {
     filename,
     blob,
     title: filename,
-    text: `Constructfield CSV Export: ${filename}`
+    text: `Scedih CSV Export: ${filename}`
   });
 }
 
@@ -92,7 +92,7 @@ export function exportMaterialsToCSV(materials: MaterialInventory[], projects?: 
 
   const csvString = csvRows.join('\r\n');
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `constructfield_materials_inventory_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+  const filename = `scedih_materials_inventory_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
   
   downloadCSVFile(filename, csvString);
 }
@@ -169,7 +169,7 @@ export function exportActivitiesToCSV(activities: Activity[], projects: Project[
 
   const csvString = csvRows.join('\r\n');
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `constructfield_activities_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+  const filename = `scedih_activities_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
   
   downloadCSVFile(filename, csvString);
 }
@@ -204,13 +204,13 @@ export function exportDailyReportsToCSV(reports: DailyReport[], projects: Projec
     r.projectId || '',
     getProjectName(r.projectId || ''),
     r.supervisor || r.submittedBy || 'Site Supervisor',
-    r.weather?.condition || 'Clear',
-    r.weather?.temp || '30',
-    r.safety?.incidents || 0,
-    r.labour?.totalWorkers || 0,
-    r.workSummary || r.notes || '',
-    r.delays || r.blockers || 'None',
-    r.qaHoldPoints || 'All Hold Points Passed'
+    typeof r.weather === 'string' ? r.weather : (r.weather as any)?.condition || r.condition || 'Clear',
+    typeof r.temperature === 'string' ? r.temperature : (r.weather as any)?.temp || r.temp || '24°C',
+    r.incidents !== undefined ? r.incidents : (r.safety?.incidents || 0),
+    r.workersOnSite !== undefined ? r.workersOnSite : (r.labour?.totalWorkers || 0),
+    r.workSummary || r.notes || r.supervisorNotes || '',
+    Array.isArray(r.delays) ? r.delays.join('; ') : (r.delays || r.blockers || 'None'),
+    Array.isArray(r.qaHoldPoints) ? r.qaHoldPoints.join('; ') : (r.qaHoldPoints || 'All Hold Points Passed')
   ]);
 
   const csvRows = [
@@ -220,7 +220,7 @@ export function exportDailyReportsToCSV(reports: DailyReport[], projects: Projec
 
   const csvString = csvRows.join('\r\n');
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `constructfield_daily_reports_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+  const filename = `scedih_daily_reports_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
   
   downloadCSVFile(filename, csvString);
 }
@@ -247,7 +247,7 @@ export function exportComprehensiveSiteCSV(
   // Summary Metadata
   const projName = selectedProjectId ? (projects.find(p => p.id === selectedProjectId)?.name || selectedProjectId) : 'All Projects';
   
-  sections.push(['CONSTRUCTFIELD SITE EXPORT SUMMARY'].map(escapeCSVCell).join(','));
+  sections.push(['SCEDIH SITE EXPORT SUMMARY'].map(escapeCSVCell).join(','));
   sections.push(['Export Date', dateStr].map(escapeCSVCell).join(','));
   sections.push(['Project Scope', projName].map(escapeCSVCell).join(','));
   sections.push(['Total Activities', filteredActivities.length].map(escapeCSVCell).join(','));
@@ -299,7 +299,7 @@ export function exportComprehensiveSiteCSV(
   });
 
   const fullCSVString = sections.join('\r\n');
-  const filename = `constructfield_full_export_${selectedProjectId || 'all'}_${dateStr}.csv`;
+  const filename = `scedih_full_export_${selectedProjectId || 'all'}_${dateStr}.csv`;
   
   downloadCSVFile(filename, fullCSVString);
 }
@@ -373,7 +373,7 @@ export function exportDocumentsToCSV(documents: DocumentItem[], projects?: Proje
 
   const csvString = csvRows.join('\r\n');
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `constructfield_document_register_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+  const filename = `scedih_document_register_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
   
   downloadCSVFile(filename, csvString);
 }
@@ -416,7 +416,7 @@ export function exportMaterialRequestsToCSV(requests: any[], filenameSuffix?: st
 
   const csvString = csvRows.join('\r\n');
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `constructfield_material_requests_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
+  const filename = `scedih_material_requests_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.csv`;
   
   downloadCSVFile(filename, csvString);
 }
@@ -564,7 +564,7 @@ export function exportAccommodationsToExcel(
   XLSX.utils.book_append_sheet(wb, wsPayments, 'Lease Payments Tracking');
 
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `Constructfield_Accommodations_Master_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.xlsx`;
+  const filename = `Scedih_Accommodations_Master_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
 
@@ -680,6 +680,6 @@ export function exportSingleAccommodationToExcel(
   XLSX.utils.book_append_sheet(wb, wsPayments, 'Lease Payments Tracking');
 
   const sanitizedName = unit.name.replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `Constructfield_Accommodation_${sanitizedName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  const filename = `Scedih_Accommodation_${sanitizedName}_${new Date().toISOString().split('T')[0]}.xlsx`;
   XLSX.writeFile(wb, filename);
 }

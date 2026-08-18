@@ -18,6 +18,7 @@ import {
   getAccommodationRateDescription, 
   generateAccommodationMonthlyPDF 
 } from '../lib/pdfAccommodation';
+import { AccommodationPdfModal } from './AccommodationPdfModal';
 import { exportSingleAccommodationToExcel } from '../lib/csvExport';
 
 interface AccommodationDetailProps {
@@ -39,7 +40,9 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
     deleteAccommodationUtility,
     addAccommodationPayment,
     updateAccommodationPayment,
-    deleteAccommodationPayment
+    deleteAccommodationPayment,
+    currentUserProfile,
+    accommodations
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<'roster' | 'utilities' | 'lease' | 'specs'>('roster');
@@ -50,6 +53,7 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
   }, [accommodationPayments, unit.id]);
 
   // Modals inside Detail view
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isUtilityModalOpen, setIsUtilityModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -481,9 +485,9 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           <button
-            onClick={() => generateAccommodationMonthlyPDF(unit, unitUtilities, employees, facilityPayments)}
+            onClick={() => setIsPdfModalOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition shadow-sm"
-            title="Download Monthly PDF Statement"
+            title="Open Interactive Print Preview & PDF Builder"
           >
             <Printer className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Print Monthly Report
           </button>
@@ -2238,6 +2242,21 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
             </div>
           </div>
         </div>
+      )}
+
+      {/* Interactive Print Preview & PDF Report Modal */}
+      {isPdfModalOpen && (
+        <AccommodationPdfModal
+          isOpen={isPdfModalOpen}
+          onClose={() => setIsPdfModalOpen(false)}
+          accommodations={accommodations && accommodations.length > 0 ? accommodations : [unit]}
+          utilities={accommodationUtilities}
+          employees={employees}
+          payments={accommodationPayments}
+          currentUserProfile={currentUserProfile}
+          defaultFacilityId={unit.id}
+          defaultFilterLabel={`${unit.name} (${unit.location})`}
+        />
       )}
     </div>
   );

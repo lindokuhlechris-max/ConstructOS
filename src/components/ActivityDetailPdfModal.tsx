@@ -224,13 +224,13 @@ export function ActivityDetailPdfModal({
     const contentWidth = pageWidth - margin * 2;
 
     // Corporate Color Tokens
-    const brandBlue = [11, 95, 255];     // #0B5FFF
-    const darkNavy = [15, 23, 42];       // slate-900
-    const slateMuted = [100, 116, 139];   // slate-500
-    const cardBg = [248, 250, 252];       // slate-50
-    const borderColor = [226, 232, 240]; // slate-200
-    const emeraldColor = [5, 150, 105];  // emerald-600
-    const roseColor = [225, 29, 72];     // rose-600
+    const brandBlue: [number, number, number] = [11, 95, 255];     // #0B5FFF
+    const darkNavy: [number, number, number] = [15, 23, 42];       // slate-900
+    const slateMuted: [number, number, number] = [100, 116, 139];   // slate-500
+    const cardBg: [number, number, number] = [248, 250, 252];       // slate-50
+    const borderColor: [number, number, number] = [226, 232, 240]; // slate-200
+    const emeraldColor: [number, number, number] = [5, 150, 105];  // emerald-600
+    const roseColor: [number, number, number] = [225, 29, 72];     // rose-600
 
     // 1. Corporate Header Banner
     doc.setFillColor(brandBlue[0], brandBlue[1], brandBlue[2]);
@@ -240,7 +240,7 @@ export function ActivityDetailPdfModal({
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
-    doc.text('CONSTRUCTFIELD ENTERPRISE', margin, 24);
+    doc.text('SCEDIH ENTERPRISE', margin, 24);
 
     doc.setFontSize(9.5);
     doc.setFont('helvetica', 'normal');
@@ -632,10 +632,14 @@ export function ActivityDetailPdfModal({
     }
 
     // 9. Remarks & Voice Notes Log
-    if (includeRemarks && ((activity.remarks && activity.remarks.length > 0) || (activity.voiceNotes && activity.voiceNotes.length > 0))) {
+    if (includeRemarks && (activity.remarks || (activity.voiceNotes && activity.voiceNotes.length > 0))) {
       const remarkEntries: [string, string][] = [];
-      (activity.remarks || []).forEach(r => remarkEntries.push(['Field Remark', r]));
-      (activity.voiceNotes || []).forEach(vn => remarkEntries.push(['Audio Voice Log', vn]));
+      if (Array.isArray(activity.remarks)) {
+        activity.remarks.forEach((r: string) => remarkEntries.push(['Field Remark', r]));
+      } else if (typeof activity.remarks === 'string' && (activity.remarks as string).trim()) {
+        remarkEntries.push(['Field Remark', activity.remarks]);
+      }
+      (activity.voiceNotes || []).forEach((vn: string) => remarkEntries.push(['Audio Voice Log', vn]));
 
       autoTable(doc, {
         startY: currentY,
@@ -722,7 +726,7 @@ export function ActivityDetailPdfModal({
       // Footer
       const footerY = doc.internal.pageSize.getHeight() - 15;
       doc.text(
-        `Constructfield Enterprise Engineering Dossier  |  Activity: ${activity.id} (${activity.name})  |  Generated ${currentDateFormatted}`,
+        `Scedih Enterprise Engineering Dossier  |  Activity: ${activity.id} (${activity.name})  |  Generated ${currentDateFormatted}`,
         margin,
         footerY
       );

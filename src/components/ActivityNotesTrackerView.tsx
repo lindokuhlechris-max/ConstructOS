@@ -359,9 +359,9 @@ export function ActivityNotesTrackerView({ onOpenActivityDetail, filterByActivit
       const margin = 36;
       const contentWidth = pageWidth - margin * 2;
 
-      const brandBlue = [11, 95, 255];
-      const darkNavy = [15, 23, 42];
-      const slateMuted = [100, 116, 139];
+      const brandBlue: [number, number, number] = [11, 95, 255];
+      const darkNavy: [number, number, number] = [15, 23, 42];
+      const slateMuted: [number, number, number] = [100, 116, 139];
 
       // Corporate Header Banner
       doc.setFillColor(brandBlue[0], brandBlue[1], brandBlue[2]);

@@ -1,4 +1,4 @@
-import { Reminder } from '../types';
+import { Reminder, Priority } from '../types';
 
 let swRegistration: ServiceWorkerRegistration | null = null;
 const NOTIFIED_CACHE_KEY = 'constructfield_notified_reminders_v1';
@@ -66,7 +66,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 export interface NotificationPayload {
   title: string;
   description?: string;
-  priority?: 'High' | 'Medium' | 'Low';
+  priority?: Priority;
   reminderId?: string;
   link?: string;
 }
@@ -88,7 +88,7 @@ export async function triggerNotification(payload: NotificationPayload): Promise
     return true;
   } else if ('Notification' in window) {
     // Fallback to standard web notification
-    new Notification(`🔔 Constructfield Reminder: ${payload.title}`, {
+    new Notification(`🔔 Scedih Reminder: ${payload.title}`, {
       body: payload.description || 'A site task activity reminder requires your attention.',
       icon: '/favicon.ico',
       tag: payload.reminderId ? `reminder-${payload.reminderId}` : undefined
@@ -113,7 +113,7 @@ export async function triggerTestNotification(): Promise<boolean> {
   } else {
     return triggerNotification({
       title: 'Service Worker Active',
-      description: 'Test notification from Constructfield reminder listener.'
+      description: 'Test notification from Scedih reminder listener.'
     });
   }
 }

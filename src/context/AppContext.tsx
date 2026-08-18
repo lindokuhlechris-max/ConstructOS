@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -143,7 +143,7 @@ interface AppContextType {
   deleteSiteInspectionPhoto: (id: string) => void;
   addPPEItem: (item: PPEMaterialItem) => void;
   updatePPEItem: (item: PPEMaterialItem) => void;
-  deletePPEItem: (item: PPEMaterialItem) => void;
+  deletePPEItem: (idOrItem: string | PPEMaterialItem) => void;
   addQAInspection: (inspection: QAInspectionItem) => void;
   updateQAInspection: (inspection: QAInspectionItem) => void;
   deleteQAInspection: (id: string) => void;
@@ -178,7 +178,7 @@ const DEFAULT_INITIAL_PROFILES: UserProfile[] = [
     title: 'Lead Administrator & Project Director',
     email: 'Lindokuhlechris@gmail.com',
     phone: '+1 (555) 019-2831',
-    company: 'Constructfield Engineering',
+    company: 'Scedih Engineering',
     department: 'Executive Office',
     initials: 'LC',
     accessAllowed: true,
@@ -199,9 +199,9 @@ const DEFAULT_INITIAL_PROFILES: UserProfile[] = [
     name: 'Site Manager',
     role: 'Manager',
     title: 'Senior Site Operations Manager',
-    email: 'manager@constructfield.io',
+    email: 'manager@scedih.io',
     phone: '+1 (555) 018-9201',
-    company: 'Constructfield Engineering',
+    company: 'Scedih Engineering',
     department: 'Site Operations',
     initials: 'SM',
     accessAllowed: true,
@@ -222,9 +222,9 @@ const DEFAULT_INITIAL_PROFILES: UserProfile[] = [
     name: 'Field Engineer',
     role: 'Engineer',
     title: 'Civil & Structural Field Engineer',
-    email: 'engineer@constructfield.io',
+    email: 'engineer@scedih.io',
     phone: '+1 (555) 017-4491',
-    company: 'Constructfield Engineering',
+    company: 'Scedih Engineering',
     department: 'Engineering',
     initials: 'FE',
     accessAllowed: true,
@@ -245,9 +245,9 @@ const DEFAULT_INITIAL_PROFILES: UserProfile[] = [
     name: 'QA Inspector',
     role: 'Inspector',
     title: 'Quality & Safety Lead Inspector',
-    email: 'inspector@constructfield.io',
+    email: 'inspector@scedih.io',
     phone: '+1 (555) 016-3382',
-    company: 'Constructfield Quality Assurance',
+    company: 'Scedih Quality Assurance',
     department: 'Quality Control',
     initials: 'QI',
     accessAllowed: true,
@@ -268,7 +268,7 @@ const DEFAULT_INITIAL_PROFILES: UserProfile[] = [
     name: 'Guest Viewer',
     role: 'Viewer',
     title: 'Client Stakeholder Representative',
-    email: 'viewer@constructfield.io',
+    email: 'viewer@scedih.io',
     phone: '+1 (555) 015-8821',
     company: 'Client Oversight Org',
     department: 'Supervision',
@@ -465,9 +465,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     name: 'Current User',
     role: 'Manager',
     title: 'Site Supervisor',
-    email: 'user@constructfield.io',
+    email: 'user@scedih.io',
     phone: '',
-    company: 'Constructfield Engineering',
+    company: 'Scedih Engineering',
     department: 'Site Management',
     initials: 'CU',
     certifications: []
@@ -556,7 +556,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSyncConflict(null);
   };
 
-  const triggerSyncToast = (message?: string, type?: 'syncing' | 'warning' | 'success' | 'offline') => {
+  const triggerSyncToast = (message?: string, type?: 'syncing' | 'warning' | 'success' | 'offline' | 'info' | 'error') => {
     setSyncToast({
       visible: true,
       message,
@@ -1926,7 +1926,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setPPEItems(prev => prev.map(i => i.id === item.id ? item : i));
     syncToServer('update_ppe_item', item);
   };
-  const deletePPEItem = (id: string) => {
+  const deletePPEItem = (idOrItem: string | PPEMaterialItem) => {
+    const id = typeof idOrItem === 'string' ? idOrItem : idOrItem.id;
     setPPEItems(prev => prev.filter(i => i.id !== id));
     syncToServer('delete_ppe_item', { id });
   };
@@ -2676,7 +2677,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         title: 'Lead Administrator',
         email: trimmedEmail,
         phone: '',
-        company: 'Constructfield',
+        company: 'Scedih',
         department: 'Executive',
         initials: 'LC',
         accessAllowed: true,

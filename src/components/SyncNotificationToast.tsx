@@ -5,7 +5,7 @@ import { useAppContext } from '../context/AppContext';
 export interface SyncToastState {
   visible: boolean;
   message?: string;
-  type?: 'syncing' | 'warning' | 'success' | 'offline';
+  type?: 'syncing' | 'warning' | 'success' | 'offline' | 'info' | 'error';
 }
 
 export function SyncNotificationToast() {
@@ -28,6 +28,10 @@ export function SyncNotificationToast() {
               ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600'
               : toastType === 'success'
               ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600'
+              : toastType === 'error'
+              ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600'
+              : toastType === 'info'
+              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600'
               : 'bg-amber-50 dark:bg-amber-950/60 text-amber-600'
           }`}>
             {toastType === 'syncing' ? (
@@ -36,6 +40,8 @@ export function SyncNotificationToast() {
               <WifiOff className="h-5 w-5" />
             ) : toastType === 'success' ? (
               <CheckCircle2 className="h-5 w-5" />
+            ) : toastType === 'error' ? (
+              <AlertTriangle className="h-5 w-5" />
             ) : (
               <AlertTriangle className="h-5 w-5" />
             )}
@@ -46,7 +52,9 @@ export function SyncNotificationToast() {
               {toastType === 'syncing' && 'Cloud Syncing Active'}
               {toastType === 'offline' && 'Offline Mode - Queued Edits'}
               {toastType === 'warning' && 'Pending Sync Operation'}
-              {toastType === 'success' && 'Data Synchronized'}
+              {toastType === 'success' && 'Operation Successful'}
+              {toastType === 'info' && 'System Notice'}
+              {toastType === 'error' && 'Action Alert'}
             </h4>
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               {syncToast.message || (

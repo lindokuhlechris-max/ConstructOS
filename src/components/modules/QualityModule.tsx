@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, CustomSelect } from '../ui';
-import { ShieldCheck, Plus, CheckCircle2, XCircle, AlertCircle, ArrowLeft, FileText, User, Search, Eye, Filter } from 'lucide-react';
+import { ShieldCheck, Plus, CheckCircle2, XCircle, AlertCircle, ArrowLeft, FileText, User, Search, Eye, Filter, FolderOpen, ExternalLink } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { QAInspectionItem } from '../../types';
 import { QualityDetail } from '../QualityDetail';
@@ -10,10 +11,12 @@ interface QualityModuleProps {
 }
 
 export function QualityModule({ onBack }: QualityModuleProps) {
+  const navigate = useNavigate();
   const { 
     qaInspections, 
     activities, 
     projects, 
+    documents,
     addQAInspection, 
     updateQAInspection, 
     deleteQAInspection, 
@@ -63,7 +66,8 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       category: category || 'Concrete',
       clientQCRepresentative,
       clientQCStatus,
-      clientQCSignoffDate: new Date().toISOString().split('T')[0]
+      clientQCSignoffDate: new Date().toISOString().split('T')[0],
+      linkedDocumentIds: []
     };
 
     addQAInspection(newItem);
@@ -93,20 +97,18 @@ export function QualityModule({ onBack }: QualityModuleProps) {
 
   if (selectedInspection) {
     return (
-      <div className="w-full h-full p-4 md:p-6 overflow-y-auto">
-        <QualityDetail
-          inspection={selectedInspection}
-          onSave={canEditQuality ? (updated) => {
-            updateQAInspection(updated);
-            setSelectedInspection(updated);
-          } : undefined}
-          onClose={() => setSelectedInspection(null)}
-          onDelete={canEditQuality ? (id) => {
-            deleteQAInspection(id);
-            setSelectedInspection(null);
-          } : undefined}
-        />
-      </div>
+      <QualityDetail
+        inspection={selectedInspection}
+        onSave={canEditQuality ? (updated) => {
+          updateQAInspection(updated);
+          setSelectedInspection(updated);
+        } : undefined}
+        onClose={() => setSelectedInspection(null)}
+        onDelete={canEditQuality ? (id) => {
+          deleteQAInspection(id);
+          setSelectedInspection(null);
+        } : undefined}
+      />
     );
   }
 
@@ -126,7 +128,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input 
@@ -138,8 +140,16 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             />
           </div>
 
+          <Button
+            onClick={() => navigate('/documents?category=QA/QC%20Inspections')}
+            variant="outline"
+            className="gap-1.5 rounded-xl h-10 px-3.5 text-xs font-semibold border-blue-200 dark:border-blue-900/50 text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-950/30"
+          >
+            <FolderOpen className="h-4 w-4" /> QA Document Hub
+          </Button>
+
           {canEditQuality && (
-            <Button onClick={() => setIsAdding(!isAdding)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shrink-0">
+            <Button onClick={() => setIsAdding(!isAdding)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 shrink-0 text-xs font-semibold">
               <Plus className="h-4 w-4" /> Log Inspection
             </Button>
           )}
@@ -311,62 +321,76 @@ export function QualityModule({ onBack }: QualityModuleProps) {
 
       {/* Inspections List Grid */}
       <div className="flex flex-col gap-3 w-full">
-        {filteredInspections.map(item => (
-          <Card 
-            key={item.id} 
-            onClick={() => setSelectedInspection(item)}
-            className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-md transition-all cursor-pointer"
-          >
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-mono font-bold text-emerald-600">{item.id}</span>
-                <Badge variant="outline" className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">{item.category}</Badge>
-                {item.ncrCode && (
-                  <Badge variant="danger" className="text-[10px] font-mono">{item.ncrCode}</Badge>
+        {filteredInspections.map(item => {
+          const attachedDocCount = (documents || []).filter(d => 
+            (item.linkedDocumentIds && item.linkedDocumentIds.includes(d.id)) ||
+            d.linkedQAInspectionId === item.id ||
+            (d.tags && d.tags.includes(item.id))
+          ).length;
+
+          return (
+            <Card 
+              key={item.id} 
+              onClick={() => setSelectedInspection(item)}
+              className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-md transition-all cursor-pointer"
+            >
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-mono font-bold text-emerald-600">{item.id}</span>
+                  <Badge variant="outline" className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">{item.category}</Badge>
+                  {item.ncrCode && (
+                    <Badge variant="danger" className="text-[10px] font-mono">{item.ncrCode}</Badge>
+                  )}
+                  {attachedDocCount > 0 && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-[#0B5FFF] bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800">
+                      <FolderOpen className="h-3 w-3" /> {attachedDocCount} {attachedDocCount === 1 ? 'Doc' : 'Docs'}
+                    </span>
+                  )}
+                </div>
+                <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 hover:text-emerald-600 transition-colors">{item.title}</h3>
+                <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                  <span>Location: <strong className="text-slate-700 dark:text-slate-300">{item.location}</strong></span>
+                  <span>Inspector: <strong className="text-slate-700 dark:text-slate-300">{item.inspector}</strong></span>
+                  <span>Date: <strong className="text-slate-700 dark:text-slate-300">{item.date}</strong></span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                {item.status === 'Passed' && (
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="h-4 w-4" /> Passed
+                  </span>
+                )}
+                {item.status === 'Failed' && (
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800">
+                    <XCircle className="h-4 w-4" /> Failed (NCR)
+                  </span>
+                )}
+                {item.status === 'Pending Approval' && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Passed'); }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded-xl h-8 px-3"
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Failed'); }}
+                      className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs rounded-xl h-8 px-3"
+                    >
+                      Reject
+                    </Button>
+                  </div>
                 )}
               </div>
-              <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 hover:text-emerald-600 transition-colors">{item.title}</h3>
-              <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-                <span>Location: <strong className="text-slate-700 dark:text-slate-300">{item.location}</strong></span>
-                <span>Inspector: <strong className="text-slate-700 dark:text-slate-300">{item.inspector}</strong></span>
-                <span>Date: <strong className="text-slate-700 dark:text-slate-300">{item.date}</strong></span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              {item.status === 'Passed' && (
-                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                  <CheckCircle2 className="h-4 w-4" /> Passed
-                </span>
-              )}
-              {item.status === 'Failed' && (
-                <span className="flex items-center gap-1.5 text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800">
-                  <XCircle className="h-4 w-4" /> Failed (NCR)
-                </span>
-              )}
-              {item.status === 'Pending Approval' && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Passed'); }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded-xl h-8 px-3"
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Failed'); }}
-                    className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs rounded-xl h-8 px-3"
-                  >
-                    Reject
-                  </Button>
-                </div>
-              )}
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
 }
+

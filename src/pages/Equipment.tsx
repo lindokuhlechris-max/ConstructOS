@@ -5,9 +5,12 @@ import {
   MapPin, Calendar, Clock, AlertCircle, FileText, X, Edit3, Trash2, 
   ClipboardList, Activity as ActivityIcon, ShieldAlert, Gauge, Zap, Boxes, Car,
   Sliders, Shield, Navigation, HardHat, Building2, Handshake, DollarSign,
-  TrendingUp, CircleDollarSign, Receipt, Timer, AlertTriangle, ToggleLeft, ToggleRight
+  TrendingUp, CircleDollarSign, Receipt, Timer, AlertTriangle, ToggleLeft, ToggleRight,
+  Camera, Image as ImageIcon, Download, Maximize2, ChevronLeft, ChevronRight, Star,
+  Upload, Eye, Sparkles
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { CameraCapture } from '../components/CameraCapture';
 import { 
   Equipment as EquipmentType, 
   EquipmentLog, 
@@ -128,6 +131,14 @@ export function Equipment() {
 
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Equipment Gallery & Camera State
+  const [formPhotos, setFormPhotos] = useState<string[]>([]);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraTarget, setCameraTarget] = useState<'detail' | 'form'>('detail');
+  const [lightboxPhotoIndex, setLightboxPhotoIndex] = useState<number | null>(null);
+  const galleryFileInputRef = React.useRef<HTMLInputElement>(null);
+  const formFileInputRef = React.useRef<HTMLInputElement>(null);
+
   // Add / Edit Form State
   const [formId, setFormId] = useState('');
   const [formName, setFormName] = useState('');
@@ -219,6 +230,116 @@ export function Equipment() {
 
   const currentEq = equipment.find(e => e.id === selectedEqId) || null;
 
+  // Keyboard navigation for photo lightbox
+  React.useEffect(() => {
+    if (lightboxPhotoIndex === null) return;
+    const currentPhotos = currentEq?.photos || [];
+    if (currentPhotos.length === 0) {
+      setLightboxPhotoIndex(null);
+      return;
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLightboxPhotoIndex(null);
+      } else if (e.key === 'ArrowLeft') {
+        setLightboxPhotoIndex(prev => (prev !== null && prev > 0 ? prev - 1 : currentPhotos.length - 1));
+      } else if (e.key === 'ArrowRight') {
+        setLightboxPhotoIndex(prev => (prev !== null && prev < currentPhotos.length - 1 ? prev + 1 : 0));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxPhotoIndex, currentEq?.photos]);
+
+  // Gallery Handlers
+  const handleCapturePhoto = (dataUrl: string) => {
+    setIsCameraOpen(false);
+    if (cameraTarget === 'detail' && currentEq) {
+      const updatedPhotos = [...(currentEq.photos || []), dataUrl];
+      updateEquipment({ ...currentEq, photos: updatedPhotos });
+    } else if (cameraTarget === 'form') {
+      setFormPhotos(prev => [...prev, dataUrl]);
+    }
+  };
+
+  const handleUploadPhotos = (files: FileList | null, target: 'detail' | 'form') => {
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        if (result) {
+          if (target === 'detail' && currentEq) {
+            updateEquipment({
+              ...currentEq,
+              photos: [...(currentEq.photos || []), result]
+            });
+          } else {
+            setFormPhotos(prev => [...prev, result]);
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleDeletePhoto = (photoIndex: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm('Are you sure you want to remove this photo from the equipment gallery?')) return;
+    if (currentEq) {
+      const updatedPhotos = (currentEq.photos || []).filter((_, idx) => idx !== photoIndex);
+      updateEquipment({ ...currentEq, photos: updatedPhotos });
+      if (lightboxPhotoIndex !== null) {
+        if (updatedPhotos.length === 0) {
+          setLightboxPhotoIndex(null);
+        } else if (lightboxPhotoIndex >= updatedPhotos.length) {
+          setLightboxPhotoIndex(updatedPhotos.length - 1);
+        }
+      }
+    }
+  };
+
+  const handleFormDeletePhoto = (photoIndex: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setFormPhotos(prev => prev.filter((_, idx) => idx !== photoIndex));
+  };
+
+  const handleSetCoverPhoto = (photoIndex: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (currentEq) {
+      const currentPhotos = [...(currentEq.photos || [])];
+      if (photoIndex >= 0 && photoIndex < currentPhotos.length) {
+        const [selected] = currentPhotos.splice(photoIndex, 1);
+        currentPhotos.unshift(selected);
+        updateEquipment({ ...currentEq, photos: currentPhotos });
+        if (lightboxPhotoIndex !== null) setLightboxPhotoIndex(0);
+      }
+    }
+  };
+
+  const handleFormSetCoverPhoto = (photoIndex: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setFormPhotos(prev => {
+      const copy = [...prev];
+      if (photoIndex >= 0 && photoIndex < copy.length) {
+        const [selected] = copy.splice(photoIndex, 1);
+        copy.unshift(selected);
+      }
+      return copy;
+    });
+  };
+
+  const handleDownloadPhoto = (photoUrl: string, index: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const link = document.createElement('a');
+    link.href = photoUrl;
+    link.download = `${currentEq?.id || 'equipment'}-photo-${index + 1}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const filteredEquipment = equipment.filter(eq => {
     const matchesStatus = filter === 'All' || eq.status === filter;
     const matchesCategory = categoryFilter === 'All' || eq.category === categoryFilter;
@@ -278,6 +399,7 @@ export function Equipment() {
     setFormRentalEndDate('');
     setFormRentalBillingCycle('Hourly');
     setFormRentalDeposit('');
+    setFormPhotos([]);
 
     setIsAddModalOpen(true);
   };
@@ -322,6 +444,7 @@ export function Equipment() {
     setFormRentalEndDate(eq.rentalEndDate || '');
     setFormRentalBillingCycle(eq.rentalBillingCycle || 'Hourly');
     setFormRentalDeposit(eq.rentalDeposit !== undefined ? eq.rentalDeposit : '');
+    setFormPhotos(eq.photos || []);
   };
 
   const openLogModal = (eq: EquipmentType, defaultTab: EquipmentLogType = 'Hours', e?: React.MouseEvent) => {
@@ -417,6 +540,7 @@ export function Equipment() {
       rentalEndDate: formOwnership === 'Rented' ? formRentalEndDate : undefined,
       rentalBillingCycle: formOwnership === 'Rented' ? formRentalBillingCycle : undefined,
       rentalDeposit: formOwnership === 'Rented' && formRentalDeposit !== '' ? Number(formRentalDeposit) : undefined,
+      photos: formPhotos,
     };
 
     addEquipment(newEq);
@@ -474,6 +598,7 @@ export function Equipment() {
       rentalEndDate: formOwnership === 'Rented' ? formRentalEndDate : undefined,
       rentalBillingCycle: formOwnership === 'Rented' ? formRentalBillingCycle : undefined,
       rentalDeposit: formOwnership === 'Rented' && formRentalDeposit !== '' ? Number(formRentalDeposit) : undefined,
+      photos: formPhotos,
     };
 
     updateEquipment(updatedEq);
@@ -642,6 +767,21 @@ export function Equipment() {
                 </div>
                 {canEditEquipment && (
                   <div className="flex gap-2 flex-wrap">
+                    <Button 
+                      onClick={() => {
+                        setCameraTarget('detail');
+                        setIsCameraOpen(true);
+                      }} 
+                      className="bg-purple-600 hover:bg-purple-700 text-white gap-2 rounded-xl shadow-sm border-0 font-medium px-3.5"
+                    >
+                      <Camera className="h-4 w-4" /> Take Photo
+                    </Button>
+                    <Button 
+                      onClick={() => galleryFileInputRef.current?.click()} 
+                      className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 gap-2 rounded-xl border border-slate-200 dark:border-slate-700 font-medium px-3"
+                    >
+                      <Upload className="h-4 w-4 text-slate-600 dark:text-slate-400" /> Upload Pictures
+                    </Button>
                     <Button onClick={(e) => openLogModal(currentEq, 'Hours', e)} className="bg-[#0B5FFF] hover:bg-blue-600 text-white gap-2 rounded-xl shadow-sm border-0 font-medium px-4">
                       <ClipboardList className="h-4 w-4" /> Log Activity
                     </Button>
@@ -869,6 +1009,159 @@ export function Equipment() {
                         <p className="text-sm font-medium text-slate-900 dark:text-slate-200">{currentEq.primaryMetric || 'Engine Hours'}</p>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Equipment Photo Gallery Section */}
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-[#1E293B]/40 p-6 shadow-sm">
+                    <div className="flex justify-between items-center mb-5 flex-wrap gap-2">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <Camera className="h-5 w-5 text-purple-600" /> Equipment Photo Gallery
+                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50">
+                            {(currentEq.photos?.length || 0)} {(currentEq.photos?.length === 1 ? 'Photo' : 'Photos')}
+                          </span>
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Field photos, inspection snapshots, and machine documentation
+                        </p>
+                      </div>
+
+                      {canEditEquipment && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setCameraTarget('detail');
+                              setIsCameraOpen(true);
+                            }}
+                            className="bg-purple-600 hover:bg-purple-700 text-white text-xs gap-1.5 rounded-xl shadow-sm"
+                          >
+                            <Camera className="h-3.5 w-3.5" /> Take Live Photo
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => galleryFileInputRef.current?.click()}
+                            variant="outline"
+                            className="text-xs gap-1.5 rounded-xl border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+                          >
+                            <Upload className="h-3.5 w-3.5" /> Upload Pictures
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    {(!currentEq.photos || currentEq.photos.length === 0) ? (
+                      <div 
+                        onClick={() => canEditEquipment && galleryFileInputRef.current?.click()}
+                        className="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-purple-400 dark:hover:border-purple-600/50 rounded-2xl p-8 text-center transition-all bg-slate-50/50 dark:bg-slate-900/20 group cursor-pointer"
+                      >
+                        <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Camera className="h-7 w-7" />
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
+                          No equipment photos attached yet
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-4">
+                          Capture on-site condition pictures with the live camera or upload existing images of this machine, license plates, and inspection points.
+                        </p>
+                        {canEditEquipment && (
+                          <div className="flex items-center justify-center gap-3">
+                            <Button
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCameraTarget('detail');
+                                setIsCameraOpen(true);
+                              }}
+                              className="bg-purple-600 hover:bg-purple-700 text-white text-xs gap-1.5 rounded-xl"
+                            >
+                              <Camera className="h-3.5 w-3.5" /> Take Live Photo
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                galleryFileInputRef.current?.click();
+                              }}
+                              className="text-xs gap-1.5 rounded-xl border-slate-300 dark:border-slate-700"
+                            >
+                              <Upload className="h-3.5 w-3.5" /> Upload from Device
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+                        {currentEq.photos.map((photoUrl, index) => (
+                          <div
+                            key={index}
+                            onClick={() => setLightboxPhotoIndex(index)}
+                            className="group relative aspect-[4/3] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 cursor-pointer shadow-sm hover:shadow-md transition-all"
+                          >
+                            <img
+                              src={photoUrl}
+                              alt={`${currentEq.name} photo ${index + 1}`}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              loading="lazy"
+                            />
+                            
+                            {/* Badges */}
+                            <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
+                              {index === 0 ? (
+                                <span className="px-2 py-0.5 rounded-md bg-amber-500/90 backdrop-blur-sm text-slate-950 font-bold text-[10px] shadow-sm flex items-center gap-1">
+                                  <Star className="h-2.5 w-2.5 fill-current" /> Cover Photo
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-white font-mono font-medium text-[10px]">
+                                  #{index + 1}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Hover Overlay with Action Buttons */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2.5 z-20">
+                              <div className="flex justify-end gap-1.5">
+                                {canEditEquipment && index !== 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleSetCoverPhoto(index, e)}
+                                    title="Set as Cover Photo"
+                                    className="p-1.5 rounded-lg bg-black/60 hover:bg-amber-500 text-white hover:text-slate-950 transition-colors backdrop-blur-sm"
+                                  >
+                                    <Star className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDownloadPhoto(photoUrl, index, e)}
+                                  title="Download Image"
+                                  className="p-1.5 rounded-lg bg-black/60 hover:bg-blue-600 text-white transition-colors backdrop-blur-sm"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                </button>
+                                {canEditEquipment && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleDeletePhoto(index, e)}
+                                    title="Delete Photo"
+                                    className="p-1.5 rounded-lg bg-black/60 hover:bg-rose-600 text-white transition-colors backdrop-blur-sm"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between text-white text-[11px]">
+                                <span className="font-semibold flex items-center gap-1">
+                                  <Maximize2 className="h-3 w-3" /> View Fullscreen
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Recent Activity Timeline */}
@@ -1202,6 +1495,19 @@ export function Equipment() {
                     onClick={() => setSelectedEqId(eq.id)}
                     className="border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-[#1E293B]/40 p-5 flex flex-col justify-between gap-4 relative cursor-pointer hover:border-blue-500 dark:hover:border-slate-700 transition-all group shadow-sm"
                   >
+                    {eq.photos && eq.photos.length > 0 && (
+                      <div className="relative w-full h-36 rounded-xl overflow-hidden -mt-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80">
+                        <img 
+                          src={eq.photos[0]} 
+                          alt={eq.name} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                        <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-white text-[10px] font-bold flex items-center gap-1 shadow-sm">
+                          <Camera className="h-3 w-3" /> {eq.photos.length}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-start gap-2">
                       <div className="space-y-1.5 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -1781,6 +2087,92 @@ export function Equipment() {
                 </div>
               </div>
 
+              {/* Equipment Pictures & Gallery Section in Add Modal */}
+              <div className="p-4 bg-purple-50/40 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-900/40 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                      <Camera className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-purple-900 dark:text-purple-300 block">
+                        Equipment Pictures & Attachments ({formPhotos.length})
+                      </label>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Add photos of machine condition, license disk, and registration
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        setCameraTarget('form');
+                        setIsCameraOpen(true);
+                      }}
+                      className="bg-purple-600 hover:bg-purple-700 text-white text-xs gap-1.5 rounded-xl shadow-sm"
+                    >
+                      <Camera className="h-3.5 w-3.5" /> Take Photo
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => formFileInputRef.current?.click()}
+                      className="text-xs gap-1.5 rounded-xl border-slate-300 dark:border-slate-700"
+                    >
+                      <Upload className="h-3.5 w-3.5" /> Upload Images
+                    </Button>
+                  </div>
+                </div>
+
+                {formPhotos.length > 0 ? (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5 pt-2">
+                    {formPhotos.map((photo, idx) => (
+                      <div key={idx} className="relative aspect-[4/3] rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group bg-slate-100 dark:bg-slate-900 shadow-sm">
+                        <img src={photo} alt="" className="w-full h-full object-cover" />
+                        {idx === 0 && (
+                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-[9px] shadow-sm">
+                            Cover
+                          </span>
+                        )}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">
+                          {idx !== 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleFormSetCoverPhoto(idx, e)}
+                              className="p-1 rounded bg-amber-500 text-slate-950 hover:scale-110 transition-transform"
+                              title="Set as Cover Photo"
+                            >
+                              <Star className="h-3 w-3 fill-current" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => handleFormDeletePhoto(idx, e)}
+                            className="p-1 rounded bg-rose-600 text-white hover:scale-110 transition-transform"
+                            title="Remove Photo"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div 
+                    onClick={() => formFileInputRef.current?.click()}
+                    className="border-2 border-dashed border-purple-200 dark:border-purple-800/40 rounded-xl p-4 text-center cursor-pointer hover:border-purple-400 transition-colors bg-white/40 dark:bg-slate-900/30"
+                  >
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Click to upload photos or use the camera to attach machine snapshots
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div className="pt-4 border-t border-slate-100 dark:border-slate-700/50 flex justify-end gap-3">
                 <Button type="button" variant="ghost" onClick={() => setIsAddModalOpen(false)} className="text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Cancel</Button>
                 <Button type="submit" className="bg-[#0B5FFF] hover:bg-blue-600 text-white font-medium px-5">Save Equipment</Button>
@@ -2100,6 +2492,92 @@ export function Equipment() {
                     <input type="date" value={formLastService} onChange={e => setFormLastService(e.target.value)} className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
                   </div>
                 </div>
+              </div>
+
+              {/* Equipment Pictures & Gallery Section in Edit Modal */}
+              <div className="p-4 bg-purple-50/40 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-900/40 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                      <Camera className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-purple-900 dark:text-purple-300 block">
+                        Equipment Pictures & Attachments ({formPhotos.length})
+                      </label>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Add photos of machine condition, license disk, and registration
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        setCameraTarget('form');
+                        setIsCameraOpen(true);
+                      }}
+                      className="bg-purple-600 hover:bg-purple-700 text-white text-xs gap-1.5 rounded-xl shadow-sm"
+                    >
+                      <Camera className="h-3.5 w-3.5" /> Take Photo
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => formFileInputRef.current?.click()}
+                      className="text-xs gap-1.5 rounded-xl border-slate-300 dark:border-slate-700"
+                    >
+                      <Upload className="h-3.5 w-3.5" /> Upload Images
+                    </Button>
+                  </div>
+                </div>
+
+                {formPhotos.length > 0 ? (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5 pt-2">
+                    {formPhotos.map((photo, idx) => (
+                      <div key={idx} className="relative aspect-[4/3] rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group bg-slate-100 dark:bg-slate-900 shadow-sm">
+                        <img src={photo} alt="" className="w-full h-full object-cover" />
+                        {idx === 0 && (
+                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-[9px] shadow-sm">
+                            Cover
+                          </span>
+                        )}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">
+                          {idx !== 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleFormSetCoverPhoto(idx, e)}
+                              className="p-1 rounded bg-amber-500 text-slate-950 hover:scale-110 transition-transform"
+                              title="Set as Cover Photo"
+                            >
+                              <Star className="h-3 w-3 fill-current" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => handleFormDeletePhoto(idx, e)}
+                            className="p-1 rounded bg-rose-600 text-white hover:scale-110 transition-transform"
+                            title="Remove Photo"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div 
+                    onClick={() => formFileInputRef.current?.click()}
+                    className="border-2 border-dashed border-purple-200 dark:border-purple-800/40 rounded-xl p-4 text-center cursor-pointer hover:border-purple-400 transition-colors bg-white/40 dark:bg-slate-900/30"
+                  >
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Click to upload photos or use the camera to attach machine snapshots
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="pt-4 border-t border-slate-100 dark:border-slate-700/50 flex justify-end gap-3">
@@ -2673,6 +3151,175 @@ export function Equipment() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* HIDDEN FILE INPUTS FOR GALLERY AND FORM */}
+      <input
+        ref={galleryFileInputRef}
+        type="file"
+        multiple
+        accept="image/*"
+        onChange={(e) => {
+          handleUploadPhotos(e.target.files, 'detail');
+          e.target.value = '';
+        }}
+        className="hidden"
+      />
+      <input
+        ref={formFileInputRef}
+        type="file"
+        multiple
+        accept="image/*"
+        onChange={(e) => {
+          handleUploadPhotos(e.target.files, 'form');
+          e.target.value = '';
+        }}
+        className="hidden"
+      />
+
+      {/* LIVE CAMERA CAPTURE OVERLAY */}
+      {isCameraOpen && (
+        <CameraCapture
+          onCapture={handleCapturePhoto}
+          onCancel={() => setIsCameraOpen(false)}
+          activityTag={currentEq ? `${currentEq.id} • ${currentEq.name}` : undefined}
+        />
+      )}
+
+      {/* FULLSCREEN PHOTO LIGHTBOX MODAL */}
+      {lightboxPhotoIndex !== null && currentEq && currentEq.photos && currentEq.photos[lightboxPhotoIndex] && (
+        <div 
+          className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-md flex flex-col justify-between p-4 animate-in fade-in"
+          onClick={() => setLightboxPhotoIndex(null)}
+        >
+          {/* Top Bar */}
+          <div 
+            className="flex items-center justify-between gap-4 z-10 p-2 text-white"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-white/10 text-white">
+                <Camera className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  {currentEq.name}
+                  {lightboxPhotoIndex === 0 && (
+                    <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1">
+                      <Star className="h-3 w-3 fill-current" /> Cover Photo
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-slate-400 font-mono">
+                  {currentEq.id} • Photo {lightboxPhotoIndex + 1} of {currentEq.photos.length}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {canEditEquipment && lightboxPhotoIndex !== 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleSetCoverPhoto(lightboxPhotoIndex)}
+                  className="bg-white/10 hover:bg-amber-400 hover:text-slate-950 text-white border-white/20 text-xs rounded-xl gap-1.5"
+                >
+                  <Star className="h-3.5 w-3.5" /> Make Cover
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleDownloadPhoto(currentEq.photos![lightboxPhotoIndex], lightboxPhotoIndex)}
+                className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs rounded-xl gap-1.5"
+              >
+                <Download className="h-3.5 w-3.5" /> Download
+              </Button>
+              {canEditEquipment && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleDeletePhoto(lightboxPhotoIndex)}
+                  className="bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border-rose-500/30 text-xs rounded-xl gap-1.5"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </Button>
+              )}
+              <button
+                onClick={() => setLightboxPhotoIndex(null)}
+                className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors ml-2"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+          </div>
+
+          {/* Main Photo Display with Navigation Controls */}
+          <div 
+            className="relative flex-1 flex items-center justify-center p-2 sm:p-6 overflow-hidden select-none"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Previous Button */}
+            {currentEq.photos.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setLightboxPhotoIndex(prev => (prev !== null && prev > 0 ? prev - 1 : currentEq.photos!.length - 1))}
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/60 hover:bg-white/20 text-white backdrop-blur-md border border-white/10 transition-all z-20 hover:scale-110"
+                title="Previous Photo"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+            )}
+
+            {/* Photo Center */}
+            <div className="max-w-5xl max-h-[75vh] flex items-center justify-center">
+              <img
+                src={currentEq.photos[lightboxPhotoIndex]}
+                alt={`${currentEq.name} photo ${lightboxPhotoIndex + 1}`}
+                className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl border border-white/10"
+              />
+            </div>
+
+            {/* Next Button */}
+            {currentEq.photos.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setLightboxPhotoIndex(prev => (prev !== null && prev < currentEq.photos!.length - 1 ? prev + 1 : 0))}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/60 hover:bg-white/20 text-white backdrop-blur-md border border-white/10 transition-all z-20 hover:scale-110"
+                title="Next Photo"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            )}
+          </div>
+
+          {/* Bottom Filmstrip Thumbnails */}
+          {currentEq.photos.length > 1 && (
+            <div 
+              className="flex items-center justify-center gap-2 p-2 overflow-x-auto z-10 max-w-3xl mx-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              {currentEq.photos.map((thumbUrl, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setLightboxPhotoIndex(idx)}
+                  className={`relative w-16 h-12 rounded-lg overflow-hidden shrink-0 border-2 transition-all ${
+                    idx === lightboxPhotoIndex 
+                      ? 'border-purple-500 scale-105 ring-2 ring-purple-500/50' 
+                      : 'border-white/20 opacity-60 hover:opacity-100'
+                  }`}
+                >
+                  <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                  {idx === 0 && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-amber-500 text-[8px] font-bold text-slate-950 text-center py-0.2">
+                      COVER
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

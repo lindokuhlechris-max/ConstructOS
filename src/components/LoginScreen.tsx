@@ -141,7 +141,7 @@ export function LoginScreen() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg text-white tracking-tight">Constructfield</span>
+              <span className="font-extrabold text-lg text-white tracking-tight">Scedih</span>
               <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-semibold tracking-wide">
                 v1.0 Enterprise
               </span>
@@ -435,7 +435,7 @@ export function LoginScreen() {
 
       {/* Footer Branding */}
       <footer className="w-full max-w-7xl mx-auto px-6 py-4 text-center text-xs text-slate-500 border-t border-slate-800/80 z-10 flex flex-col sm:flex-row items-center justify-between gap-2">
-        <div>© 2026 Constructfield Enterprise Operations. All Rights Reserved.</div>
+        <div>© 2026 Scedih Enterprise Operations. All Rights Reserved.</div>
         <div className="flex items-center gap-4">
           <span className="hover:text-slate-400 cursor-pointer">Security Terms</span>
           <span>•</span>

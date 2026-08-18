@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from './ui';
 import { 
   ArrowLeft, 
@@ -24,10 +25,36 @@ import {
   Layers,
   Edit3,
   UserCheck,
-  Printer
+  Printer,
+  FolderOpen,
+  UploadCloud,
+  FileSpreadsheet,
+  FileCode,
+  Link as LinkIcon,
+  Search,
+  Filter,
+  Eye,
+  ExternalLink,
+  Unlink,
+  HardDrive,
+  Tag,
+  Paperclip,
+  CheckCircle,
+  MessageSquare,
+  StickyNote,
+  Send,
+  CornerDownLeft,
+  Save,
+  MessageCircle,
+  Sparkles,
+  Clock3
 } from 'lucide-react';
-import { QAInspectionItem, canManage, canUserEditSection } from '../types';
+import { QAInspectionItem, DocumentItem, DocumentCategory, canManage, canUserEditSection, Comment } from '../types';
 import { useAppContext } from '../context/AppContext';
+import { DocumentUploadModal } from './documents/DocumentUploadModal';
+import { DocumentPreviewModal } from './documents/DocumentPreviewModal';
+import { downloadDocument } from '../lib/documentStorage';
+import { formatFileSize } from '../lib/documentUtils';
 
 interface QualityDetailProps {
   inspection: QAInspectionItem;
@@ -37,16 +64,59 @@ interface QualityDetailProps {
 }
 
 export function QualityDetail({ inspection, onSave, onClose, onDelete }: QualityDetailProps) {
-  const { activities, projects, userRole, currentUserProfile } = useAppContext();
+  const navigate = useNavigate();
+  const { activities, projects, documents, addDocument, updateDocument, userRole, currentUserProfile } = useAppContext();
   const canEditQuality = canUserEditSection(currentUserProfile, 'quality');
-  const [activeTab, setActiveTab] = useState<'overview' | 'ncr' | 'tests' | 'photos'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'ncr' | 'tests' | 'documents' | 'photos'>('overview');
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
+  // Comments and Notes State
+  const [activeSideTab, setActiveSideTab] = useState<'comments' | 'notes'>('comments');
+  const [newCommentText, setNewCommentText] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
+  const [quickNoteText, setQuickNoteText] = useState<string>(() => {
+    if (inspection.notes) return inspection.notes;
+    try {
+      const saved = localStorage.getItem(`constructos_qa_notes_${inspection.id}`);
+      if (saved) return saved;
+    } catch {}
+    return '';
+  });
+  const [notesSaveStatus, setNotesSaveStatus] = useState<string>('');
+
+  const [comments, setComments] = useState<Comment[]>(() => {
+    if (inspection.comments && inspection.comments.length > 0) return inspection.comments;
+    try {
+      const saved = localStorage.getItem(`constructos_qa_comments_${inspection.id}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      {
+        id: `CMT-QA-${inspection.id}-1`,
+        author: inspection.inspector || 'David Smith (QA Engineer)',
+        userRole: 'QA Inspector',
+        userInitials: 'DS',
+        text: `Inspection recorded for ${inspection.title} at ${inspection.location}. Site parameters verified against engineering specification.`,
+        timestamp: new Date(Date.now() - 3600 * 1000 * 3).toISOString()
+      }
+    ];
+  });
 
   // Modals state
   const [isSignoffModalOpen, setIsSignoffModalOpen] = useState(false);
   const [isNCRModalOpen, setIsNCRModalOpen] = useState(false);
   const [isAddMetricModalOpen, setIsAddMetricModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Document Integration state
+  const [isUploadDocModalOpen, setIsUploadDocModalOpen] = useState(false);
+  const [isLinkExistingDocModalOpen, setIsLinkExistingDocModalOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
+  const [docSearchQuery, setDocSearchQuery] = useState('');
+  const [docTypeFilter, setDocTypeFilter] = useState<'all' | 'pdf' | 'excel' | 'image' | 'cad' | 'other'>('all');
+  const [existingDocSearch, setExistingDocSearch] = useState('');
+  const [uploadModalCategory, setUploadModalCategory] = useState<DocumentCategory>('QA/QC Inspections');
 
   // Edit Inspection State
   const [editForm, setEditForm] = useState<Partial<QAInspectionItem>>({
@@ -61,6 +131,127 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     clientQCNotes: inspection.clientQCNotes || '',
     clientQCSignoffDate: inspection.clientQCSignoffDate || new Date().toISOString().split('T')[0]
   });
+
+  // Comments and Notes Handlers
+  const handlePostComment = () => {
+    if (!newCommentText.trim()) return;
+
+    const authorName = currentUserProfile?.name || (userRole === 'Admin' ? 'Administrator' : 'Current User');
+    const authorId = currentUserProfile?.id || 'current-user';
+    const authorRole = currentUserProfile?.role || userRole || 'Inspector';
+    const authorInitials = currentUserProfile?.initials || authorName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    const authorAvatar = currentUserProfile?.avatarUrl;
+
+    const newComment: Comment = {
+      id: `CMT-QA-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      author: authorName,
+      userId: authorId,
+      userRole: authorRole,
+      userInitials: authorInitials,
+      text: newCommentText.trim(),
+      timestamp: new Date().toISOString(),
+      avatar: authorAvatar
+    };
+
+    const updatedComments = [...comments, newComment];
+    setComments(updatedComments);
+    setNewCommentText('');
+
+    try {
+      localStorage.setItem(`constructos_qa_comments_${inspection.id}`, JSON.stringify(updatedComments));
+    } catch {}
+
+    onSave({
+      ...inspection,
+      comments: updatedComments
+    });
+  };
+
+  const handleDeleteComment = (commentId: string) => {
+    const commentToDelete = comments.find(c => c.id === commentId);
+    if (!commentToDelete) return;
+
+    const currentUserName = currentUserProfile?.name || 'Current User';
+    const currentUserId = currentUserProfile?.id;
+    const isAuthor = Boolean(
+      (currentUserId && commentToDelete.userId && commentToDelete.userId === currentUserId) || 
+      (commentToDelete.author && commentToDelete.author.toLowerCase() === currentUserName.toLowerCase())
+    );
+    const isAdminOrManager = userRole === 'Admin' || userRole === 'Manager' || 
+      currentUserProfile?.role === 'Admin' || currentUserProfile?.role === 'Manager';
+
+    if (!isAuthor && !isAdminOrManager) {
+      alert('Permission Denied: You can only delete your own comments.');
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to delete this comment?')) {
+      return;
+    }
+
+    const updatedComments = comments.filter(c => c.id !== commentId);
+    setComments(updatedComments);
+
+    try {
+      localStorage.setItem(`constructos_qa_comments_${inspection.id}`, JSON.stringify(updatedComments));
+    } catch {}
+
+    onSave({
+      ...inspection,
+      comments: updatedComments
+    });
+  };
+
+  const handleSaveEditComment = (commentId: string) => {
+    if (!editingCommentText.trim()) return;
+
+    const updatedComments = comments.map(c => {
+      if (c.id === commentId) {
+        return {
+          ...c,
+          text: editingCommentText.trim(),
+          editedAt: new Date().toISOString()
+        };
+      }
+      return c;
+    });
+
+    setComments(updatedComments);
+    setEditingCommentId(null);
+    setEditingCommentText('');
+
+    try {
+      localStorage.setItem(`constructos_qa_comments_${inspection.id}`, JSON.stringify(updatedComments));
+    } catch {}
+
+    onSave({
+      ...inspection,
+      comments: updatedComments
+    });
+  };
+
+  const handleSaveNotes = () => {
+    try {
+      localStorage.setItem(`constructos_qa_notes_${inspection.id}`, quickNoteText);
+    } catch {}
+
+    onSave({
+      ...inspection,
+      notes: quickNoteText
+    });
+
+    setNotesSaveStatus('Saved!');
+    setTimeout(() => setNotesSaveStatus(''), 2500);
+  };
+
+  const handleInsertTimestampToNotes = () => {
+    const timestampStr = `[${new Date().toLocaleDateString('en-CA')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] `;
+    setQuickNoteText(prev => prev ? `${prev}\n${timestampStr}` : timestampStr);
+  };
+
+  const handleInsertTagToNotes = (tag: string) => {
+    setQuickNoteText(prev => prev ? `${prev} ${tag} ` : `${tag} `);
+  };
 
   // Signoff Form state
   const [signoffNotes, setSignoffNotes] = useState(inspection.signoffNotes || '');
@@ -86,6 +277,34 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
 
   const linkedActivity = activities.find(a => a.id === (editForm?.activityId || inspection?.activityId));
   const linkedProject = projects.find(p => p.id === inspection.projectId);
+
+  // Compute attached documents from Document Hub
+  const attachedDocuments = (documents || []).filter(d => 
+    (inspection.linkedDocumentIds && inspection.linkedDocumentIds.includes(d.id)) ||
+    d.linkedQAInspectionId === inspection.id ||
+    (d.tags && d.tags.includes(inspection.id))
+  );
+
+  // Filtered documents within inspection
+  const filteredAttachedDocuments = attachedDocuments.filter(doc => {
+    const matchesSearch = !docSearchQuery.trim() || 
+      doc.title.toLowerCase().includes(docSearchQuery.toLowerCase()) ||
+      doc.fileName.toLowerCase().includes(docSearchQuery.toLowerCase()) ||
+      (doc.tags || []).some(t => t.toLowerCase().includes(docSearchQuery.toLowerCase())) ||
+      (doc.description || '').toLowerCase().includes(docSearchQuery.toLowerCase());
+    
+    if (docTypeFilter === 'all') return matchesSearch;
+    return matchesSearch && doc.fileType === docTypeFilter;
+  });
+
+  // Unlinked existing documents from Hub (for linking modal)
+  const unlinkedHubDocuments = (documents || []).filter(doc => 
+    !attachedDocuments.some(ad => ad.id === doc.id) &&
+    (!existingDocSearch.trim() || 
+      doc.title.toLowerCase().includes(existingDocSearch.toLowerCase()) ||
+      doc.fileName.toLowerCase().includes(existingDocSearch.toLowerCase()) ||
+      doc.category.toLowerCase().includes(existingDocSearch.toLowerCase()))
+  );
 
   const handleSaveEditInspection = (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,6 +392,64 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     }
   };
 
+  const handleUploadDocumentSuccess = (newDoc: DocumentItem) => {
+    addDocument(newDoc);
+    const updatedIds = Array.from(new Set([...(inspection.linkedDocumentIds || []), newDoc.id]));
+    onSave({
+      ...inspection,
+      linkedDocumentIds: updatedIds
+    });
+    setIsUploadDocModalOpen(false);
+  };
+
+  const handleLinkExistingDocument = (doc: DocumentItem) => {
+    const updatedDoc: DocumentItem = {
+      ...doc,
+      linkedQAInspectionId: inspection.id,
+      linkedQAInspectionTitle: inspection.title,
+      tags: Array.from(new Set([...(doc.tags || []), 'QA-QC', inspection.id]))
+    };
+    updateDocument(updatedDoc);
+    const updatedIds = Array.from(new Set([...(inspection.linkedDocumentIds || []), doc.id]));
+    onSave({
+      ...inspection,
+      linkedDocumentIds: updatedIds
+    });
+    setIsLinkExistingDocModalOpen(false);
+  };
+
+  const handleUnlinkDocument = (docId: string) => {
+    const targetDoc = (documents || []).find(d => d.id === docId);
+    if (targetDoc && targetDoc.linkedQAInspectionId === inspection.id) {
+      updateDocument({
+        ...targetDoc,
+        linkedQAInspectionId: undefined,
+        linkedQAInspectionTitle: undefined,
+        tags: (targetDoc.tags || []).filter(t => t !== inspection.id)
+      });
+    }
+    const updatedIds = (inspection.linkedDocumentIds || []).filter(id => id !== docId);
+    onSave({
+      ...inspection,
+      linkedDocumentIds: updatedIds
+    });
+  };
+
+  const getDocTypeIcon = (fileType: string) => {
+    switch (fileType) {
+      case 'pdf':
+        return <FileText className="h-5 w-5 text-red-500" />;
+      case 'excel':
+        return <FileSpreadsheet className="h-5 w-5 text-emerald-600" />;
+      case 'image':
+        return <ImageIcon className="h-5 w-5 text-purple-600" />;
+      case 'cad':
+        return <FileCode className="h-5 w-5 text-amber-500" />;
+      default:
+        return <FileText className="h-5 w-5 text-[#0B5FFF]" />;
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 w-full h-full p-4 md:p-6 overflow-y-auto">
       {/* Top Navigation & Status Header */}
@@ -184,11 +461,21 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
           <div>
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className="text-xs font-mono font-bold tracking-wider text-emerald-600">{inspection.id}</span>
-              <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-700">{inspection.category}</Badge>
+              <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">{inspection.category}</Badge>
               {inspection.ncrCode && <Badge variant="danger" className="text-[10px] font-mono">{inspection.ncrCode}</Badge>}
               <Badge variant={inspection.status === 'Passed' ? 'success' : inspection.status === 'Failed' ? 'danger' : 'warning'}>
                 {inspection.status}
               </Badge>
+              {attachedDocuments.length > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-[#0B5FFF] dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+                  <FolderOpen className="h-3 w-3" /> {attachedDocuments.length} Attached {attachedDocuments.length === 1 ? 'Doc' : 'Docs'}
+                </span>
+              )}
+              {comments.length > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                  <MessageSquare className="h-3 w-3 text-[#0B5FFF]" /> {comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}
+                </span>
+              )}
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{inspection.title}</h1>
           </div>
@@ -203,6 +490,18 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
           >
             <Printer className="h-4 w-4 text-slate-500" /> Print Inspection
           </button>
+
+          {canEditQuality && (
+            <button
+              onClick={() => {
+                setUploadModalCategory('QA/QC Inspections');
+                setIsUploadDocModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-[#0B5FFF] dark:text-blue-300 text-xs font-semibold transition-colors border border-blue-200 dark:border-blue-800"
+            >
+              <UploadCloud className="h-4 w-4" /> Upload Document
+            </button>
+          )}
 
           {canEditQuality && (
             <button
@@ -255,41 +554,75 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       </div>
 
       {/* Detail Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto w-full">
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 py-2.5 overflow-x-auto w-full shrink-0 min-h-[52px] bg-slate-50/70 dark:bg-slate-900/60 rounded-xl px-2">
         <button
+          type="button"
           onClick={() => setActiveTab('overview')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'overview' ? 'bg-[#0B5FFF] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400'
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+            activeTab === 'overview' 
+              ? 'bg-[#0B5FFF] text-white shadow-sm ring-2 ring-blue-500/20' 
+              : 'text-slate-600 hover:bg-white dark:hover:bg-slate-800 dark:text-slate-400 bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60'
           }`}
         >
-          <ShieldCheck className="h-4 w-4" /> Overview & QA Specifications
+          <ShieldCheck className="h-4 w-4 shrink-0" />
+          <span>Overview & QA Specifications</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('ncr')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'ncr' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400'
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+            activeTab === 'ncr' 
+              ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-500/20' 
+              : 'text-slate-600 hover:bg-white dark:hover:bg-slate-800 dark:text-slate-400 bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60'
           }`}
         >
-          <AlertTriangle className="h-4 w-4" /> Non-Conformance (NCR) & Remediation
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Non-Conformance (NCR) & Remediation</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('tests')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'tests' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400'
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+            activeTab === 'tests' 
+              ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/20' 
+              : 'text-slate-600 hover:bg-white dark:hover:bg-slate-800 dark:text-slate-400 bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60'
           }`}
         >
-          <Award className="h-4 w-4" /> Lab Test Results & Certificates
+          <Award className="h-4 w-4 shrink-0" />
+          <span>Lab Test Results & Certificates</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('photos')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'photos' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400'
+          type="button"
+          onClick={() => setActiveTab('documents')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+            activeTab === 'documents' 
+              ? 'bg-[#0B5FFF] text-white shadow-sm ring-2 ring-blue-500/20' 
+              : 'text-slate-600 hover:bg-white dark:hover:bg-slate-800 dark:text-slate-400 bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60'
           }`}
         >
-          <ImageIcon className="h-4 w-4" /> Photo Evidence Gallery
+          <FolderOpen className="h-4 w-4 shrink-0" />
+          <span>QA Documents & Hub</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+            activeTab === 'documents' ? 'bg-white/20 text-white' : 'bg-blue-100 text-[#0B5FFF] dark:bg-blue-900/60 dark:text-blue-200'
+          }`}>
+            {attachedDocuments.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('photos')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+            activeTab === 'photos' 
+              ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-500/20' 
+              : 'text-slate-600 hover:bg-white dark:hover:bg-slate-800 dark:text-slate-400 bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60'
+          }`}
+        >
+          <ImageIcon className="h-4 w-4 shrink-0" />
+          <span>Photo Evidence Gallery</span>
         </button>
       </div>
 
@@ -370,6 +703,57 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   </div>
                 </div>
               )}
+
+              {/* Attached QA Documents Quick Card */}
+              <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-4 bg-slate-50/60 dark:bg-slate-900/40">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    <FolderOpen className="h-4 w-4 text-[#0B5FFF]" />
+                    Attached Quality Documents ({attachedDocuments.length})
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setActiveTab('documents')}
+                    className="text-xs font-bold text-[#0B5FFF] hover:underline h-7 px-2"
+                  >
+                    View All & Upload →
+                  </Button>
+                </div>
+
+                {attachedDocuments.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {attachedDocuments.slice(0, 4).map(doc => (
+                      <div
+                        key={doc.id}
+                        onClick={() => setPreviewDoc(doc)}
+                        className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 hover:border-[#0B5FFF] cursor-pointer transition-all flex items-center justify-between gap-2 group"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 shrink-0">
+                            {getDocTypeIcon(doc.fileType)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#0B5FFF] transition-colors">
+                              {doc.title}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                              <span>{doc.fileSizeFormatted || formatFileSize(doc.fileSize)}</span>
+                              <span>•</span>
+                              <span className="text-emerald-600 font-semibold">{doc.status}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <Eye className="h-3.5 w-3.5 text-slate-400 group-hover:text-[#0B5FFF] shrink-0" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-xs text-slate-400 italic">
+                    No documents attached yet. Click "Upload Document" to attach test certificates, NDT logs, or specs.
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -407,7 +791,313 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   <span className="text-slate-500">Non-Conformance</span>
                   <span>{inspection.ncrCode ? 'NCR Active' : 'None'}</span>
                 </div>
+                <div className="flex items-center justify-between text-xs font-semibold pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500">Attached QA Documents</span>
+                  <span className="font-bold text-[#0B5FFF]">{attachedDocuments.length}</span>
+                </div>
               </div>
+            </Card>
+
+            {/* QA Comments & Inspector Notes Card */}
+            <Card className="border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
+              {/* Header with Segmented Tabs */}
+              <div className="p-4 bg-slate-50/90 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-blue-100/80 dark:bg-blue-900/40 text-[#0B5FFF]">
+                    <MessageSquare className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                      Comments & Notes
+                    </h3>
+                  </div>
+                </div>
+
+                {/* Sub-tab pills */}
+                <div className="flex bg-slate-200/70 dark:bg-slate-800 p-0.5 rounded-lg text-[11px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSideTab('comments')}
+                    className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+                      activeSideTab === 'comments'
+                        ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] dark:text-white shadow-xs font-bold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>Comments</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold ${
+                      activeSideTab === 'comments' 
+                        ? 'bg-blue-100 dark:bg-blue-950 text-[#0B5FFF]' 
+                        : 'bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                    }`}>
+                      {comments.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSideTab('notes')}
+                    className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+                      activeSideTab === 'notes'
+                        ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] dark:text-white shadow-xs font-bold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <StickyNote className="h-3 w-3" />
+                    <span>Field Notes</span>
+                    {quickNoteText.trim().length > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* COMMENTS TAB CONTENT */}
+              {activeSideTab === 'comments' && (
+                <div className="p-4 flex flex-col gap-4">
+                  {/* Comments Thread List */}
+                  <div className="flex flex-col gap-3 max-h-[350px] overflow-y-auto pr-1">
+                    {comments.length > 0 ? (
+                      comments.map(comment => {
+                        const currentUserName = currentUserProfile?.name || 'Current User';
+                        const currentUserId = currentUserProfile?.id;
+                        const isAuthor = Boolean(
+                          (currentUserId && comment.userId && comment.userId === currentUserId) || 
+                          (comment.author && comment.author.toLowerCase() === currentUserName.toLowerCase())
+                        );
+                        const isAdminOrManager = userRole === 'Admin' || userRole === 'Manager' || 
+                          currentUserProfile?.role === 'Admin' || currentUserProfile?.role === 'Manager';
+                        const canDelete = isAuthor || isAdminOrManager;
+                        const canEdit = isAuthor;
+                        const isEditingThis = editingCommentId === comment.id;
+
+                        const formattedDate = new Date(comment.timestamp).toLocaleDateString([], {
+                          month: 'short',
+                          day: 'numeric'
+                        });
+                        const formattedTime = new Date(comment.timestamp).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        });
+
+                        return (
+                          <div key={comment.id} className="flex gap-2.5 group">
+                            {comment.avatar ? (
+                              <img 
+                                src={comment.avatar} 
+                                alt={comment.author} 
+                                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0 border border-slate-200 dark:border-slate-700 object-cover" 
+                              />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-950/60 text-[#0B5FFF] font-bold text-[10px] flex items-center justify-center shrink-0 border border-blue-200 dark:border-blue-800">
+                                {comment.userInitials || comment.author.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+
+                            <div className="flex-1 bg-slate-50 dark:bg-slate-800/80 rounded-xl rounded-tl-none p-3 border border-slate-200/80 dark:border-slate-700/80 relative transition-all">
+                              <div className="flex justify-between items-start mb-1 gap-1 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                    {comment.author}
+                                  </span>
+                                  {comment.userRole && (
+                                    <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-blue-100/70 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300">
+                                      {comment.userRole}
+                                    </span>
+                                  )}
+                                  {isAuthor && (
+                                    <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                      You
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-medium text-slate-400">
+                                    {formattedDate} {formattedTime}
+                                  </span>
+                                  {comment.editedAt && (
+                                    <span className="text-[8px] text-slate-400 italic">
+                                      (edited)
+                                    </span>
+                                  )}
+                                  {canEdit && !isEditingThis && (
+                                    <button 
+                                      type="button"
+                                      onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }}
+                                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-[#0B5FFF] text-slate-400 transition-all"
+                                      title="Edit comment"
+                                    >
+                                      <Edit3 className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                  {canDelete && !isEditingThis && (
+                                    <button 
+                                      type="button"
+                                      onClick={() => handleDeleteComment(comment.id)}
+                                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-500 text-slate-400 transition-all"
+                                      title="Delete comment"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {isEditingThis ? (
+                                <div className="mt-2 space-y-2">
+                                  <textarea 
+                                    value={editingCommentText}
+                                    onChange={e => setEditingCommentText(e.target.value)}
+                                    className="w-full text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 focus:ring-1 focus:ring-[#0B5FFF]"
+                                    rows={2}
+                                  />
+                                  <div className="flex justify-end gap-1.5">
+                                    <Button size="sm" variant="ghost" onClick={() => setEditingCommentId(null)} className="h-6 text-[10px] px-2">Cancel</Button>
+                                    <Button size="sm" onClick={() => handleSaveEditComment(comment.id)} className="h-6 text-[10px] px-2 bg-[#0B5FFF] text-white">Save</Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
+                                  {comment.text}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-6 text-center text-xs text-slate-400 italic bg-slate-50/50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700/60 flex flex-col items-center gap-1.5">
+                        <MessageCircle className="h-6 w-6 text-slate-300 dark:text-slate-600" />
+                        <span>No comments yet.</span>
+                        <span className="text-[10px] text-slate-400">Post an observation or discuss with the QA team below.</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Comment Input Box */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+                    {/* Quick Tag Pills */}
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="text-[10px] font-semibold text-slate-400 mr-0.5">Quick:</span>
+                      <button
+                        type="button"
+                        onClick={() => setNewCommentText(prev => prev ? `${prev} @ClientQC ` : '@ClientQC ')}
+                        className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] border border-blue-200 dark:border-blue-800 hover:bg-blue-100"
+                      >
+                        + @ClientQC
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewCommentText(prev => prev ? `${prev} [Hold Point] ` : '[Hold Point] ')}
+                        className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-600 border border-amber-200 dark:border-amber-800 hover:bg-amber-100"
+                      >
+                        + [Hold Point]
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewCommentText(prev => prev ? `${prev} [Passed Spec] ` : '[Passed Spec] ')}
+                        className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100"
+                      >
+                        + [Passed]
+                      </button>
+                    </div>
+
+                    <div className="relative">
+                      <textarea
+                        value={newCommentText}
+                        onChange={e => setNewCommentText(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handlePostComment();
+                          }
+                        }}
+                        placeholder="Add QA remark or question... (Enter to send)"
+                        className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 pr-10 focus:outline-none focus:ring-2 focus:ring-[#0B5FFF] min-h-[64px]"
+                      />
+                      <Button
+                        size="icon"
+                        onClick={handlePostComment}
+                        disabled={!newCommentText.trim()}
+                        className="absolute right-2 bottom-3 h-7 w-7 rounded-lg bg-[#0B5FFF] hover:bg-blue-600 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Post comment"
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* FIELD NOTES TAB CONTENT */}
+              {activeSideTab === 'notes' && (
+                <div className="p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-1 flex-wrap">
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      Inspector field scratchpad & punch-list
+                    </span>
+                    {notesSaveStatus && (
+                      <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1 animate-pulse">
+                        <Check className="h-3 w-3" /> {notesSaveStatus}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Notes Quick Tag Insertion */}
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleInsertTimestampToNotes}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 flex items-center gap-1"
+                    >
+                      <Clock3 className="h-2.5 w-2.5" /> Timestamp
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertTagToNotes('[Punch List]')}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-600 border border-amber-200 dark:border-amber-800"
+                    >
+                      + [Punch List]
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertTagToNotes('[Re-inspect Req]')}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-600 border border-rose-200 dark:border-rose-800"
+                    >
+                      + [Re-inspect]
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertTagToNotes('[NDT Verified]')}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200 dark:border-emerald-800"
+                    >
+                      + [NDT Verified]
+                    </button>
+                  </div>
+
+                  <textarea
+                    value={quickNoteText}
+                    onChange={e => setQuickNoteText(e.target.value)}
+                    placeholder="Type inspector observations, dimensions measured on site, punch items, or re-inspection requirements..."
+                    rows={8}
+                    className="w-full text-xs font-mono bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-[#0B5FFF] leading-relaxed"
+                  />
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {quickNoteText.length} characters
+                    </span>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveNotes}
+                      className="h-7 text-xs font-bold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg"
+                    >
+                      <Save className="h-3.5 w-3.5" /> Save Notes
+                    </Button>
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
         </div>
@@ -470,18 +1160,32 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       {/* TAB 3: LAB TEST RESULTS & CERTIFICATES */}
       {activeTab === 'tests' && (
         <div className="flex flex-col gap-6 w-full">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center flex-wrap gap-3">
             <div>
               <h2 className="text-lg font-bold text-[#0B5FFF] dark:text-white flex items-center gap-2">
                 <Award className="h-5 w-5 text-emerald-600" /> Laboratory & NDT Test Parameters
               </h2>
               <p className="text-xs text-slate-500">Quantitative test measurements (e.g., Concrete Slump, Ultrasonic NDT, Pressure tests).</p>
             </div>
-            {canManage(userRole) && (
-              <Button onClick={() => setIsAddMetricModalOpen(true)} className="gap-2 bg-emerald-600 text-white rounded-xl text-xs">
-                <Plus className="h-4 w-4" /> Add Test Metric
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {canEditQuality && (
+                <Button 
+                  onClick={() => {
+                    setUploadModalCategory('QA/QC Inspections');
+                    setIsUploadDocModalOpen(true);
+                  }}
+                  variant="outline"
+                  className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs"
+                >
+                  <UploadCloud className="h-4 w-4" /> Upload Lab Certificate
+                </Button>
+              )}
+              {canManage(userRole) && (
+                <Button onClick={() => setIsAddMetricModalOpen(true)} className="gap-2 bg-emerald-600 text-white rounded-xl text-xs">
+                  <Plus className="h-4 w-4" /> Add Test Metric
+                </Button>
+              )}
+            </div>
           </div>
 
           <Card className="border-slate-200 dark:border-slate-800 overflow-hidden">
@@ -516,10 +1220,318 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
               </tbody>
             </table>
           </Card>
+
+          {/* Laboratory Test Documents Section */}
+          <div className="mt-2 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                <FileCheck className="h-4 w-4 text-emerald-600" />
+                Attached Lab Certificates & Third-Party Reports ({attachedDocuments.length})
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setActiveTab('documents')}
+                className="text-xs font-bold text-[#0B5FFF] hover:underline"
+              >
+                Manage All Documents →
+              </Button>
+            </div>
+
+            {attachedDocuments.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {attachedDocuments.map(doc => (
+                  <div
+                    key={doc.id}
+                    className="p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 transition-all flex flex-col justify-between gap-3 shadow-xs"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700 shrink-0">
+                        {getDocTypeIcon(doc.fileType)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">{doc.title}</h4>
+                        <p className="text-[11px] text-slate-400 font-mono truncate">{doc.fileName}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] font-semibold text-slate-500">{doc.fileSizeFormatted || formatFileSize(doc.fileSize)}</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-semibold">{doc.status}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setPreviewDoc(doc)}
+                        className="h-7 px-2 text-xs font-semibold text-[#0B5FFF]"
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-1" /> Preview
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => downloadDocument(doc)}
+                        className="h-7 px-2 text-xs font-semibold text-slate-600 dark:text-slate-300"
+                      >
+                        <Download className="h-3.5 w-3.5 mr-1" /> Download
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                <p className="text-xs text-slate-400 italic mb-2">No laboratory certificates or test sheets attached yet.</p>
+                {canEditQuality && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setUploadModalCategory('QA/QC Inspections');
+                      setIsUploadDocModalOpen(true);
+                    }}
+                    className="text-xs h-8 rounded-xl gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                  >
+                    <UploadCloud className="h-3.5 w-3.5" /> Upload Test Certificate Now
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* TAB 4: PHOTO EVIDENCE GALLERY & LIGHTBOX */}
+      {/* TAB 4: QA DOCUMENTS & DOCUMENT ENGINE HUB */}
+      {activeTab === 'documents' && (
+        <div className="flex flex-col gap-6 w-full">
+          {/* Header & Quick Action Banner */}
+          <div className="bg-gradient-to-r from-blue-900/10 via-indigo-900/10 to-slate-900/10 dark:from-blue-950/30 dark:via-indigo-950/30 dark:to-slate-950/30 p-5 sm:p-6 rounded-2xl border border-blue-200/80 dark:border-blue-900/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <FolderOpen className="h-5 w-5 text-[#0B5FFF]" />
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">QA Quality Documents & Engineering Hub</h2>
+                <Badge variant="outline" className="bg-white dark:bg-slate-900 text-xs font-bold">
+                  {attachedDocuments.length} Attached
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
+                Integrated with the centralized Document Engine. Attach lab test certificates, mill test reports (MTC), NDT reports, non-conformance records, and method statements.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                onClick={() => navigate(`/documents?category=QA/QC%20Inspections`)}
+                variant="outline"
+                className="gap-1.5 rounded-xl text-xs font-semibold border-slate-300 dark:border-slate-700"
+              >
+                <ExternalLink className="h-4 w-4 text-slate-500" /> Open Document Hub
+              </Button>
+
+              {canEditQuality && (
+                <Button
+                  onClick={() => setIsLinkExistingDocModalOpen(true)}
+                  variant="outline"
+                  className="gap-1.5 rounded-xl text-xs font-semibold border-[#0B5FFF]/40 text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                >
+                  <LinkIcon className="h-4 w-4" /> Link from Hub
+                </Button>
+              )}
+
+              {canEditQuality && (
+                <Button
+                  onClick={() => {
+                    setUploadModalCategory('QA/QC Inspections');
+                    setIsUploadDocModalOpen(true);
+                  }}
+                  className="gap-1.5 bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl text-xs font-semibold shadow-sm"
+                >
+                  <UploadCloud className="h-4 w-4" /> Upload QA Document
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search attached documents, tags, or specs..."
+                value={docSearchQuery}
+                onChange={e => setDocSearchQuery(e.target.value)}
+                className="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+              />
+            </div>
+
+            {/* File Type Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              {[
+                { id: 'all', label: 'All Files' },
+                { id: 'pdf', label: 'PDFs' },
+                { id: 'excel', label: 'Excel / CSV' },
+                { id: 'image', label: 'Images / NDT' },
+                { id: 'cad', label: 'CAD / DWG' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setDocTypeFilter(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                    docTypeFilter === tab.id
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Document Cards Grid */}
+          {filteredAttachedDocuments.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredAttachedDocuments.map(doc => (
+                <div
+                  key={doc.id}
+                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 hover:border-[#0B5FFF] dark:hover:border-[#0B5FFF] hover:shadow-md transition-all flex flex-col justify-between gap-4 group"
+                >
+                  <div className="space-y-2.5">
+                    {/* Top Row: Type, Revision, Status */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800">
+                          {getDocTypeIcon(doc.fileType)}
+                        </div>
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          {doc.fileExtension || doc.fileType}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-[#0B5FFF]">
+                          {doc.version || 'v1.0'}
+                        </span>
+                        <Badge variant={doc.status === 'Approved' ? 'success' : doc.status === 'Under Review' ? 'warning' : 'outline'} className="text-[10px]">
+                          {doc.status}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {/* Title & Filename */}
+                    <div>
+                      <h3
+                        onClick={() => setPreviewDoc(doc)}
+                        className="font-bold text-sm text-slate-900 dark:text-slate-100 hover:text-[#0B5FFF] dark:hover:text-[#0B5FFF] cursor-pointer transition-colors line-clamp-2"
+                      >
+                        {doc.title}
+                      </h3>
+                      <p className="text-xs text-slate-400 font-mono truncate mt-0.5">{doc.fileName}</p>
+                    </div>
+
+                    {/* Description if available */}
+                    {doc.description && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl">
+                        {doc.description}
+                      </p>
+                    )}
+
+                    {/* Tags */}
+                    {doc.tags && doc.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {doc.tags.slice(0, 3).map(tag => (
+                          <span key={tag} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Metadata & Actions Footer */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">{doc.fileSizeFormatted || formatFileSize(doc.fileSize)}</span>
+                      <span className="text-[10px] text-slate-400">By {doc.uploadedBy}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setPreviewDoc(doc)}
+                        title="Preview with In-Browser Viewer Engine"
+                        className="p-1.5 rounded-lg bg-blue-50 text-[#0B5FFF] hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 transition-colors"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        onClick={() => downloadDocument(doc)}
+                        title="Download Document Binary"
+                        className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        onClick={() => navigate(`/documents?id=${doc.id}`)}
+                        title="Open in Document Hub"
+                        className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </button>
+
+                      {canEditQuality && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Unlink "${doc.title}" from this inspection record?`)) {
+                              handleUnlinkDocument(doc.id);
+                            }
+                          }}
+                          title="Unlink from this inspection"
+                          className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 transition-colors"
+                        >
+                          <Unlink className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Card className="p-12 text-center border-dashed border-slate-300 dark:border-slate-800 rounded-2xl">
+              <FolderOpen className="h-12 w-12 text-[#0B5FFF] mx-auto mb-3 opacity-60" />
+              <h3 className="font-bold text-base text-slate-800 dark:text-slate-200">No Attached Quality Documents</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                Upload laboratory test results, material certificates, inspection sign-off sheets, or NDT logs directly to link with this QA/QC inspection.
+              </p>
+              {canEditQuality && (
+                <div className="flex items-center justify-center gap-3 mt-4">
+                  <Button
+                    onClick={() => {
+                      setUploadModalCategory('QA/QC Inspections');
+                      setIsUploadDocModalOpen(true);
+                    }}
+                    className="gap-2 bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl text-xs font-semibold"
+                  >
+                    <UploadCloud className="h-4 w-4" /> Upload QA Document
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsLinkExistingDocModalOpen(true)}
+                    className="gap-2 rounded-xl text-xs font-semibold border-slate-300 dark:border-slate-700"
+                  >
+                    <LinkIcon className="h-4 w-4" /> Link from Document Hub
+                  </Button>
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* TAB 5: PHOTO EVIDENCE GALLERY & LIGHTBOX */}
       {activeTab === 'photos' && (
         <div className="flex flex-col gap-6 w-full">
           <div className="flex justify-between items-center">
@@ -552,6 +1564,21 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 No site evidence photos uploaded yet.
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* LIGHTBOX FOR PHOTOS */}
+      {lightboxImage && (
+        <div className="fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4" onClick={() => setLightboxImage(null)}>
+          <div className="relative max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl">
+            <img src={lightboxImage} alt="Zoomed Evidence" className="max-h-[85vh] w-auto object-contain rounded-xl" />
+            <button
+              onClick={() => setLightboxImage(null)}
+              className="absolute top-3 right-3 p-2 rounded-full bg-slate-900/80 text-white hover:bg-slate-900"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
         </div>
       )}
@@ -723,6 +1750,182 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 <button type="submit" className="px-4 py-2 rounded-xl text-sm font-semibold bg-rose-600 text-white">Issue NCR Ticket</button>
               </div>
             </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ADD TEST METRIC MODAL */}
+      {isAddMetricModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md shadow-2xl border-slate-200 dark:border-slate-800">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Award className="h-5 w-5 text-emerald-600" /> Add Quantitative Test Metric
+              </h3>
+              <button onClick={() => setIsAddMetricModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+            </div>
+            <form onSubmit={handleAddTestMetric} className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Test Parameter *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Concrete Slump Test (mm)"
+                  value={metricForm.parameter}
+                  onChange={e => setMetricForm({ ...metricForm, parameter: e.target.value })}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Specification Limit</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 75mm ± 25mm"
+                  value={metricForm.specification}
+                  onChange={e => setMetricForm({ ...metricForm, specification: e.target.value })}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Measured Site Result</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 85mm"
+                  value={metricForm.measured}
+                  onChange={e => setMetricForm({ ...metricForm, measured: e.target.value })}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Test Outcome</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="radio"
+                      name="passStatus"
+                      checked={metricForm.pass === true}
+                      onChange={() => setMetricForm({ ...metricForm, pass: true })}
+                      className="text-emerald-600"
+                    />
+                    <span className="text-emerald-600 font-bold">Passed</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="radio"
+                      name="passStatus"
+                      checked={metricForm.pass === false}
+                      onChange={() => setMetricForm({ ...metricForm, pass: false })}
+                      className="text-rose-600"
+                    />
+                    <span className="text-rose-600 font-bold">Failed</span>
+                  </label>
+                </div>
+              </div>
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsAddMetricModalOpen(false)} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-600 text-white">Save Metric</button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* DOCUMENT UPLOAD MODAL (INTEGRATED WITH DOCUMENT ENGINE) */}
+      <DocumentUploadModal
+        isOpen={isUploadDocModalOpen}
+        onClose={() => setIsUploadDocModalOpen(false)}
+        onUpload={handleUploadDocumentSuccess}
+        activities={activities}
+        currentUser={currentUserProfile?.name || 'David Smith (QA Engineer)'}
+        projectId={inspection.projectId}
+        defaultActivityId={inspection.activityId}
+        defaultCategory={uploadModalCategory}
+        defaultQAInspectionId={inspection.id}
+        defaultQAInspectionTitle={inspection.title}
+      />
+
+      {/* DOCUMENT PREVIEW MODAL (WITH FULL IN-BROWSER VIEWERS) */}
+      <DocumentPreviewModal
+        document={previewDoc}
+        isOpen={!!previewDoc}
+        onClose={() => setPreviewDoc(null)}
+        activities={activities}
+      />
+
+      {/* LINK EXISTING DOCUMENT FROM HUB MODAL */}
+      {isLinkExistingDocModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-2xl shadow-2xl border-slate-200 dark:border-slate-800 flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-[#0B5FFF]">
+                  <LinkIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Link Existing Document from Hub</h3>
+                  <p className="text-xs text-slate-500">Attach any existing blueprint, lab report, or specification to inspection {inspection.id}.</p>
+                </div>
+              </div>
+              <button onClick={() => setIsLinkExistingDocModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+            </div>
+
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search Document Hub by title, category, or filename..."
+                  value={existingDocSearch}
+                  onChange={e => setExistingDocSearch(e.target.value)}
+                  className="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-2.5 flex-1">
+              {unlinkedHubDocuments.length > 0 ? (
+                unlinkedHubDocuments.map(doc => (
+                  <div
+                    key={doc.id}
+                    className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-[#0B5FFF] transition-all flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 shrink-0">
+                        {getDocTypeIcon(doc.fileType)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate">{doc.title}</div>
+                        <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
+                          <span>{doc.fileName}</span>
+                          <span>•</span>
+                          <span className="font-semibold text-slate-600 dark:text-slate-300">{doc.category}</span>
+                          <span>•</span>
+                          <span>{doc.fileSizeFormatted || formatFileSize(doc.fileSize)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      onClick={() => handleLinkExistingDocument(doc)}
+                      className="bg-[#0B5FFF] hover:bg-blue-600 text-white text-xs h-8 px-3 rounded-xl shrink-0 gap-1.5"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Attach
+                    </Button>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-slate-400 text-xs italic">
+                  {existingDocSearch ? 'No matching documents found in the Hub.' : 'All documents in the Hub are already attached, or no documents exist yet.'}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+              <Button variant="outline" onClick={() => setIsLinkExistingDocModalOpen(false)} className="rounded-xl text-xs">
+                Close
+              </Button>
+            </div>
           </Card>
         </div>
       )}

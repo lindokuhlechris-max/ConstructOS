@@ -1,4 +1,137 @@
-import { TaskLabourAssignment, Employee, LabourLog } from '../types';
+import { TaskLabourAssignment, Employee, LabourLog, SubTaskMeasurementType } from '../types';
+
+/**
+ * Robustly classifies a subtask into its correct SubTaskMeasurementType
+ * based on explicit type, structural flags, units of measurement, or task title/category semantics.
+ */
+export function inferSubtaskMeasurementType(st?: {
+  measurementType?: SubTaskMeasurementType;
+  unit?: string;
+  isHoldPoint?: boolean;
+  isMilestone?: boolean;
+  checklist?: any[];
+  title?: string;
+  category?: string;
+}): SubTaskMeasurementType {
+  if (!st) return 'Quantity';
+
+  // 1. Explicit valid measurement type if already recorded
+  if (st.measurementType) return st.measurementType;
+
+  // 2. Structural & Quality hold point flags
+  if (st.isHoldPoint || (st.unit && st.unit.toLowerCase() === 'sign-off')) return 'Sign-off';
+  if (st.isMilestone || (st.unit && st.unit.toLowerCase() === 'checkpoint')) return 'Milestone';
+  if (st.checklist && st.checklist.length > 0) return 'Checklist';
+
+  // 3. Unit-based classification
+  const u = (st.unit || '').trim().toLowerCase();
+  if (u === '%' || u === 'percent' || u === 'percentage') return 'Percentage';
+  if (u === 'done' || u === 'yes/no' || u === 'boolean') return 'Yes/No';
+  if (['m', 'km', 'cm', 'mm', 'ft', 'yd', 'lin.m', 'meter', 'meters', 'metre', 'metres', 'linear m', 'lin m', 'linear metre', 'linear meter'].includes(u)) {
+    return 'Length';
+  }
+  if (['m²', 'm2', 'sqm', 'sq.m', 'ha', 'hectare', 'hectares', 'sq ft', 'sq.ft', 'sq yd', 'acres', 'acre'].includes(u)) {
+    return 'Area';
+  }
+  if (['m³', 'm3', 'cum', 'cu.m', 'l', 'litre', 'litres', 'liter', 'liters', 'cu yd', 'cu ft', 'gallons', 'gal'].includes(u)) {
+    return 'Volume';
+  }
+  if (['tons', 'ton', 't', 'kg', 'kgs', 'lbs', 'tonne', 'tonnes'].includes(u)) {
+    return 'Weight';
+  }
+  if (['poles', 'panels', 'fixtures', 'joints', 'pipes', 'manholes', 'items', 'valves'].includes(u)) {
+    return 'Count';
+  }
+
+  // 4. Title and category heuristics
+  const text = `${st.title || ''} ${st.category || ''}`.toLowerCase();
+
+  // QA Inspection & Hold Point Gate keywords
+  if (
+    text.includes('inspection') ||
+    text.includes('sign-off') ||
+    text.includes('sign off') ||
+    text.includes('qa gate') ||
+    text.includes('quality hold') ||
+    text.includes('audit check') ||
+    text.includes('test certificate') ||
+    text.includes('probing inspection')
+  ) {
+    return 'Sign-off';
+  }
+
+  // Milestone keywords
+  if (
+    text.includes('milestone') ||
+    text.includes('checkpoint') ||
+    text.includes('stage gate') ||
+    text.includes('handover')
+  ) {
+    return 'Milestone';
+  }
+
+  // Volume deliverables
+  if (
+    text.includes('bedding') ||
+    text.includes('sand layer') ||
+    text.includes('concrete pour') ||
+    text.includes('blinding') ||
+    text.includes('backfill') ||
+    text.includes('compaction') ||
+    text.includes('aggregate') ||
+    text.includes('crushed stone')
+  ) {
+    return 'Volume';
+  }
+
+  // Area deliverables
+  if (
+    text.includes('paving') ||
+    text.includes('surfacing') ||
+    text.includes('clearing') ||
+    text.includes('topsoil stripping') ||
+    text.includes('plastering') ||
+    text.includes('painting') ||
+    text.includes('formwork assembly')
+  ) {
+    return 'Area';
+  }
+
+  // Weight deliverables
+  if (
+    text.includes('rebar') ||
+    text.includes('reinforcement') ||
+    text.includes('structural steel') ||
+    text.includes('asphalt hot mix')
+  ) {
+    return 'Weight';
+  }
+
+  // Linear Distance & Trenching deliverables
+  if (
+    text.includes('trench') ||
+    text.includes('corridor') ||
+    text.includes('pipeline') ||
+    text.includes('conduit') ||
+    text.includes('cable') ||
+    text.includes('cables') ||
+    text.includes('fibre') ||
+    text.includes('fiber') ||
+    text.includes('set-out') ||
+    text.includes('pegging') ||
+    text.includes('marking') ||
+    text.includes('fencing') ||
+    text.includes('kerb') ||
+    text.includes('pulling') ||
+    text.includes('laying') ||
+    text.includes('span') ||
+    text.includes('duct assembly')
+  ) {
+    return 'Length';
+  }
+
+  return 'Quantity';
+}
 
 /**
  * Returns safe 1-2 character uppercase initials for avatars (e.g. "DM" for "Dimi Maphanga"),

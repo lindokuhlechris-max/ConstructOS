@@ -21,14 +21,14 @@ export interface CompanyDetails {
 }
 
 const defaultCompanyDetails: CompanyDetails = {
-  name: 'Constructfield Infrastructure Ltd.',
+  name: 'Scedih Infrastructure Ltd.',
   tagline: 'Building the Future with Precision & Safety',
   mission: 'To deliver exceptional construction projects through innovation, safety, and unwavering commitment to quality, building the infrastructure of tomorrow.',
   vision: 'To be the industry leader in sustainable and intelligent construction, transforming skylines and communities worldwide.',
   address: '100 Construction Way, Suite 400, Industrial Zone',
   phone: '+61 2 9000 8888',
-  email: 'contact@constructfield.io',
-  website: 'www.constructfield.io',
+  email: 'contact@scedih.io',
+  website: 'www.scedih.io',
   registrationNumber: 'ABN 99 123 456 789',
   coreValues: ['Safety First', 'Uncompromised Quality', 'Sustainable Innovation', 'Integrity & Respect']
 };

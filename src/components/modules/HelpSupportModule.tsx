@@ -34,12 +34,12 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
 
   const faqs = [
     {
-      q: 'How does Offline Sync work in Constructfield?',
-      a: 'Constructfield is built with a local-first offline architecture using IndexedDB and Service Workers. You can record labour check-ins, log activity progress, upload photos, and draft daily reports even with zero internet connectivity. When your device reconnects, all pending changes sync automatically to the cloud.'
+      q: 'How does Offline Sync work in Scedih?',
+      a: 'Scedih is built with a local-first offline architecture using IndexedDB and Service Workers. You can record labour check-ins, log activity progress, upload photos, and draft daily reports even with zero internet connectivity. When your device reconnects, all pending changes sync automatically to the cloud.'
     },
     {
       q: 'Why is a parent activity or subtask locked from completion?',
-      a: 'Constructfield enforces strict hierarchical integrity. A parent activity or parent subtask cannot be marked as "Completed" while any child subtask remains incomplete. In addition, subtasks designated as Milestone Checkpoints require 100% target fulfillment before they can be closed.'
+      a: 'Scedih enforces strict hierarchical integrity. A parent activity or parent subtask cannot be marked as "Completed" while any child subtask remains incomplete. In addition, subtasks designated as Milestone Checkpoints require 100% target fulfillment before they can be closed.'
     },
     {
       q: 'How do I backup and restore project data?',
@@ -50,8 +50,8 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
       a: 'Navigate to the Reports page, select your active project and date, and review aggregated weather, labour attendance, equipment logs, and progress. Click "Export PDF Report" or "Share WhatsApp Summary" to distribute daily logs to stakeholders.'
     },
     {
-      q: 'Can I install Constructfield as a mobile or desktop app?',
-      a: 'Yes! Constructfield is a Progressive Web App (PWA). In Chrome/Edge/Safari, tap "Install App" or "Add to Home Screen" to run Constructfield in full-screen offline mode on iOS, Android, macOS, and Windows.'
+      q: 'Can I install Scedih as a mobile or desktop app?',
+      a: 'Yes! Scedih is a Progressive Web App (PWA). In Chrome/Edge/Safari, tap "Install App" or "Add to Home Screen" to run Scedih in full-screen offline mode on iOS, Android, macOS, and Windows.'
     }
   ];
 
@@ -163,7 +163,7 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
             <h3 className="font-bold text-sm text-slate-900 dark:text-white">PWA & Offline First</h3>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            Install Constructfield directly on smartphones, tablets, or rugged field laptops for full offline performance without network drops.
+            Install Scedih directly on smartphones, tablets, or rugged field laptops for full offline performance without network drops.
           </p>
         </Card>
       </div>
@@ -213,7 +213,7 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
           ) : (
             <form onSubmit={handleSendFeedback} className="space-y-4">
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Experiencing an issue or have a feature request? Submit your feedback directly to the Constructfield engineering team:
+                Experiencing an issue or have a feature request? Submit your feedback directly to the Scedih engineering team:
               </p>
               <textarea
                 rows={3}
@@ -225,7 +225,7 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
               />
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-slate-400">
-                  Constructfield v1.0 • Enterprise Edition
+                  Scedih v1.0 • Enterprise Edition
                 </span>
                 <Button type="submit" className="bg-[#0B5FFF] rounded-xl text-xs font-bold gap-2">
                   <Mail className="h-3.5 w-3.5" /> Submit Support Request

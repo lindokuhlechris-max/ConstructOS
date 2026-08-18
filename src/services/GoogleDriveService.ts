@@ -8,6 +8,28 @@ export interface DriveBackupFile {
 export class GoogleDriveService {
   private readonly defaultFileName = 'constructfield_data.json';
 
+  public static getClientId(): string {
+    const raw = import.meta.env.VITE_GOOGLE_CLIENT_ID || 
+      localStorage.getItem('constructfield_google_client_id') || 
+      localStorage.getItem('constructos_google_client_id') || '';
+    return raw.trim();
+  }
+
+  public static isClientIdValid(id?: string): boolean {
+    const target = (id !== undefined ? id : GoogleDriveService.getClientId()).trim();
+    return target.length > 15 && target.includes('.apps.googleusercontent.com');
+  }
+
+  public static saveClientId(id: string): void {
+    const cleanId = id.trim();
+    if (cleanId) {
+      localStorage.setItem('constructfield_google_client_id', cleanId);
+    } else {
+      localStorage.removeItem('constructfield_google_client_id');
+      localStorage.removeItem('constructos_google_client_id');
+    }
+  }
+
   private async ensureGoogleScriptLoaded(): Promise<void> {
     if (window.google?.accounts?.oauth2) return;
 
@@ -59,9 +81,14 @@ export class GoogleDriveService {
         return;
       }
       
-      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem('constructfield_google_client_id') || localStorage.getItem('constructos_google_client_id');
+      const clientId = GoogleDriveService.getClientId();
       if (!clientId) {
-        reject(new Error('Google Client ID is not configured. Please configure your Google Client ID in Settings or provide VITE_GOOGLE_CLIENT_ID in your environment.'));
+        reject(new Error('Google OAuth Client ID is not configured. Please enter your Google OAuth 2.0 Web Client ID in Settings → System & Backup, or use Cloud Sync.'));
+        return;
+      }
+
+      if (!GoogleDriveService.isClientIdValid(clientId)) {
+        reject(new Error(`Invalid Google Client ID format ("${clientId}"). A valid Google OAuth 2.0 Web Client ID must end with ".apps.googleusercontent.com".`));
         return;
       }
 
@@ -71,7 +98,13 @@ export class GoogleDriveService {
           scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata',
           callback: (response: any) => {
             if (response.error !== undefined) {
-              reject(new Error(response.error_description || response.error || 'Google Authentication was cancelled or failed.'));
+              const errCode = response.error;
+              const errDesc = response.error_description || '';
+              if (errCode === 'invalid_client' || errCode === 'unauthorized_client') {
+                reject(new Error(`Google OAuth error (${errCode}): The OAuth Client ID "${clientId.slice(0, 15)}..." was not found or origin "${window.location.origin}" is not authorized in Google Cloud Console.`));
+              } else {
+                reject(new Error(errDesc || errCode || 'Google Authentication was cancelled or failed.'));
+              }
               return;
             }
             resolve(response.access_token);
@@ -119,13 +152,13 @@ export class GoogleDriveService {
     if (onStatus) onStatus('Checking for existing backup file...');
     const existingFileId = await this.getFileId(token, fileName);
     
-    if (onStatus) onStatus('Preparing comprehensive database snapshot...');
+    if (onStatus) onStatus('Preparing database snapshot...');
     const fileContent = JSON.stringify(data, null, 2);
     
     const metadata = {
       name: fileName,
       mimeType: 'application/json',
-      description: `Constructfield Full System Backup (${new Date().toLocaleString()})`
+      description: `Scedih Full System Backup (${new Date().toLocaleString()})`
     };
 
     const form = new FormData();

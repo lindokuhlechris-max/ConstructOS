@@ -40,12 +40,19 @@ export function Badge({ className, variant = "default", ...props }: React.HTMLAt
   );
 }
 
-export function ProgressBar({ value, className, ...props }: React.HTMLAttributes<HTMLDivElement> & { value: number }) {
+export function ProgressBar({ 
+  value, 
+  progress, 
+  size,
+  className, 
+  ...props 
+}: React.HTMLAttributes<HTMLDivElement> & { value?: number; progress?: number; size?: string }) {
+  const val = value !== undefined ? value : (progress !== undefined ? progress : 0);
   return (
     <div className={cn("relative h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800", className)} {...props}>
       <div 
         className="h-full w-full flex-1 bg-[#0B5FFF] transition-all" 
-        style={{ transform: `translateX(-${100 - (value || 0)}%)` }} 
+        style={{ transform: `translateX(-${Math.max(0, 100 - (val || 0))}%)` }} 
       />
     </div>
   );

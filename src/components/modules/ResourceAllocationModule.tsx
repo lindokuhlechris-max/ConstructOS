@@ -537,7 +537,7 @@ export function ResourceAllocationModule({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `constructfield_resource_allocations_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `scedih_resource_allocations_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -551,7 +551,7 @@ export function ResourceAllocationModule({
       // Header
       doc.setFontSize(18);
       doc.setTextColor(11, 95, 255); // #0B5FFF
-      doc.text('Constructfield Resource Allocation Dispatch Manifest', 40, 40);
+      doc.text('Scedih Resource Allocation Dispatch Manifest', 40, 40);
       
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
@@ -614,13 +614,13 @@ export function ResourceAllocationModule({
         styles: { fontSize: 8, cellPadding: 4 },
       });
 
-      const filename = `Constructfield_Dispatch_Manifest_${new Date().toISOString().split('T')[0]}.pdf`;
+      const filename = `Scedih_Dispatch_Manifest_${new Date().toISOString().split('T')[0]}.pdf`;
       const blob = doc.output('blob');
       saveOrShareFile({
         filename,
         blob,
         title: 'Dispatch Manifest',
-        text: `Constructfield Dispatch Manifest`
+        text: `Scedih Dispatch Manifest`
       });
     } catch (err) {
       console.error('Failed to generate PDF manifest:', err);
@@ -2008,13 +2008,13 @@ export function ResourceAllocationModule({
       <PrintPreview
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
-        title="Constructfield Resource Allocation Dispatch Manifest"
+        title="Scedih Resource Allocation Dispatch Manifest"
         onDownloadPdf={handleDownloadPDF}
       >
         <div className="p-8 font-sans">
           <div className="border-b-2 border-[#0B5FFF] pb-6 mb-8 flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-black text-slate-900 mb-2">Constructfield Dispatch Manifest</h1>
+              <h1 className="text-3xl font-black text-slate-900 mb-2">Scedih Dispatch Manifest</h1>
               <p className="text-sm text-slate-500 font-medium">Resource Allocations & Assignments</p>
             </div>
             <div className="text-right">

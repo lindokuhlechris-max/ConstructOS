@@ -98,7 +98,7 @@ export async function exportActivitiesToExcel(
   // TAB 1: EXECUTIVE SUMMARY
   // -------------------------------------------------------------
   const summaryRows: any[][] = [
-    ['CONSTRUCTFIELD ENTERPRISE — ACTIVITIES & FIELD OPERATIONS MASTER REPORT'],
+    ['SCEDIH ENTERPRISE — ACTIVITIES & FIELD OPERATIONS MASTER REPORT'],
     ['Generated on:', `${currentDate} at ${currentTime}`, '', 'Report Scope:', filenameSuffix ? filenameSuffix.toUpperCase() : 'ALL ACTIVE ACTIVITIES'],
     ['Total Records:', total, '', 'Weighted Progress:', `${avgProgress}%`],
     [''],
@@ -434,12 +434,12 @@ export async function exportActivitiesToExcel(
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   });
 
-  const filename = `constructfield_activities_master_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.xlsx`;
+  const filename = `scedih_activities_master_${filenameSuffix ? filenameSuffix + '_' : ''}${dateStr}.xlsx`;
 
   return await saveOrShareFile({
     filename,
     blob,
-    title: 'Constructfield Activities Master Excel Report',
-    text: `Constructfield Master Activities Report - ${currentDate}`
+    title: 'Scedih Activities Master Excel Report',
+    text: `Scedih Master Activities Report - ${currentDate}`
   });
 }

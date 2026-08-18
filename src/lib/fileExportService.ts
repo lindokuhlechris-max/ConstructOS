@@ -29,7 +29,7 @@ export async function saveOrShareFile(options: ExportFileOptions): Promise<boole
         await navigator.share({
           files: [file],
           title: title || filename,
-          text: text || `Constructfield Export: ${filename}`,
+          text: text || `Scedih Export: ${filename}`,
         });
         return true;
       }
@@ -66,14 +66,14 @@ export async function saveOrShareFile(options: ExportFileOptions): Promise<boole
  * Export JSON data snapshot
  */
 export async function exportJsonFile(data: any, filename?: string, title?: string): Promise<boolean> {
-  const name = filename || `constructfield-backup-${new Date().toISOString().split('T')[0]}.json`;
+  const name = filename || `scedih-backup-${new Date().toISOString().split('T')[0]}.json`;
   const jsonStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json' });
   return saveOrShareFile({
     filename: name,
     blob,
-    title: title || 'Constructfield JSON Backup',
-    text: 'Constructfield Offline Database Backup Snapshot'
+    title: title || 'Scedih JSON Backup',
+    text: 'Scedih Offline Database Backup Snapshot'
   });
 }
 
@@ -86,7 +86,7 @@ export async function exportCsvFile(csvContent: string, filename: string, title?
     filename,
     blob,
     title: title || filename,
-    text: `Constructfield CSV Report: ${filename}`
+    text: `Scedih CSV Report: ${filename}`
   });
 }
 
@@ -100,7 +100,7 @@ export async function exportPdfDoc(doc: any, filename: string, title?: string): 
       filename,
       blob: new Blob([blob], { type: 'application/pdf' }),
       title: title || filename,
-      text: `Constructfield PDF Document: ${filename}`
+      text: `Scedih PDF Document: ${filename}`
     });
   } catch (e) {
     // If output('blob') fails, fallback to doc.save

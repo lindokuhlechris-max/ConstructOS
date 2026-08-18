@@ -1,12 +1,75 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from './ui';
-import { X, Building2, MapPin, Calendar, Users, FileText, CheckCircle2, ShieldAlert, Edit3, Save, Plus, Trash2, Download, BookOpen, Search, Tag, Printer, FileSpreadsheet } from 'lucide-react';
+import { X, Building2, MapPin, Calendar, Users, FileText, CheckCircle2, ShieldAlert, Edit3, Save, Plus, Trash2, Download, BookOpen, Search, Tag, Printer, FileSpreadsheet, DollarSign, Coins, TrendingUp, Calculator, Percent, Layers } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAppContext } from '../context/AppContext';
-import { Project } from '../types';
+import { Project, ProjectDeliverable } from '../types';
 import { exportFullProjectCSV } from '../lib/csvExport';
 import { saveOrShareFile } from '../lib/fileExportService';
+
+const DEFAULT_DELIVERABLES: ProjectDeliverable[] = [
+  {
+    pos: '1.0',
+    description: 'Site Establishment & Security Hoarding',
+    specification: 'Temporary site offices, perimeter safety fencing, project signage, and environmental silt barriers.',
+    unit: 'sum',
+    quantity: '1',
+    unitCost: 145000,
+    totalCost: 145000
+  },
+  {
+    pos: '2.0',
+    description: 'Bulk Earthworks & Subgrade Compaction',
+    specification: 'Topsoil stripping, cut/fill grading, and subgrade compaction to 95% Mod AASHTO density.',
+    unit: 'm³',
+    quantity: '3200',
+    unitCost: 85,
+    totalCost: 272000
+  },
+  {
+    pos: '3.0',
+    description: 'Reinforced Concrete Foundations & Ground Slabs',
+    specification: '30 MPa ready-mix concrete, high-tensile steel rebar reinforcement (Y16/Y12), formwork, and moisture curing.',
+    unit: 'm³',
+    quantity: '450',
+    unitCost: 2850,
+    totalCost: 1282500
+  },
+  {
+    pos: '4.0',
+    description: 'Structural Steel Framing & Rafter Erection',
+    specification: 'Grade S355JR hot-rolled steel sections, holding down bolts, corrosion-resistant primer, and crane installation.',
+    unit: 'tons',
+    quantity: '85',
+    unitCost: 32000,
+    totalCost: 2720000
+  },
+  {
+    pos: '5.0',
+    description: 'Civil Stormwater Reticulation & Drainage',
+    specification: '450mm diameter concrete stormwater pipes, precast catchpits, manholes, and headwall discharge.',
+    unit: 'lm',
+    quantity: '620',
+    unitCost: 950,
+    totalCost: 589000
+  }
+];
+
+const DEFAULT_SCOPE_DESCRIPTION = 'Full engineering, procurement, and construction (EPC) scope encompassing site clearance, earthworks, reinforced concrete substructures, structural steel erection, civil stormwater reticulation, and final testing and quality commissioning according to project specifications.';
+
+export const formatCurrency = (amount: number | string | undefined, curr = 'ZAR') => {
+  const num = typeof amount === 'number' ? amount : parseFloat(String(amount || '0')) || 0;
+  try {
+    return new Intl.NumberFormat('en-ZA', {
+      style: 'currency',
+      currency: curr === 'USD' ? 'USD' : curr === 'EUR' ? 'EUR' : curr === 'GBP' ? 'GBP' : 'ZAR',
+      maximumFractionDigits: 2
+    }).format(num);
+  } catch {
+    return `R ${num.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+};
 
 export function ProjectDetailScreen({ project: initialProject, onClose }: { project: Project; onClose: () => void }) {
   const { activities, reports, projects } = useAppContext();
@@ -14,11 +77,49 @@ export function ProjectDetailScreen({ project: initialProject, onClose }: { proj
   const [isEditing, setIsEditing] = useState(false);
   const [project, setProject] = useState(initialProject);
   const [terminologySearch, setTerminologySearch] = useState('');
+  const [currency, setCurrency] = useState<string>(initialProject.currency || 'ZAR');
   
-  // Mock state for scope, rules, and terminologies
-  const [deliverables, setDeliverables] = useState<any[]>([]);
-  const [scopeDescription, setScopeDescription] = useState('');
-  const [rules, setRules] = useState<any[]>([]);
+  // State for scope deliverables with cost support
+  const [deliverables, setDeliverables] = useState<ProjectDeliverable[]>(() => {
+    if (initialProject.deliverables && initialProject.deliverables.length > 0) return initialProject.deliverables;
+    try {
+      const saved = localStorage.getItem(`constructos_project_deliverables_${initialProject.id}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_DELIVERABLES;
+  });
+
+  const [scopeDescription, setScopeDescription] = useState<string>(() => {
+    if (initialProject.scopeDescription) return initialProject.scopeDescription;
+    try {
+      const saved = localStorage.getItem(`constructos_project_scope_${initialProject.id}`);
+      if (saved) return saved;
+    } catch {}
+    return DEFAULT_SCOPE_DESCRIPTION;
+  });
+
+  const [rules, setRules] = useState<any[]>(() => {
+    if ((initialProject as any).rules && (initialProject as any).rules.length > 0) return (initialProject as any).rules;
+    return [
+      {
+        title: 'General Site Safety Rules',
+        items: [
+          'Full PPE (Hard Hat, High-Vis Vest, Steel-Toe Boots, Eye Protection) is mandatory at all times.',
+          'Daily toolbox talks must be completed and signed before commencing any site works.',
+          'All plant and equipment must undergo pre-start daily inspection checklists.',
+          'Smoking is strictly prohibited except in designated smoking shelters.'
+        ]
+      },
+      {
+        title: 'Working at Heights & Excavations',
+        items: [
+          'Full-body safety harnesses must be 100% tied off for works above 2 meters.',
+          'Excavations exceeding 1.5m depth must have certified shoring, benching, or battering.',
+          'Barricading and high-visibility warning tape must surround all open trenches.'
+        ]
+      }
+    ];
+  });
 
   const [terminologies, setTerminologies] = useState<Array<{ term: string; abbreviation?: string; definition: string; category?: string }>>([
     { term: 'Overhead Line', abbreviation: 'OHL', definition: 'Electric power transmission lines suspended by towers or utility poles.', category: 'Electrical' },
@@ -29,7 +130,46 @@ export function ProjectDetailScreen({ project: initialProject, onClose }: { proj
     { term: 'Civil Works', abbreviation: 'CIV', definition: 'Infrastructure, earthworks, foundations, and structural tasks on site.', category: 'Civil' }
   ]);
 
+  // Financial Calculations
+  const totalScopeCost = useMemo(() => {
+    return deliverables.reduce((sum, item) => {
+      const itemTotal = typeof item.totalCost === 'number' 
+        ? item.totalCost 
+        : (parseFloat(String(item.quantity)) || 0) * (parseFloat(String(item.unitCost)) || 0);
+      return sum + (itemTotal || 0);
+    }, 0);
+  }, [deliverables]);
+
+  const contractValue = project.contractValue || 0;
+  const budgetVariance = contractValue - totalScopeCost;
+  const budgetPercent = contractValue > 0 ? (totalScopeCost / contractValue) * 100 : 0;
+
+  const handleDeliverableChange = (idx: number, field: keyof ProjectDeliverable, value: any) => {
+    const updated = [...deliverables];
+    const item = { ...updated[idx], [field]: value };
+    if (field === 'quantity' || field === 'unitCost') {
+      const q = parseFloat(String(field === 'quantity' ? value : item.quantity)) || 0;
+      const u = parseFloat(String(field === 'unitCost' ? value : item.unitCost)) || 0;
+      item.totalCost = Math.round(q * u * 100) / 100;
+    }
+    updated[idx] = item;
+    setDeliverables(updated);
+  };
+
   const handleSave = () => {
+    try {
+      localStorage.setItem(`constructos_project_deliverables_${project.id}`, JSON.stringify(deliverables));
+      localStorage.setItem(`constructos_project_scope_${project.id}`, scopeDescription);
+      localStorage.setItem(`constructos_project_currency_${project.id}`, currency);
+    } catch {}
+
+    setProject(prev => ({
+      ...prev,
+      scopeDescription,
+      deliverables,
+      totalScopeCost,
+      currency
+    }));
     setIsEditing(false);
   };
 
@@ -44,35 +184,88 @@ export function ProjectDetailScreen({ project: initialProject, onClose }: { proj
     doc.text(`ID: ${project.id}`, 14, 30);
     doc.text(`Location: ${project.location}`, 14, 38);
     doc.text(`Status: ${project.status}`, 14, 46);
-    doc.text(`Progress: ${project.progress}%`, 14, 54);
+    doc.text(`Contract Value: ${formatCurrency(project.contractValue, currency)}`, 14, 54);
+    doc.text(`Total Scope of Work Cost: ${formatCurrency(totalScopeCost, currency)}`, 14, 62);
     
     // Scope Description
     doc.setFontSize(14);
-    doc.text('Project Scope', 14, 66);
+    doc.text('Project Scope of Work', 14, 74);
     doc.setFontSize(10);
     const splitScope = doc.splitTextToSize(scopeDescription, 180);
-    doc.text(splitScope, 14, 74);
+    doc.text(splitScope, 14, 82);
     
-    let currentY = 74 + (splitScope.length * 5) + 6;
+    let currentY = 82 + (splitScope.length * 5) + 6;
     
-    // Deliverables
+    // Deliverables with Cost
     doc.setFontSize(14);
-    doc.text('Key Deliverables', 14, currentY);
+    doc.text('Key Deliverables & Cost Breakdown', 14, currentY);
     currentY += 6;
     
-    const tableData = deliverables.map(d => [d.pos, d.description, d.specification, d.unit, d.quantity]);
+    const tableData = deliverables.map(d => [
+      d.pos, 
+      d.description, 
+      d.specification || '-', 
+      d.unit || '-', 
+      String(d.quantity || '-'),
+      formatCurrency(d.unitCost, currency),
+      formatCurrency(d.totalCost, currency)
+    ]);
+
+    // Summary Total Row
+    tableData.push([
+      '', 
+      'TOTAL ESTIMATED SCOPE COST', 
+      '', 
+      '', 
+      '', 
+      '', 
+      formatCurrency(totalScopeCost, currency)
+    ]);
+
     autoTable(doc, {
       startY: currentY,
-      head: [['Pos', 'Item Description', 'Specification', 'Unit', 'Quantity']],
+      head: [['Pos', 'Item Description', 'Specification', 'Unit', 'Qty', 'Unit Rate', 'Total Cost']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [11, 95, 255] }
+      headStyles: { fillColor: [11, 95, 255] },
+      columnStyles: {
+        0: { halign: 'center' },
+        3: { halign: 'center' },
+        4: { halign: 'right' },
+        5: { halign: 'right' },
+        6: { halign: 'right', fontStyle: 'bold' }
+      }
     });
     
     currentY = (doc as any).lastAutoTable.finalY + 14;
     
     // Rules
     doc.setFontSize(14);
+    doc.text('Site Safety Rules', 14, currentY);
+    currentY += 8;
+    
+    doc.setFontSize(10);
+    rules.forEach(ruleSec => {
+      if (currentY > 270) {
+        doc.addPage();
+        currentY = 20;
+      }
+      doc.setFont(undefined, 'bold');
+      doc.text(ruleSec.title, 14, currentY);
+      currentY += 6;
+      
+      doc.setFont(undefined, 'normal');
+      ruleSec.items.forEach(item => {
+        if (currentY > 280) {
+          doc.addPage();
+          currentY = 20;
+        }
+        const splitItem = doc.splitTextToSize(`• ${item}`, 175);
+        doc.text(splitItem, 18, currentY);
+        currentY += splitItem.length * 5;
+      });
+      currentY += 4;
+    });
     doc.text('Site Safety Rules', 14, currentY);
     currentY += 8;
     
@@ -127,7 +320,7 @@ export function ProjectDetailScreen({ project: initialProject, onClose }: { proj
       filename,
       blob,
       title: `Project: ${project.name}`,
-      text: `Constructfield Project Details - ${project.name}`
+      text: `Scedih Project Details - ${project.name}`
     });
   };
 
@@ -292,36 +485,152 @@ export function ProjectDetailScreen({ project: initialProject, onClose }: { proj
 
           {activeTab === 'scope' && (
             <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-6">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2 pb-4 border-b border-slate-100 dark:border-slate-800">
-                  <FileText className="h-5 w-5 text-[#0B5FFF]" />
-                  Project Scope
-                </h3>
+              {/* Financial Metrics Summary Banner */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Total Scope Cost */}
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                      <Calculator className="h-4 w-4 text-[#0B5FFF]" /> Total Scope Cost
+                    </span>
+                    <Badge variant="outline" className="text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] border-blue-200 dark:border-blue-800">
+                      {deliverables.length} Deliverables
+                    </Badge>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
+                      {formatCurrency(totalScopeCost, currency)}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">Calculated sum of all scope deliverables</p>
+                  </div>
+                </div>
+
+                {/* Contract Baseline Value */}
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                      <Coins className="h-4 w-4 text-emerald-600" /> Contract Value
+                    </span>
+                    <Badge variant="outline" className="text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border-emerald-200 dark:border-emerald-800">
+                      Contract Baseline
+                    </Badge>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight">
+                      {formatCurrency(contractValue, currency)}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">Approved contract baseline value</p>
+                  </div>
+                </div>
+
+                {/* Scope vs Contract Budget Variance */}
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-col justify-between sm:col-span-2 lg:col-span-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                      <TrendingUp className="h-4 w-4 text-amber-500" /> Scope vs. Budget
+                    </span>
+                    <span className={`text-xs font-bold ${budgetVariance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {budgetVariance >= 0 ? 'Under Contract' : 'Exceeds Contract'}
+                    </span>
+                  </div>
+                  <div className="mt-3">
+                    <div className="flex items-baseline justify-between mb-1.5">
+                      <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                        {formatCurrency(Math.abs(budgetVariance), currency)}
+                      </span>
+                      <span className="text-xs font-bold text-slate-500 font-mono">
+                        {budgetPercent.toFixed(1)}% of Budget
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 rounded-full ${
+                          budgetPercent > 100 
+                            ? 'bg-rose-500' 
+                            : budgetPercent > 85 
+                              ? 'bg-amber-500' 
+                              : 'bg-emerald-500'
+                        }`} 
+                        style={{ width: `${Math.min(budgetPercent, 100)}%` }} 
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Project Scope Description & Key Deliverables Card */}
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-700">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-[#0B5FFF]" />
+                    Project Scope of Work & Deliverables
+                  </h3>
+                  {isEditing && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-500">Currency:</span>
+                      <select 
+                        value={currency} 
+                        onChange={(e) => setCurrency(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-bold"
+                      >
+                        <option value="ZAR">ZAR (R)</option>
+                        <option value="USD">USD ($)</option>
+                        <option value="EUR">EUR (€)</option>
+                        <option value="GBP">GBP (£)</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
                 
                 <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-2">Scope Summary</label>
                   {isEditing ? (
                     <textarea 
                       value={scopeDescription}
                       onChange={(e) => setScopeDescription(e.target.value)}
-                      className="w-full min-h-[100px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                      placeholder="Detail the overall project scope of work, methodology, and client specifications..."
+                      className="w-full min-h-[110px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF] text-slate-900 dark:text-slate-100"
                     />
                   ) : (
-                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                      {scopeDescription}
+                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50/70 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                      {scopeDescription || 'No scope summary text specified.'}
                     </p>
                   )}
                 </div>
 
                 <div className="space-y-4 mt-6">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Key Deliverables</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Layers className="h-4 w-4 text-[#0B5FFF]" />
+                        Key Deliverables & Cost Breakdown
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Itemized deliverables, bill of quantities (BOQ) rates, and total scope costs.</p>
+                    </div>
                     {isEditing && (
-                      <Button variant="outline" size="sm" onClick={() => setDeliverables([...deliverables, { pos: String(deliverables.length + 1), description: 'New Item', specification: '', unit: '', quantity: '' }])} className="h-7 text-xs rounded-lg gap-1">
-                        <Plus className="h-3 w-3" /> Add Item
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setDeliverables([
+                          ...deliverables, 
+                          { 
+                            pos: `${deliverables.length + 1}.0`, 
+                            description: 'New Deliverable Item', 
+                            specification: '', 
+                            unit: 'sum', 
+                            quantity: '1', 
+                            unitCost: 0, 
+                            totalCost: 0 
+                          }
+                        ])} 
+                        className="h-8 text-xs font-bold rounded-xl gap-1.5 bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] border-blue-200 dark:border-blue-800 hover:bg-blue-100"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add Deliverable Item
                       </Button>
                     )}
                   </div>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
                     <datalist id="known-units">
                       <option value="m³" />
                       <option value="m²" />
@@ -332,58 +641,157 @@ export function ProjectDetailScreen({ project: initialProject, onClose }: { proj
                       <option value="hrs" />
                       <option value="days" />
                       <option value="ea" />
+                      <option value="sum" />
                       <option value="bags" />
                       <option value="L" />
                     </datalist>
-                    <table className="w-full text-sm text-left">
-                      <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+
+                    <table className="w-full text-sm text-left border-collapse min-w-[750px]">
+                      <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
                         <tr>
-                          <th className="px-4 py-3 font-semibold text-center w-16 text-slate-600 dark:text-slate-300">Pos</th>
-                          <th className="px-4 py-3 font-semibold w-1/4 text-slate-600 dark:text-slate-300">Item Description</th>
-                          <th className="px-4 py-3 font-semibold w-1/3 text-slate-600 dark:text-slate-300">Specification</th>
-                          <th className="px-4 py-3 font-semibold text-center w-24 text-slate-600 dark:text-slate-300">Unit</th>
-                          <th className="px-4 py-3 font-semibold text-right w-24 text-slate-600 dark:text-slate-300">Quantity</th>
-                          {isEditing && <th className="px-4 py-3 w-16 text-center">Action</th>}
+                          <th className="px-3.5 py-3 font-semibold text-center w-14 text-slate-600 dark:text-slate-300 text-xs">Pos</th>
+                          <th className="px-4 py-3 font-semibold w-1/4 text-slate-600 dark:text-slate-300 text-xs">Item Description</th>
+                          <th className="px-4 py-3 font-semibold w-1/4 text-slate-600 dark:text-slate-300 text-xs">Specification</th>
+                          <th className="px-3.5 py-3 font-semibold text-center w-20 text-slate-600 dark:text-slate-300 text-xs">Unit</th>
+                          <th className="px-3.5 py-3 font-semibold text-right w-24 text-slate-600 dark:text-slate-300 text-xs">Quantity</th>
+                          <th className="px-4 py-3 font-semibold text-right w-32 text-slate-600 dark:text-slate-300 text-xs">Unit Cost ({currency})</th>
+                          <th className="px-4 py-3 font-semibold text-right w-36 text-slate-600 dark:text-slate-300 text-xs">Total Cost ({currency})</th>
+                          {isEditing && <th className="px-3 py-3 w-12 text-center text-xs">Action</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {deliverables.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
-                            <td className="px-4 py-3 text-center align-top font-mono text-xs text-slate-500">
-                              {isEditing ? (
-                                <input type="text" value={item.pos} onChange={e => { const newD = [...deliverables]; newD[idx].pos = e.target.value; setDeliverables(newD); }} className="w-full text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1" />
-                              ) : item.pos}
-                            </td>
-                            <td className="px-4 py-3 align-top font-semibold text-slate-900 dark:text-slate-100">
-                              {isEditing ? (
-                                <input type="text" value={item.description} onChange={e => { const newD = [...deliverables]; newD[idx].description = e.target.value; setDeliverables(newD); }} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-sm font-semibold" />
-                              ) : item.description}
-                            </td>
-                            <td className="px-4 py-3 align-top text-slate-600 dark:text-slate-400">
-                              {isEditing ? (
-                                <textarea value={item.specification} onChange={e => { const newD = [...deliverables]; newD[idx].specification = e.target.value; setDeliverables(newD); }} className="w-full min-h-[60px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs" />
-                              ) : <span className="text-xs">{item.specification}</span>}
-                            </td>
-                            <td className="px-4 py-3 text-center align-top text-slate-600 dark:text-slate-400">
-                              {isEditing ? (
-                                <input type="text" list="known-units" value={item.unit} onChange={e => { const newD = [...deliverables]; newD[idx].unit = e.target.value; setDeliverables(newD); }} className="w-full text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1" />
-                              ) : item.unit}
-                            </td>
-                            <td className="px-4 py-3 text-right align-top font-medium text-slate-900 dark:text-slate-100">
-                              {isEditing ? (
-                                <input type="text" value={item.quantity} onChange={e => { const newD = [...deliverables]; newD[idx].quantity = e.target.value; setDeliverables(newD); }} className="w-full text-right bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1" />
-                              ) : item.quantity}
-                            </td>
-                            {isEditing && (
-                              <td className="px-4 py-3 text-center align-top">
-                                <Button variant="ghost" size="icon" onClick={() => setDeliverables(deliverables.filter((_, i) => i !== idx))} className="h-8 w-8 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 mx-auto">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                        {deliverables.map((item, idx) => {
+                          const itemQty = parseFloat(String(item.quantity)) || 0;
+                          const itemUnitCost = parseFloat(String(item.unitCost)) || 0;
+                          const itemTotalCost = typeof item.totalCost === 'number' ? item.totalCost : itemQty * itemUnitCost;
+
+                          return (
+                            <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors group">
+                              {/* Pos */}
+                              <td className="px-3.5 py-3 text-center align-top font-mono text-xs font-bold text-slate-500">
+                                {isEditing ? (
+                                  <input 
+                                    type="text" 
+                                    value={item.pos} 
+                                    onChange={e => handleDeliverableChange(idx, 'pos', e.target.value)} 
+                                    className="w-full text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono font-bold" 
+                                  />
+                                ) : item.pos}
                               </td>
-                            )}
-                          </tr>
-                        ))}
+
+                              {/* Description */}
+                              <td className="px-4 py-3 align-top font-bold text-slate-900 dark:text-slate-100">
+                                {isEditing ? (
+                                  <input 
+                                    type="text" 
+                                    value={item.description} 
+                                    onChange={e => handleDeliverableChange(idx, 'description', e.target.value)} 
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-sm font-semibold" 
+                                    placeholder="Deliverable item description..."
+                                  />
+                                ) : (
+                                  <span className="text-slate-900 dark:text-slate-100 font-semibold">{item.description}</span>
+                                )}
+                              </td>
+
+                              {/* Specification */}
+                              <td className="px-4 py-3 align-top text-slate-600 dark:text-slate-400">
+                                {isEditing ? (
+                                  <textarea 
+                                    value={item.specification || ''} 
+                                    onChange={e => handleDeliverableChange(idx, 'specification', e.target.value)} 
+                                    className="w-full min-h-[55px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs" 
+                                    placeholder="Technical specifications, materials, standards..."
+                                  />
+                                ) : (
+                                  <span className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{item.specification || '-'}</span>
+                                )}
+                              </td>
+
+                              {/* Unit */}
+                              <td className="px-3.5 py-3 text-center align-top text-slate-600 dark:text-slate-400 font-medium">
+                                {isEditing ? (
+                                  <input 
+                                    type="text" 
+                                    list="known-units" 
+                                    value={item.unit} 
+                                    onChange={e => handleDeliverableChange(idx, 'unit', e.target.value)} 
+                                    className="w-full text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-semibold" 
+                                    placeholder="Unit"
+                                  />
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-xs font-semibold">{item.unit || '-'}</span>
+                                )}
+                              </td>
+
+                              {/* Quantity */}
+                              <td className="px-3.5 py-3 text-right align-top font-bold text-slate-900 dark:text-slate-100">
+                                {isEditing ? (
+                                  <input 
+                                    type="number" 
+                                    step="any"
+                                    value={item.quantity} 
+                                    onChange={e => handleDeliverableChange(idx, 'quantity', e.target.value)} 
+                                    className="w-full text-right bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold" 
+                                  />
+                                ) : (
+                                  <span>{typeof item.quantity === 'number' ? item.quantity.toLocaleString('en-ZA') : item.quantity}</span>
+                                )}
+                              </td>
+
+                              {/* Unit Cost */}
+                              <td className="px-4 py-3 text-right align-top font-medium text-slate-700 dark:text-slate-300">
+                                {isEditing ? (
+                                  <div className="relative flex items-center">
+                                    <input 
+                                      type="number" 
+                                      step="any"
+                                      value={item.unitCost ?? ''} 
+                                      onChange={e => handleDeliverableChange(idx, 'unitCost', parseFloat(e.target.value) || 0)} 
+                                      className="w-full text-right bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-semibold" 
+                                      placeholder="0.00"
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="font-mono text-xs">{formatCurrency(item.unitCost, currency)}</span>
+                                )}
+                              </td>
+
+                              {/* Total Cost */}
+                              <td className="px-4 py-3 text-right align-top font-black text-slate-900 dark:text-slate-100 font-mono text-xs">
+                                {formatCurrency(itemTotalCost, currency)}
+                              </td>
+
+                              {/* Action */}
+                              {isEditing && (
+                                <td className="px-3 py-3 text-center align-top">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    onClick={() => setDeliverables(deliverables.filter((_, i) => i !== idx))} 
+                                    className="h-7 w-7 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg mx-auto"
+                                    title="Delete Deliverable Item"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
                       </tbody>
+                      
+                      {/* Summary Table Footer */}
+                      <tfoot className="bg-slate-50 dark:bg-slate-800/90 border-t-2 border-slate-300 dark:border-slate-700 font-bold">
+                        <tr>
+                          <td colSpan={5} className="px-4 py-3 text-right uppercase tracking-wider text-xs text-slate-600 dark:text-slate-300">
+                            Total Scope of Work Estimated Cost:
+                          </td>
+                          <td colSpan={isEditing ? 3 : 2} className="px-4 py-3 text-right text-base font-black text-[#0B5FFF] dark:text-blue-400 font-mono">
+                            {formatCurrency(totalScopeCost, currency)}
+                          </td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 </div>

@@ -40,10 +40,13 @@ import {
   Eye,
   EyeOff,
   KeyRound,
-  Fingerprint
+  Fingerprint,
+  Sparkles,
+  Layers
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { CustomFieldDefinition, UserProfile, UserRole, ProjectSectionPermissions } from '../../types';
+import { DataMigrationEngineModal } from '../DataMigrationEngineModal';
 
 declare global {
   interface Window {
@@ -260,6 +263,8 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
   const [cloudSyncStatus, setCloudSyncStatus] = useState<string | null>(null);
   const [customGoogleClientId, setCustomGoogleClientId] = useState(() => localStorage.getItem('constructfield_google_client_id') || localStorage.getItem('constructos_google_client_id') || '');
   const [clientIdSavedMsg, setClientIdSavedMsg] = useState(false);
+  const [isMigrationModalOpen, setIsMigrationModalOpen] = useState(false);
+  const [migrationModalTab, setMigrationModalTab] = useState<'export' | 'restore'>('export');
 
   const handleSaveClientId = () => {
     if (customGoogleClientId.trim()) {
@@ -343,7 +348,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
           const { saveFullFirestoreState } = await import('../../lib/firestoreService');
           await saveFullFirestoreState(imported.idbData);
         }
-        setDriveStatus('Restore complete. Reloading Constructfield...');
+        setDriveStatus('Restore complete. Reloading Scedih...');
         setTimeout(() => window.location.reload(), 1500);
       } else {
         throw new Error('Invalid backup format.');
@@ -376,8 +381,8 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
         idbData: allData
       };
       const { exportJsonFile } = await import('../../lib/fileExportService');
-      const filename = `constructfield-backup-${new Date().toISOString().split('T')[0]}.json`;
-      await exportJsonFile(backupData, filename, 'Constructfield Settings Backup');
+      const filename = `scedih-backup-${new Date().toISOString().split('T')[0]}.json`;
+      await exportJsonFile(backupData, filename, 'Scedih Settings Backup');
     } catch (e: any) {
       alert('Failed to export backup: ' + e.message);
     }
@@ -404,7 +409,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
             alert('System backup restored successfully! Reloading application...');
             window.location.reload();
           } else {
-            alert('Invalid backup format. File does not contain Constructfield data.');
+            alert('Invalid backup format. File does not contain Scedih data.');
           }
         } catch (err) {
           alert('Failed to parse backup JSON file.');
@@ -1193,7 +1198,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
                   <CloudUpload className="h-5 w-5 text-indigo-600" /> Sync to Google Drive
                 </h3>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 pr-6 leading-relaxed">
-                  Securely backup all Constructfield project database models (including activities, subtasks, QA hold points, daily reports, and audit trail logs) directly to your Google Drive account.
+                  Securely backup all Scedih project database models (including activities, subtasks, QA hold points, daily reports, and audit trail logs) directly to your Google Drive account.
                 </p>
               </div>
 
@@ -1223,7 +1228,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
                   <CloudDownload className="h-5 w-5 text-teal-600" /> Restore from Google Drive
                 </h3>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 pr-6 leading-relaxed">
-                  Retrieve and restore your most recent Constructfield backup snapshot from your Google Drive account. This will restore all activities, reports, and system settings.
+                  Retrieve and restore your most recent Scedih backup snapshot from your Google Drive account. This will restore all activities, reports, and system settings.
                 </p>
               </div>
 
@@ -1241,38 +1246,81 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
           </div>
 
           {/* Google Drive Client ID Setting Box */}
-          <Card className="p-4 sm:p-5 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                  <Key className="h-4 w-4" />
+          <Card className="p-4 sm:p-6 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 shrink-0 mt-0.5">
+                  <Key className="h-5 w-5" />
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">Google OAuth Client ID (Optional)</h4>
-                  <p className="text-[11px] text-slate-500">Configure your custom Google Cloud OAuth 2.0 Web Client ID for enterprise Drive backup.</p>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    Google OAuth 2.0 Client ID for Drive Backup
+                    {customGoogleClientId && customGoogleClientId.includes('.apps.googleusercontent.com') && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                        Valid Format
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-xl leading-relaxed">
+                    Google Drive requires a registered Google Cloud OAuth 2.0 Web Client ID to authorize backup file creation.
+                  </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <input
                   type="text"
-                  placeholder="e.g. 123456-abc.apps.googleusercontent.com"
+                  placeholder="123456789-abc.apps.googleusercontent.com"
                   value={customGoogleClientId}
                   onChange={e => setCustomGoogleClientId(e.target.value)}
-                  className="h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 font-mono flex-1 sm:w-72 focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                  className="h-10 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 font-mono flex-1 sm:w-80 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <Button
                   onClick={handleSaveClientId}
-                  variant="outline"
-                  className="h-9 px-3 rounded-xl text-xs font-semibold shrink-0"
+                  className="h-10 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shrink-0"
                 >
                   Save ID
                 </Button>
               </div>
             </div>
+
+            {/* Quick Helper Box */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-600 dark:text-slate-300 space-y-2">
+              <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                <span>Google Cloud Console Setup Checklist:</span>
+                <span className="text-[11px] font-mono text-slate-400">Application Type: Web application</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="font-bold text-indigo-600 block mb-0.5">1. Authorized Origin</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <code className="font-mono text-[10px] text-slate-700 dark:text-slate-300 truncate">{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}</code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(window.location.origin);
+                        alert('Copied origin URL to clipboard: ' + window.location.origin);
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="font-bold text-indigo-600 block mb-0.5">2. Required API</span>
+                  <span className="text-slate-500">Enable <strong>Google Drive API</strong> in Google Cloud Console.</span>
+                </div>
+                <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="font-bold text-indigo-600 block mb-0.5">3. Client ID Format</span>
+                  <span className="text-slate-500">Ends in <code>.apps.googleusercontent.com</code></span>
+                </div>
+              </div>
+            </div>
+
             {clientIdSavedMsg && (
-              <p className="text-[11px] font-semibold text-emerald-600 mt-2 flex items-center gap-1">
-                <Check className="h-3.5 w-3.5" /> Google Client ID configuration updated successfully.
+              <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                <Check className="h-4 w-4" /> Google Client ID configuration saved successfully!
               </p>
             )}
           </Card>
@@ -1280,40 +1328,74 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
           {/* 3. LOCAL DEVICE BACKUP & RESTORE SECTION */}
           <div className="flex items-center gap-4 py-1">
             <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1"></div>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Local Device Offline Backup</span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-[#0B5FFF]" />
+              Granular & Encrypted Local Device Backup
+            </span>
             <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1"></div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-            <Card className="p-6 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between">
-              <div>
-                <h3 className="text-base font-bold flex items-center gap-2 mb-2 text-slate-900 dark:text-white">
-                  <Download className="h-5 w-5 text-[#0B5FFF]" /> Export Local JSON Snapshot
-                </h3>
-                <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                  Download a complete, offline JSON file containing your entire Constructfield database, activities, and QA audit logs.
-                </p>
+          <Card className="p-6 border-slate-200 dark:border-slate-800 bg-gradient-to-br from-white via-slate-50/50 to-blue-50/30 dark:from-slate-900 dark:via-slate-900/90 dark:to-blue-950/20 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-3 rounded-2xl bg-gradient-to-br from-[#0B5FFF] to-indigo-600 text-white shadow-md shadow-blue-500/20">
+                  <Database className="h-6 w-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      Data Export, Encryption & Migration Engine
+                    </h3>
+                    <Badge className="bg-blue-100 text-[#0B5FFF] dark:bg-blue-950 dark:text-blue-300 text-[10px] font-bold">
+                      AES-256-GCM
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                    Export specific modules of your construction project, protect files with military-grade passwords (<code className="font-mono text-[11px] bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">.cfbak</code>), inspect archive manifests, and safely restore via smart merging.
+                  </p>
+                </div>
               </div>
-              <Button onClick={handleExportBackup} className="gap-2 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-xs font-bold h-9 self-start">
-                <Download className="h-4 w-4 text-[#0B5FFF]" /> Export JSON File
-              </Button>
-            </Card>
 
-            <Card className="p-6 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between">
-              <div>
-                <h3 className="text-base font-bold flex items-center gap-2 mb-2 text-slate-900 dark:text-white">
-                  <Upload className="h-5 w-5 text-emerald-600" /> Restore Local JSON Snapshot
-                </h3>
-                <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                  Restore your entire Constructfield database from a saved offline JSON backup file.
-                </p>
+              <div className="flex flex-wrap gap-2.5 shrink-0">
+                <Button
+                  onClick={() => {
+                    setMigrationModalTab('export');
+                    setIsMigrationModalOpen(true);
+                  }}
+                  className="h-10 px-4 bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl text-xs font-bold gap-2 shadow-xs"
+                >
+                  <Download className="h-4 w-4" /> Open Export Hub
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    setMigrationModalTab('restore');
+                    setIsMigrationModalOpen(true);
+                  }}
+                  variant="outline"
+                  className="h-10 px-4 rounded-xl text-xs font-bold gap-2 border-slate-300 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                >
+                  <Upload className="h-4 w-4 text-emerald-600" /> Open Smart Restore Hub
+                </Button>
               </div>
-              <label className="cursor-pointer inline-flex items-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold self-start">
-                <Upload className="h-4 w-4 text-emerald-600" /> Select JSON File to Restore
-                <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
-              </label>
-            </Card>
-          </div>
+            </div>
+
+            {/* Feature Highlights Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+              <div className="p-3 bg-white dark:bg-slate-900/80 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                <span className="font-bold text-slate-900 dark:text-white block mb-0.5">1. Granular Modules</span>
+                <span className="text-[11px] text-slate-500">Pick specific sections (e.g. Activities, QA, Accommodation, Labour, Materials).</span>
+              </div>
+              <div className="p-3 bg-white dark:bg-slate-900/80 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                <span className="font-bold text-indigo-600 dark:text-indigo-400 block mb-0.5">2. Password Protection</span>
+                <span className="text-[11px] text-slate-500">Encrypt archives with AES-256-GCM so sensitive project data stays protected.</span>
+              </div>
+              <div className="p-3 bg-white dark:bg-slate-900/80 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 block mb-0.5">3. Smart Merge & Upsert</span>
+                <span className="text-[11px] text-slate-500">Restore new records without wiping other project tables, or choose clean overwrite.</span>
+              </div>
+            </div>
+          </Card>
         </div>
       )}
 
@@ -1575,7 +1657,7 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
                     <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                       <Lock className="h-3.5 w-3.5 text-[#0B5FFF]" /> Whitelisted App Access
                     </div>
-                    <p className="text-[11px] text-slate-500">Allow this email address to log in and view project details on Constructfield.</p>
+                    <p className="text-[11px] text-slate-500">Allow this email address to log in and view project details on Scedih.</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
@@ -1730,6 +1812,14 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
           </Card>
         </div>
       )}
+
+      {/* Data Migration, Granular Export & Smart Restore Engine Modal */}
+      <DataMigrationEngineModal
+        isOpen={isMigrationModalOpen}
+        onClose={() => setIsMigrationModalOpen(false)}
+        initialTab={migrationModalTab}
+        currentUserProfile={currentUserProfile}
+      />
     </div>
   );
 }

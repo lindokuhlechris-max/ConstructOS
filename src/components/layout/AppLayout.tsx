@@ -209,7 +209,7 @@ export function AppLayout() {
       name: newProfileForm.name,
       role: newProfileForm.role,
       title: newProfileForm.title || newProfileForm.role,
-      email: newProfileForm.email || `${newProfileForm.name.toLowerCase().replace(/\s+/g, '.')}@constructfield.io`,
+      email: newProfileForm.email || `${newProfileForm.name.toLowerCase().replace(/\s+/g, '.')}@scedih.io`,
       phone: newProfileForm.phone || '+61 400 000 000',
       company: newProfileForm.company,
       department: newProfileForm.department,
@@ -254,11 +254,11 @@ export function AppLayout() {
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/70 dark:bg-slate-900/70">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-[#0B5FFF] text-white rounded-xl flex items-center justify-center font-black text-lg shadow-sm">
-                  C
+                  S
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <h2 className="text-base font-black tracking-tight text-slate-900 dark:text-white">ConstructOS</h2>
+                    <h2 className="text-base font-black tracking-tight text-slate-900 dark:text-white">Scedih</h2>
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-[#0B5FFF] font-mono">v1.0</span>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[160px]">
@@ -459,7 +459,7 @@ export function AppLayout() {
               title="Expand project info & specifications"
             >
               <div className="w-9 h-9 bg-[#0B5FFF] rounded-xl flex items-center justify-center text-white font-bold text-base shadow-sm group-hover:scale-105 transition-transform shrink-0">
-                {currentProject?.name?.charAt(0) || 'C'}
+                {currentProject?.name?.charAt(0) || 'S'}
               </div>
               <div className="flex items-center text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 pr-1">
                 <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", isProjectExpanded && "rotate-180")} />
@@ -472,7 +472,7 @@ export function AppLayout() {
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 bg-[#0B5FFF] rounded-md flex items-center justify-center text-white font-bold text-xs">
-                      {currentProject?.name?.charAt(0) || 'C'}
+                      {currentProject?.name?.charAt(0) || 'S'}
                     </div>
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Project</span>
                   </div>
@@ -487,7 +487,7 @@ export function AppLayout() {
                 <div className="space-y-3">
                   <div>
                     <h3 className="text-base font-extrabold text-slate-900 dark:text-white leading-snug">
-                      {currentProject?.name || 'Constructfield Project'}
+                      {currentProject?.name || 'Scedih Project'}
                     </h3>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">

@@ -25,6 +25,7 @@ export interface Reminder {
   location?: string;
   status: ReminderStatus;
   priority: Priority;
+  completed?: boolean;
   linkedModules: string[];
   linkedEmployeeId?: string;
   linkedEquipmentId?: string;
@@ -43,6 +44,17 @@ export interface CustomFieldDefinition {
   active: boolean;
 }
 
+export interface ProjectDeliverable {
+  pos: string;
+  description: string;
+  specification?: string;
+  unit: string;
+  quantity: string | number;
+  unitCost?: number;
+  totalCost?: number;
+  currency?: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -55,6 +67,10 @@ export interface Project {
   finishDate: string;
   status: ProjectStatus;
   progress: number;
+  scopeDescription?: string;
+  deliverables?: ProjectDeliverable[];
+  totalScopeCost?: number;
+  currency?: string;
 }
 
 export interface Comment {
@@ -79,6 +95,7 @@ export type SubTaskCategory =
   | 'Electrical & MEP'
   | 'Paving & Surfacing'
   | 'Quality & Inspection'
+  | 'Quality Control & Hold Points'
   | 'Custom';
 
 export type SubTaskMeasurementType = 
@@ -93,6 +110,14 @@ export type SubTaskMeasurementType =
   | 'Sign-off'
   | 'Milestone'
   | 'Yes/No';
+
+export interface MeasurementPresetConfig {
+  targetQuantity?: number;
+  unit?: string;
+  stepIncrement?: number;
+}
+
+export type ActivityMeasurementPresets = Partial<Record<SubTaskMeasurementType, MeasurementPresetConfig>>;
 
 export interface SubTaskChecklistItem {
   id: string;
@@ -118,6 +143,7 @@ export interface SubTask {
   targetQuantity?: number;
   completedQuantity?: number;
   unit?: string;
+  stepIncrement?: number;
   assignedPerson?: string;
   assignedWorkers?: string[];
   assignedEquipment?: string;
@@ -253,6 +279,14 @@ export interface Activity {
   assignedEquipment?: TaskEquipmentAssignment[];
   subtasks?: SubTask[];
   checklists?: ActivityChecklistItem[];
+  measurementPresets?: ActivityMeasurementPresets;
+
+  // Legacy & Alias fields for CSV/Reporting
+  endDate?: string;
+  quantity?: number;
+  assignedTeam?: string;
+  assignedTeams?: string[];
+  labourTracking?: any;
 
   // Multi-Discipline Workstream Metadata
   workstream?: WorkstreamType;
@@ -378,6 +412,7 @@ export interface TaskMaterialAssignment {
   quantity: number;
   unit: string;
   assignedDate: string;
+  status?: string;
   notes?: string;
 }
 
@@ -398,6 +433,8 @@ export interface TaskEquipmentAssignment {
   equipmentId: string;
   name: string;
   operator?: string;
+  type?: string;
+  hours?: number;
   startDate: string;
   endDate?: string;
   notes?: string;
@@ -430,7 +467,8 @@ export interface AuditLog {
   timestamp: string;
   entityType?: 'Activity' | 'LabourLog' | 'Equipment' | 'Material' | 'Safety' | 'Report' | 'Project' | 'Employee' | 'Profile' | 'QA' | 'Reminder' | 'System';
   entityId?: string;
-  actionType?: 'create' | 'update' | 'delete' | 'status_change' | 'security_permission' | 'other';
+  activityId?: string;
+  actionType?: 'create' | 'update' | 'delete' | 'status_change' | 'security_permission' | 'other' | 'sign_off' | 'sign_off_revoked';
   previousValue?: string;
   newValue?: string;
   ipAddress?: string;
@@ -611,6 +649,9 @@ export interface QAInspectionItem {
   clientQCStatus?: 'Approved' | 'Rejected' | 'Pending Client Review';
   clientQCSignoffDate?: string;
   clientQCNotes?: string;
+  linkedDocumentIds?: string[];
+  comments?: Comment[];
+  notes?: string;
 }
 
 export interface ProjectSectionPermissions {
@@ -656,6 +697,7 @@ export interface DocumentItem {
   fileName: string;
   fileType: DocumentFileType;
   fileExtension: string; // e.g. pdf, xlsx, docx, png, dwg
+  extension?: string; // alias for CSV export
   fileSize: number; // in bytes
   fileSizeFormatted?: string; // e.g. 2.4 MB
   category: DocumentCategory;
@@ -665,6 +707,8 @@ export interface DocumentItem {
   fileUrl?: string; // base64 data URL or asset link for preview/download
   linkedActivityId?: string; // optional assignment to an Activity
   linkedActivityName?: string;
+  linkedQAInspectionId?: string; // optional assignment to QA/QC Inspection
+  linkedQAInspectionTitle?: string;
   uploadedBy: string;
   uploadedAt: string;
   lastModified?: string;
@@ -844,17 +888,35 @@ export interface DailyReport {
   projectId: string;
   weather: string;
   temperature: string;
+  condition?: string;
+  temp?: string;
   siteConditions?: string;
   significantEvents?: string;
-  workersOnSite: number;
-  equipmentRunning: number;
-  incidents: number;
-  ncr: number;
+  workersOnSite?: number;
+  equipmentRunning?: number;
+  incidents?: number;
+  ncr?: number;
   activitiesLogged?: string[];
+  activitiesWorked?: string[];
+  subtasksCompleted?: string[];
+  delaysOrIssues?: string[];
+  generalNotes?: string;
+  submittedBy?: string;
+  supervisor?: string;
+  workSummary?: string;
+  notes?: string;
+  delays?: string | string[];
+  blockers?: string | string[];
+  qaHoldPoints?: string | string[];
+  safety?: any;
+  labour?: any;
   manpowerBreakdown?: { trade: string; count: number; hours: number }[];
+  labourLogged?: { name: string; role: string; hours: number }[];
   equipmentLogged?: { equipmentId: string; hours: number; status: string }[];
   photos?: string[];
   supervisorNotes?: string;
+  createdAt?: string;
+  status?: string;
 }
 
 export interface EmployeeCertificate {
@@ -1007,6 +1069,9 @@ export interface Equipment {
   rentalEndDate?: string; // YYYY-MM-DD (Return deadline)
   rentalBillingCycle?: 'Hourly' | 'Daily' | 'Weekly' | 'Monthly';
   rentalDeposit?: number; // Deposit in Rands
+
+  // Gallery & Field Photos
+  photos?: string[]; // Array of photo data URLs or image URLs
 }
 
 export type EquipmentLogType = 'Hours' | 'Mileage' | 'Loads & Trips' | 'Power Output' | 'Refuel' | 'Maintenance';

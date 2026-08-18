@@ -1,144 +1,146 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { saveOrShareFile } from './fileExportService';
 
-// Extend jsPDF type to include autoTable if not recognized
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: any;
-    lastAutoTable: { finalY: number };
-  }
-}
-
 export const generateRequestsPDF = (requests: any[], project: any) => {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  
-  // Header
-  doc.setFontSize(20);
-  doc.setTextColor(11, 95, 255); // #0B5FFF
-  doc.text('Material Requests Report', 14, 22);
-  
-  doc.setFontSize(10);
-  doc.setTextColor(100, 116, 139); // slate-500
-  doc.text(`Project: ${project?.name || 'Constructfield Project'}`, 14, 30);
-  doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 14, 35);
-  
-  // Stats
-  const pending = requests.filter(r => r.status === 'Pending').length;
-  const approved = requests.filter(r => r.status === 'Approved').length;
-  const delivered = requests.filter(r => r.status === 'Delivered').length;
-  const total = requests.length;
-  
-  doc.setFontSize(12);
-  doc.setTextColor(15, 23, 42);
-  doc.text(`Total Requests: ${total} | Pending: ${pending} | Approved: ${approved} | Delivered: ${delivered}`, 14, 45);
+  try {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Header
+    doc.setFontSize(20);
+    doc.setTextColor(11, 95, 255); // #0B5FFF
+    doc.text('Material Requests Report', 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139); // slate-500
+    doc.text(`Project: ${project?.name || 'Scedih Project'}`, 14, 30);
+    doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 14, 35);
+    
+    // Stats
+    const pending = requests.filter(r => r.status === 'Pending').length;
+    const approved = requests.filter(r => r.status === 'Approved').length;
+    const delivered = requests.filter(r => r.status === 'Delivered').length;
+    const total = requests.length;
+    
+    doc.setFontSize(12);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`Total Requests: ${total} | Pending: ${pending} | Approved: ${approved} | Delivered: ${delivered}`, 14, 45);
 
-  const tableData = requests.map(req => [
-    req.id,
-    req.material,
-    req.type || 'Consumable',
-    `${req.quantity} ${req.unit}`,
-    req.requestedBy,
-    req.date,
-    req.status
-  ]);
+    const tableData = requests.map(req => [
+      req.id,
+      req.material,
+      req.type || 'Consumable',
+      `${req.quantity} ${req.unit}`,
+      req.requestedBy,
+      req.date,
+      req.status
+    ]);
 
-  doc.autoTable({
-    startY: 55,
-    head: [['ID', 'Material', 'Type', 'Quantity', 'Requested By', 'Date', 'Status']],
-    body: tableData,
-    theme: 'grid',
-    headStyles: { fillColor: [11, 95, 255], textColor: [255, 255, 255] },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    styles: { fontSize: 9, cellPadding: 4 }
-  });
+    autoTable(doc, {
+      startY: 55,
+      head: [['ID', 'Material', 'Type', 'Quantity', 'Requested By', 'Date', 'Status']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [11, 95, 255], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      styles: { fontSize: 9, cellPadding: 4 }
+    });
 
-  const filename = `Material-Requests-${new Date().toISOString().split('T')[0]}.pdf`;
-  const blob = doc.output('blob');
-  saveOrShareFile({
-    filename,
-    blob,
-    title: 'Material Requests Report',
-    text: `Constructfield Material Requests Report - ${project?.name || 'Project'}`
-  });
+    const filename = `Material-Requests-${new Date().toISOString().split('T')[0]}.pdf`;
+    const blob = doc.output('blob');
+    saveOrShareFile({
+      filename,
+      blob,
+      title: 'Material Requests Report',
+      text: `Scedih Material Requests Report - ${project?.name || 'Project'}`
+    });
+  } catch (error) {
+    console.error('Failed to generate requests PDF:', error);
+    alert('Unable to generate Material Requests PDF report.');
+  }
 };
 
 export const generateCostsPDF = (materials: any[], requests: any[], project: any, currency: string) => {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  
-  // Header
-  doc.setFontSize(20);
-  doc.setTextColor(11, 95, 255); // #0B5FFF
-  doc.text('Material Costs & Financial Summary', 14, 22);
-  
-  doc.setFontSize(10);
-  doc.setTextColor(100, 116, 139); // slate-500
-  doc.text(`Project: ${project?.name || 'Constructfield Project'}`, 14, 30);
-  doc.text(`Date Generated: ${new Date().toLocaleDateString()} | Currency: ${currency}`, 14, 35);
-  
-  // Calculate Stores Financials
-  const totalEstimated = materials.reduce((acc, curr) => acc + (curr.estimatedQuantity * (curr.unitCost || curr.costPerUnit || 0)), 0);
-  const currentInventoryValue = materials.reduce((acc, curr) => {
-    const balance = curr.receivedQuantity - curr.usedQuantity;
-    return acc + (Math.max(0, balance) * (curr.unitCost || curr.costPerUnit || 0));
-  }, 0);
-  const totalConsumed = materials.reduce((acc, curr) => acc + (curr.usedQuantity * (curr.unitCost || curr.costPerUnit || 0)), 0);
+  try {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Header
+    doc.setFontSize(20);
+    doc.setTextColor(11, 95, 255); // #0B5FFF
+    doc.text('Material Costs & Financial Summary', 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139); // slate-500
+    doc.text(`Project: ${project?.name || 'Scedih Project'}`, 14, 30);
+    doc.text(`Date Generated: ${new Date().toLocaleDateString()} | Currency: ${currency}`, 14, 35);
+    
+    // Calculate Stores Financials
+    const totalEstimated = materials.reduce((acc, curr) => acc + (curr.estimatedQuantity * (curr.unitCost || curr.costPerUnit || 0)), 0);
+    const currentInventoryValue = materials.reduce((acc, curr) => {
+      const balance = curr.receivedQuantity - curr.usedQuantity;
+      return acc + (Math.max(0, balance) * (curr.unitCost || curr.costPerUnit || 0));
+    }, 0);
+    const totalConsumed = materials.reduce((acc, curr) => acc + (curr.usedQuantity * (curr.unitCost || curr.costPerUnit || 0)), 0);
 
-  let currentY = 50;
-  
-  doc.setFontSize(14);
-  doc.setTextColor(15, 23, 42);
-  doc.text('Company Stores - Financial Summary', 14, currentY);
-  currentY += 10;
-  
-  doc.autoTable({
-    startY: currentY,
-    head: [['Metric', 'Value']],
-    body: [
-      ['Total Estimated Budget', `${currency} ${totalEstimated.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
-      ['Current Inventory Value', `${currency} ${currentInventoryValue.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
-      ['Total Consumed Costs', `${currency} ${totalConsumed.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
-    ],
-    theme: 'grid',
-    headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    styles: { fontSize: 10, cellPadding: 5 }
-  });
+    let currentY = 50;
+    
+    doc.setFontSize(14);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Company Stores - Financial Summary', 14, currentY);
+    currentY += 10;
+    
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Total Estimated Budget', `${currency} ${totalEstimated.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
+        ['Current Inventory Value', `${currency} ${currentInventoryValue.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
+        ['Total Consumed Costs', `${currency} ${totalConsumed.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      styles: { fontSize: 10, cellPadding: 5 }
+    });
 
-  currentY = doc.lastAutoTable.finalY + 20;
+    currentY = (doc as any).lastAutoTable.finalY + 20;
 
-  // Calculate Requests Financials
-  const reqTotalEst = requests.reduce((acc, curr) => acc + (curr.quantity * (Number(curr.price) || 0)), 0);
-  const reqPending = requests.filter(r => r.status === 'Pending').reduce((acc, curr) => acc + (curr.quantity * (Number(curr.price) || 0)), 0);
-  const reqApproved = requests.filter(r => r.status === 'Approved' || r.status === 'Delivered').reduce((acc, curr) => acc + (curr.quantity * (Number(curr.price) || 0)), 0);
+    // Calculate Requests Financials
+    const reqTotalEst = requests.reduce((acc, curr) => acc + (curr.quantity * (Number(curr.price) || 0)), 0);
+    const reqPending = requests.filter(r => r.status === 'Pending').reduce((acc, curr) => acc + (curr.quantity * (Number(curr.price) || 0)), 0);
+    const reqApproved = requests.filter(r => r.status === 'Approved' || r.status === 'Delivered').reduce((acc, curr) => acc + (curr.quantity * (Number(curr.price) || 0)), 0);
 
-  doc.setFontSize(14);
-  doc.setTextColor(15, 23, 42);
-  doc.text('Material Requests - Cost Summary', 14, currentY);
-  currentY += 10;
-  
-  doc.autoTable({
-    startY: currentY,
-    head: [['Metric', 'Value']],
-    body: [
-      ['Total Estimated Requests Cost', `${currency} ${reqTotalEst.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
-      ['Pending Requests Cost', `${currency} ${reqPending.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
-      ['Approved/Delivered Cost', `${currency} ${reqApproved.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
-    ],
-    theme: 'grid',
-    headStyles: { fillColor: [99, 102, 241], textColor: [255, 255, 255] },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    styles: { fontSize: 10, cellPadding: 5 }
-  });
+    doc.setFontSize(14);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Material Requests - Cost Summary', 14, currentY);
+    currentY += 10;
+    
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Total Estimated Requests Cost', `${currency} ${reqTotalEst.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
+        ['Pending Requests Cost', `${currency} ${reqPending.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
+        ['Approved/Delivered Cost', `${currency} ${reqApproved.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [99, 102, 241], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      styles: { fontSize: 10, cellPadding: 5 }
+    });
 
-  const filename = `Material-Costs-${new Date().toISOString().split('T')[0]}.pdf`;
-  const blob = doc.output('blob');
-  saveOrShareFile({
-    filename,
-    blob,
-    title: 'Material Costs & Financial Summary',
-    text: `Constructfield Material Costs Report - ${project?.name || 'Project'}`
-  });
+    const filename = `Material-Costs-${new Date().toISOString().split('T')[0]}.pdf`;
+    const blob = doc.output('blob');
+    saveOrShareFile({
+      filename,
+      blob,
+      title: 'Material Costs & Financial Summary',
+      text: `Scedih Material Costs Report - ${project?.name || 'Project'}`
+    });
+  } catch (error) {
+    console.error('Failed to generate costs PDF:', error);
+    alert('Unable to generate Material Costs PDF report.');
+  }
 };

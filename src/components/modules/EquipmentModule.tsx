@@ -480,6 +480,14 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
 
           return (
             <Card key={item.id} className="p-4 flex flex-col justify-between gap-4">
+              {item.photos && item.photos.length > 0 && (
+                <div className="relative w-full h-32 rounded-xl overflow-hidden -mt-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <img src={item.photos[0]} alt="" className="w-full h-full object-cover" loading="lazy" />
+                  <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-white text-[10px] font-bold">
+                    📷 {item.photos.length}
+                  </span>
+                </div>
+              )}
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-2 mb-1 flex-wrap">

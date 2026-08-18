@@ -1,14 +1,26 @@
 import React, { useState } from 'react';
 import { Card } from './ui';
-import { ChevronLeft, ChevronRight, Plus, MapPin, Clock, X, Calendar as CalendarIcon, AlignLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, MapPin, Clock, X, Calendar as CalendarIcon, AlignLeft } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isToday, isSameDay } from 'date-fns';
 import { useAppContext } from '../context/AppContext';
 import { Reminder } from '../types';
 
-export function CalendarWidget() {
+export function CalendarWidget({ defaultCollapsed = false }: { defaultCollapsed?: boolean }) {
   const { reminders, addReminder, updateReminder, deleteReminder, currentUserProfile } = useAppContext();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    const saved = localStorage.getItem('constructos_calendar_collapsed');
+    return saved !== null ? saved === 'true' : defaultCollapsed;
+  });
+
+  const toggleCollapse = () => {
+    setIsCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('constructos_calendar_collapsed', String(next));
+      return next;
+    });
+  };
   
   // Modal State
   const [isAddingEvent, setIsAddingEvent] = useState(false);
@@ -62,57 +74,80 @@ export function CalendarWidget() {
 
   return (
     <>
-      <Card className="p-4 shrink-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl relative">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
-            {format(currentMonth, 'MMMM yyyy')}
-          </span>
+      <Card className={`p-4 shrink-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl relative transition-all duration-300 ${isCollapsed ? 'pb-4' : ''}`}>
+        <div className={`flex items-center justify-between ${isCollapsed ? 'mb-0' : 'mb-4'}`}>
+          <div className="flex items-center gap-2">
+            <CalendarIcon className="w-4 h-4 text-[#0B5FFF]" />
+            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+              {format(currentMonth, 'MMMM yyyy')}
+            </span>
+            {isCollapsed && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] border border-blue-100 dark:border-blue-900/40">
+                {format(new Date(), 'd MMM')}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1">
-            <button onClick={handlePrevMonth} className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button onClick={handleNextMonth} className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors">
-              <ChevronRight className="w-4 h-4" />
+            {!isCollapsed && (
+              <>
+                <button onClick={handlePrevMonth} className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors" title="Previous month">
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button onClick={handleNextMonth} className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors" title="Next month">
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </>
+            )}
+            <button 
+              onClick={toggleCollapse} 
+              className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors ml-0.5"
+              title={isCollapsed ? "Expand calendar" : "Collapse calendar"}
+            >
+              {isCollapsed ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronUp className="w-4 h-4 text-slate-500" />}
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 text-center mb-1">
-          {weekDays.map(day => (
-            <div key={day} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider py-1">
-              {day}
+        {!isCollapsed && (
+          <div className="transition-all duration-300 animate-in fade-in">
+            <div className="grid grid-cols-7 gap-1 text-center mb-1">
+              {weekDays.map(day => (
+                <div key={day} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider py-1">
+                  {day}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        <div className="grid grid-cols-7 gap-1 text-center">
-          {days.map((day, i) => {
-            const isSelectedMonth = isSameMonth(day, monthStart);
-            const isTodayDate = isToday(day);
-            const dayEvents = getEventsForDate(day);
-            
-            return (
-              <div 
-                key={i} 
-                onClick={() => setSelectedDate(day)}
-                className={`
-                  flex flex-col items-center justify-start text-xs rounded-lg h-10 pt-1 relative
-                  ${!isSelectedMonth ? 'text-slate-300 dark:text-slate-600 font-medium' : 'text-slate-700 dark:text-slate-300 font-semibold'}
-                  ${isTodayDate ? 'bg-[#0B5FFF] text-white font-bold shadow-md shadow-blue-500/20' : 'hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors'}
-                `}
-              >
-                <span>{format(day, 'd')}</span>
-                {dayEvents.length > 0 && (
-                  <div className="flex gap-0.5 mt-1">
-                    {dayEvents.slice(0, 3).map((_, idx) => (
-                      <div key={idx} className={`w-1 h-1 rounded-full ${isTodayDate ? 'bg-white' : 'bg-[#0B5FFF]'}`} />
-                    ))}
+            <div className="grid grid-cols-7 gap-1 text-center">
+              {days.map((day, i) => {
+                const isSelectedMonth = isSameMonth(day, monthStart);
+                const isTodayDate = isToday(day);
+                const dayEvents = getEventsForDate(day);
+                
+                return (
+                  <div 
+                    key={i} 
+                    onClick={() => setSelectedDate(day)}
+                    className={`
+                      flex flex-col items-center justify-start text-xs rounded-lg h-10 pt-1 relative
+                      ${!isSelectedMonth ? 'text-slate-300 dark:text-slate-600 font-medium' : 'text-slate-700 dark:text-slate-300 font-semibold'}
+                      ${isTodayDate ? 'bg-[#0B5FFF] text-white font-bold shadow-md shadow-blue-500/20' : 'hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors'}
+                    `}
+                  >
+                    <span>{format(day, 'd')}</span>
+                    {dayEvents.length > 0 && (
+                      <div className="flex gap-0.5 mt-1">
+                        {dayEvents.slice(0, 3).map((_, idx) => (
+                          <div key={idx} className={`w-1 h-1 rounded-full ${isTodayDate ? 'bg-white' : 'bg-[#0B5FFF]'}`} />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Date Details & Add Event Modal */}
