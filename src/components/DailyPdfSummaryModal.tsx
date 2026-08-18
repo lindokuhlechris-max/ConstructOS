@@ -9,6 +9,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAppContext } from '../context/AppContext';
 import { WeatherLog, Activity, SafetyIncident, DailyReport } from '../types';
+import { saveOrShareFile } from '../lib/fileExportService';
 
 interface DailyPdfSummaryModalProps {
   isOpen: boolean;
@@ -350,7 +351,14 @@ export function DailyPdfSummaryModal({
   // Download PDF Action
   const handleDownloadPdf = () => {
     const doc = generatePdfBlob();
-    doc.save(`Daily_Site_Weather_Summary_${selectedDate}_${(currentProject as any).contractNumber || currentProject.id}.pdf`);
+    const filename = `Daily_Site_Weather_Summary_${selectedDate}_${(currentProject as any).contractNumber || currentProject.id}.pdf`;
+    const blob = doc.output('blob');
+    saveOrShareFile({
+      filename,
+      blob,
+      title: 'Daily Site & Weather Summary',
+      text: `Constructfield Daily Site Summary - ${selectedDate}`
+    });
 
     // Audit Log entry
     addAuditLog({

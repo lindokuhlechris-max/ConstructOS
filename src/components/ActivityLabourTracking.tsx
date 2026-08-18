@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from './ui';
 import { LabourLog, canUserEditSection, Activity } from '../types';
 import { useAppContext } from '../context/AppContext';
-import { Users, Clock, Plus, Trash2, Edit3, User, ShieldCheck, Lock, CheckCircle2, HardHat } from 'lucide-react';
+import { Users, Clock, Plus, Trash2, Edit3, User, ShieldCheck, Lock, CheckCircle2, HardHat, AlertCircle } from 'lucide-react';
+import { getPersonInitials, normalizeLabourAssignments, getLoggedHoursForWorker } from '../lib/labourUtils';
 
 interface ActivityLabourTrackingProps {
   activityId: string;
@@ -18,6 +19,10 @@ export function ActivityLabourTracking({ activityId, projectId, activity }: Acti
   const activityLogs = useMemo(() => 
     labourLogs.filter(l => l?.activityId === activityId),
   [labourLogs, activityId]);
+
+  const normalizedAssignedLabour = useMemo(() => 
+    normalizeLabourAssignments(activity?.assignedLabour, employees),
+  [activity?.assignedLabour, employees]);
 
   const [isAdding, setIsAdding] = useState(false);
   const [editingLog, setEditingLog] = useState<LabourLog | null>(null);
@@ -53,12 +58,21 @@ export function ActivityLabourTracking({ activityId, projectId, activity }: Acti
   };
 
   const handleQuickLogAssignedLabour = (assignedPerson: { name: string; role?: string; hours?: number }) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const logCheck = getLoggedHoursForWorker(activityLogs, activityId, assignedPerson.name, todayStr);
+    
+    // Prevent double logging
+    if (logCheck.isLogged) {
+      alert(`${assignedPerson.name} already has ${logCheck.hours} hours logged for today on this task.`);
+      return;
+    }
+
     const defaultHours = assignedPerson.hours || 8;
     addLabourLog({
       id: `LAB-${Date.now()}`,
       projectId,
       activityId,
-      date: new Date().toISOString().split('T')[0],
+      date: todayStr,
       workerType: assignedPerson.role || 'General Laborer',
       workerName: assignedPerson.name,
       startTime: '08:00',
@@ -141,18 +155,16 @@ export function ActivityLabourTracking({ activityId, projectId, activity }: Acti
       
       <CardContent className="flex flex-col gap-4">
         {/* Allocated Personnel Quick-Log Strip */}
-        {activity?.assignedLabour && activity.assignedLabour.length > 0 && !isAdding && (
+        {normalizedAssignedLabour.length > 0 && !isAdding && (
           <div className="p-3 rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 flex flex-col gap-2">
             <span className="text-[11px] font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
               <HardHat className="h-3.5 w-3.5 text-emerald-600" />
               Allocated Personnel Quick-Log:
             </span>
             <div className="flex flex-wrap gap-2">
-              {activity.assignedLabour.map(labAssigned => {
-                const isLoggedToday = activityLogs.some(l => 
-                  l.workerName?.toLowerCase() === labAssigned.name.toLowerCase() && 
-                  l.date === new Date().toISOString().split('T')[0]
-                );
+              {normalizedAssignedLabour.map(labAssigned => {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const logInfo = getLoggedHoursForWorker(activityLogs, activityId, labAssigned.name, todayStr);
 
                 return (
                   <div 
@@ -160,10 +172,10 @@ export function ActivityLabourTracking({ activityId, projectId, activity }: Acti
                     className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 shadow-2xs text-xs"
                   >
                     <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center font-bold text-[10px] shrink-0">
-                      {labAssigned.name.split(' ').map(n => n[0]).join('')}
+                      {getPersonInitials(labAssigned.name)}
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[130px]">
+                      <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[140px]">
                         {labAssigned.name}
                       </span>
                       <span className="text-[10px] text-slate-500 truncate">
@@ -171,9 +183,9 @@ export function ActivityLabourTracking({ activityId, projectId, activity }: Acti
                       </span>
                     </div>
 
-                    {isLoggedToday ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-1 rounded-md border border-emerald-200 dark:border-emerald-800">
-                        <CheckCircle2 className="h-3 w-3" /> Logged Today
+                    {logInfo.isLogged ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/80 px-2 py-1 rounded-md border border-emerald-300 dark:border-emerald-700">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Logged ({logInfo.hours}h)
                       </span>
                     ) : (
                       <Button
@@ -214,7 +226,7 @@ export function ActivityLabourTracking({ activityId, projectId, activity }: Acti
                   onChange={(e) => {
                     const selectedName = e.target.value;
                     const employee = employees.find(emp => `${emp.firstName} ${emp.lastName}` === selectedName);
-                    const assignedLabourItem = activity?.assignedLabour?.find(l => l.name === selectedName);
+                    const assignedLabourItem = normalizedAssignedLabour.find(l => l.name === selectedName);
                     
                     setFormData({ 
                       ...formData, 
@@ -226,9 +238,9 @@ export function ActivityLabourTracking({ activityId, projectId, activity }: Acti
                   className="w-full h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B5FFF]"
                 >
                   <option value="">Select an employee...</option>
-                  {activity?.assignedLabour && activity.assignedLabour.length > 0 && (
+                  {normalizedAssignedLabour.length > 0 && (
                     <optgroup label="Allocated to This Task">
-                      {activity.assignedLabour.map(lab => (
+                      {normalizedAssignedLabour.map(lab => (
                         <option key={`assigned-lab-${lab.id}`} value={lab.name}>
                           ⭐ {lab.name} - {lab.role} ({lab.hours || 8} hrs/shift)
                         </option>

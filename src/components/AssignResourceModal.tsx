@@ -31,6 +31,7 @@ import {
   TaskEquipmentAssignment,
   TaskMaterialAssignment 
 } from '../types';
+import { normalizeLabourAssignments, isEmployeeAlreadyAssigned, getLoggedHoursForWorker } from '../lib/labourUtils';
 
 export interface AssignResourceModalProps {
   isOpen: boolean;
@@ -370,7 +371,7 @@ export function AssignResourceModal({
 
       // Synchronize with target activity's assignedLabour array
       if (targetActivity) {
-        const existingLabour = targetActivity.assignedLabour || [];
+        const existingNormalizedLabour = normalizeLabourAssignments(targetActivity.assignedLabour, employees);
         const taskAssignment: TaskLabourAssignment = {
           id: `TLA-${allocationId}`,
           employeeId: selectedEmployeeId || undefined,
@@ -382,9 +383,16 @@ export function AssignResourceModal({
           notes: employeeNotes
         };
 
-        const updatedLabour = existingLabour.some(l => l.name === workerName || (selectedEmployeeId && l.employeeId === selectedEmployeeId))
-          ? existingLabour.map(l => (l.name === workerName || (selectedEmployeeId && l.employeeId === selectedEmployeeId)) ? taskAssignment : l)
-          : [taskAssignment, ...existingLabour];
+        const updatedLabour = existingNormalizedLabour.some(l => 
+          (selectedEmployeeId && l.employeeId === selectedEmployeeId) || 
+          l.name.toLowerCase() === workerName.toLowerCase()
+        )
+          ? existingNormalizedLabour.map(l => 
+              ((selectedEmployeeId && l.employeeId === selectedEmployeeId) || l.name.toLowerCase() === workerName.toLowerCase()) 
+                ? taskAssignment 
+                : l
+            )
+          : [taskAssignment, ...existingNormalizedLabour];
 
         updateActivity({
           ...targetActivity,
@@ -392,10 +400,8 @@ export function AssignResourceModal({
         });
 
         // Automatically register onto Labour Tracking Panel if not already logged today
-        const hasExistingLog = (labourLogs || []).some(
-          l => l.activityId === selectedActivityId && l.workerName?.toLowerCase() === workerName.toLowerCase() && l.date === employeeStartDate
-        );
-        if (!hasExistingLog) {
+        const logCheck = getLoggedHoursForWorker(labourLogs, selectedActivityId, workerName, employeeStartDate);
+        if (!logCheck.isLogged) {
           addLabourLog({
             id: `LAB-AUTO-${Date.now()}`,
             projectId: selectedProjectId,

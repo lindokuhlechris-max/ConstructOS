@@ -802,7 +802,7 @@ export function Equipment() {
                         <p className="text-xs text-slate-500 mb-1 font-medium">Current Driver / Operator</p>
                         <div className="flex items-center gap-2 mt-1">
                           <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-800 dark:text-white shrink-0">
-                            {currentEq.operator ? currentEq.operator.split(' ').map(n => n[0]).join('') : 'U'}
+                            {currentEq.operator ? currentEq.operator.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'U'}
                           </div>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-200 truncate">{currentEq.operator}</p>
                         </div>

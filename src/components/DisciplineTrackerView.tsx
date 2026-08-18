@@ -308,7 +308,7 @@ export function DisciplineTrackerView({
           unit: activity.unit,
           startDate: activity.startDate,
           endDate: activity.finishDate,
-          assignedWorkers: activity.assignedLabour?.map(l => l.employeeName) || [],
+          assignedWorkers: activity.assignedLabour?.map(l => l.name) || [],
           isHoldPoint: false,
           isMilestone: activity.isMilestone,
           notes: activity.description,

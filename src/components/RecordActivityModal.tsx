@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from './ui';
 import { DailyReport } from '../types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveOrShareFile } from '../lib/fileExportService';
 
 interface RecordActivityModalProps {
   onClose: () => void;
@@ -162,7 +163,14 @@ export function RecordActivityModal({ onClose, onReportGenerated, projectId }: R
       doc.text(splitText, 14, currentY + 22);
     }
 
-    doc.save(`Daily_Activity_Report_${report.id}_${report.date}.pdf`);
+    const filename = `Daily_Activity_Report_${report.id}_${report.date}.pdf`;
+    const blob = doc.output('blob');
+    saveOrShareFile({
+      filename,
+      blob,
+      title: `Daily Report: ${report.id}`,
+      text: `Constructfield Daily Activity Report - ${report.date}`
+    });
   };
 
   const handlePostAndDownload = () => {

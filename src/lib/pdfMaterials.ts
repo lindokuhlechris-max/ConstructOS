@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { saveOrShareFile } from './fileExportService';
 
 // Extend jsPDF type to include autoTable if not recognized
 declare module 'jspdf' {
@@ -53,7 +54,14 @@ export const generateRequestsPDF = (requests: any[], project: any) => {
     styles: { fontSize: 9, cellPadding: 4 }
   });
 
-  doc.save(`Material-Requests-${new Date().toISOString().split('T')[0]}.pdf`);
+  const filename = `Material-Requests-${new Date().toISOString().split('T')[0]}.pdf`;
+  const blob = doc.output('blob');
+  saveOrShareFile({
+    filename,
+    blob,
+    title: 'Material Requests Report',
+    text: `Constructfield Material Requests Report - ${project?.name || 'Project'}`
+  });
 };
 
 export const generateCostsPDF = (materials: any[], requests: any[], project: any, currency: string) => {
@@ -125,6 +133,12 @@ export const generateCostsPDF = (materials: any[], requests: any[], project: any
     styles: { fontSize: 10, cellPadding: 5 }
   });
 
-  // Could also add a breakdown table of top costs, but let's keep it simple first
-  doc.save(`Material-Costs-${new Date().toISOString().split('T')[0]}.pdf`);
+  const filename = `Material-Costs-${new Date().toISOString().split('T')[0]}.pdf`;
+  const blob = doc.output('blob');
+  saveOrShareFile({
+    filename,
+    blob,
+    title: 'Material Costs & Financial Summary',
+    text: `Constructfield Material Costs Report - ${project?.name || 'Project'}`
+  });
 };

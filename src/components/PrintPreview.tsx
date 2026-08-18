@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { X, Printer, Download, Building2 } from 'lucide-react';
 import { Button } from './ui';
+import { saveOrShareFile } from '../lib/fileExportService';
 
 interface PrintPreviewProps {
   isOpen: boolean;
@@ -36,7 +37,14 @@ export function PrintPreview({ isOpen, onClose, title, children, onDownloadPdf, 
         creator: `${brandName} System`
       });
       pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-      pdf.save(`${title.replace(/\s+/g, '_')}.pdf`);
+      const filename = `${title.replace(/\s+/g, '_')}.pdf`;
+      const blob = pdf.output('blob');
+      await saveOrShareFile({
+        filename,
+        blob,
+        title: title,
+        text: `${brandName} PDF Document: ${title}`
+      });
     } catch (error) {
       console.error('Failed to generate PDF', error);
     } finally {

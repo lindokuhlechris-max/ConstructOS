@@ -313,7 +313,7 @@ export function SurveyTrackerView({ onOpenActivity }: SurveyTrackerViewProps) {
       chainage: launchingRecord.chainageStart && launchingRecord.chainageEnd 
         ? `${launchingRecord.chainageStart} - ${launchingRecord.chainageEnd}` 
         : undefined,
-      priority: 'Normal',
+      priority: 'Medium',
       discipline: 'Civil & Earthworks',
       targetQuantity: launchingRecord.distanceMeters,
       actualQuantity: 0,
@@ -323,10 +323,12 @@ export function SurveyTrackerView({ onOpenActivity }: SurveyTrackerViewProps) {
       startDate: launchStartDate,
       endDate: launchEndDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
       subtasks: defaultSubtasks,
-      assignedLabour: (launchingRecord.surveyors || []).map(s => ({
+      assignedLabour: (launchingRecord.surveyors || []).map((s, idx) => ({
+        id: `TLA-SURV-${Date.now()}-${idx}`,
         name: s,
         role: 'Surveyor / Operator',
-        hours: 8
+        hours: 8,
+        startDate: launchStartDate
       })),
       createdAt: new Date().toISOString().split('T')[0],
       updatedAt: new Date().toISOString().split('T')[0]

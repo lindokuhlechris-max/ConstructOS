@@ -135,15 +135,11 @@ export function SyncStatusIndicator() {
         idbData
       };
 
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `constructfield-backup-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setBackupMsg('Backup downloaded successfully!');
-      setTimeout(() => setBackupMsg(null), 3000);
+      const { exportJsonFile } = await import('../lib/fileExportService');
+      const filename = `constructfield-backup-${new Date().toISOString().split('T')[0]}.json`;
+      await exportJsonFile(backupData, filename, 'Constructfield Offline Backup');
+      setBackupMsg('Backup exported successfully!');
+      setTimeout(() => setBackupMsg(null), 3500);
     } catch (err: any) {
       console.error(err);
       alert('Error creating backup: ' + (err.message || 'Unknown error'));

@@ -6,6 +6,7 @@ import autoTable from 'jspdf-autotable';
 import { useAppContext } from '../context/AppContext';
 import { Project } from '../types';
 import { exportFullProjectCSV } from '../lib/csvExport';
+import { saveOrShareFile } from '../lib/fileExportService';
 
 export function ProjectDetailScreen({ project: initialProject, onClose }: { project: Project; onClose: () => void }) {
   const { activities, reports, projects } = useAppContext();
@@ -120,7 +121,14 @@ export function ProjectDetailScreen({ project: initialProject, onClose }: { proj
       });
     }
     
-    doc.save(`${project.name.replace(/\s+/g, '_')}_Details.pdf`);
+    const filename = `${project.name.replace(/\s+/g, '_')}_Details.pdf`;
+    const blob = doc.output('blob');
+    saveOrShareFile({
+      filename,
+      blob,
+      title: `Project: ${project.name}`,
+      text: `Constructfield Project Details - ${project.name}`
+    });
   };
 
   return (

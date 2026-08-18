@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { DailyReport, Project, AuditLog } from '../types';
+import { saveOrShareFile } from './fileExportService';
 
 export interface ParsedReportNotes {
   activityTitle?: string;
@@ -618,7 +619,14 @@ export function exportSingleReportPDF(report: DailyReport, projectName: string) 
     doc.text(`Page ${i} of ${totalPages}   |   Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, 196, 289, { align: 'right' });
   }
 
-  doc.save(`Daily_Report_${report.id}_${report.date}.pdf`);
+  const filename = `Daily_Report_${report.id}_${report.date}.pdf`;
+  const blob = doc.output('blob');
+  saveOrShareFile({
+    filename,
+    blob,
+    title: `Daily Report ${report.id}`,
+    text: `Constructfield Daily Site Report: ${report.id}`
+  });
 }
 
 /**
@@ -740,7 +748,14 @@ export function exportMultipleReportsPDF(reports: DailyReport[], projects: Proje
     doc.text(`Page ${i} of ${totalPages}   |   Exported: ${new Date().toLocaleDateString()}`, 196, 289, { align: 'right' });
   }
 
-  doc.save(`Daily_Activity_Reports_Export_${new Date().toISOString().split('T')[0]}.pdf`);
+  const filename = `Daily_Activity_Reports_Export_${new Date().toISOString().split('T')[0]}.pdf`;
+  const blob = doc.output('blob');
+  saveOrShareFile({
+    filename,
+    blob,
+    title: 'Daily Activity Reports Export',
+    text: `Constructfield Daily Activity Reports Export`
+  });
 }
 
 export interface ConsolidatedActivityLogsPdfOptions {
@@ -978,7 +993,13 @@ export function exportConsolidatedActivityLogsPDF({
     doc.text(`Confidential • Project Audit Trail`, 145, 288);
   }
 
-  // Save the PDF file
+  // Save the PDF file (Mobile APK & Desktop compatible)
   const filename = `Consolidated_Activity_Logs_${reportDate}_${logs.length}logs.pdf`;
-  doc.save(filename);
+  const blob = doc.output('blob');
+  saveOrShareFile({
+    filename,
+    blob,
+    title: 'Consolidated Activity Logs',
+    text: `Constructfield Consolidated Activity Logs Report - ${reportDate}`
+  });
 }

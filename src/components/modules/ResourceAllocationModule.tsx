@@ -38,6 +38,7 @@ import { AssignResourceModal } from '../AssignResourceModal';
 import { PrintPreview } from '../PrintPreview';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveOrShareFile } from '../../lib/fileExportService';
 
 export interface ResourceAllocationModuleProps {
   projectId?: string;
@@ -613,7 +614,14 @@ export function ResourceAllocationModule({
         styles: { fontSize: 8, cellPadding: 4 },
       });
 
-      doc.save(`Constructfield_Dispatch_Manifest_${new Date().toISOString().split('T')[0]}.pdf`);
+      const filename = `Constructfield_Dispatch_Manifest_${new Date().toISOString().split('T')[0]}.pdf`;
+      const blob = doc.output('blob');
+      saveOrShareFile({
+        filename,
+        blob,
+        title: 'Dispatch Manifest',
+        text: `Constructfield Dispatch Manifest`
+      });
     } catch (err) {
       console.error('Failed to generate PDF manifest:', err);
     }

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ActivityStatus, Priority, TaskMaterialAssignment, TaskLabourAssignment, TaskEquipmentAssignment, SubTask, DailyReport, canUserEditSection, WORKSTREAMS, WorkstreamType } from '../types';
+import { Activity, ActivityStatus, Priority, TaskMaterialAssignment, TaskLabourAssignment, TaskEquipmentAssignment, SubTask, DailyReport, canUserEditSection, WORKSTREAMS, WorkstreamType, Comment } from '../types';
 import { Card, CardHeader, CardTitle, CardContent, Badge, ProgressBar, Button } from './ui';
 import { InteractiveProgress } from './InteractiveProgress';
 import { CameraCapture } from './CameraCapture';
@@ -10,11 +10,13 @@ import { SubTaskManager } from './SubTaskManager';
 import { ActivityExplainerBreakdown } from './ActivityExplainerBreakdown';
 import { RecordActivityForTaskModal } from './RecordActivityForTaskModal';
 import { PlanningCalendar } from './PlanningCalendar';
-import { PrintPreview } from './PrintPreview';
+import { ActivityDetailPdfModal } from './ActivityDetailPdfModal';
 import { ActivityAuditScreen } from './ActivityAuditScreen';
 import { useAppContext } from '../context/AppContext';
+import { getPersonInitials, normalizeLabourAssignments, isEmployeeAlreadyAssigned, getLoggedHoursForWorker } from '../lib/labourUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveOrShareFile } from '../lib/fileExportService';
 import {
   MapPin,
   QrCode,
@@ -99,6 +101,11 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
   const [copiedGps, setCopiedGps] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+
+  // Normalized and deduplicated labour personnel assignments
+  const normalizedLabour = React.useMemo(() => 
+    normalizeLabourAssignments(activity.assignedLabour, employees), 
+  [activity.assignedLabour, employees]);
 
   // Cross-Workstream Multi-Discipline Handshake Data
   const crossDisciplineData = React.useMemo(() => {
@@ -523,39 +530,107 @@ ${subtaskSummaryLines}
 
   const handleAddLabourAssignment = (e: React.FormEvent) => {
     e.preventDefault();
-    const empObj = employees.find(emp => emp.id === selectedEmployeeId);
-    const workerName = empObj ? `${empObj.firstName} ${empObj.lastName}` : (customWorkerName || 'Site Worker');
-    const workerRole = empObj ? empObj.position : assignLabourRole;
     const assignedHours = Number(assignLabourHours) || 8;
-    const autoLabourLogId = `LAB-AUTO-${Date.now()}`;
+    const todayStr = new Date().toISOString().split('T')[0];
 
-    const newAssignment: TaskLabourAssignment = {
-      id: `TLA-${Date.now()}`,
-      employeeId: selectedEmployeeId,
-      name: workerName,
-      role: workerRole,
-      hours: assignedHours,
-      startDate: new Date().toISOString().split('T')[0],
-      notes: assignLabourNotes,
-      labourLogId: autoLabourLogId
-    };
+    const newAssignmentsToAdd: TaskLabourAssignment[] = [];
 
-    // Automatically register onto Labour Tracking Panel
-    addLabourLog({
-      id: autoLabourLogId,
-      projectId: activity.projectId,
-      activityId: activity.id,
-      date: newAssignment.startDate,
-      workerType: workerRole,
-      workerName: workerName,
-      startTime: '08:00',
-      endTime: '16:00',
-      hours: assignedHours,
-      hoursWorked: assignedHours,
-      notes: `Allocated to task "${activity.name}" (${assignedHours}h/shift)`
-    });
+    if (selectedEmployeeId && selectedEmployeeId !== 'CUSTOM') {
+      const empObj = employees.find(emp => emp.id === selectedEmployeeId);
+      const workerName = empObj ? `${empObj.firstName} ${empObj.lastName}` : (customWorkerName || 'Site Worker');
+      const workerRole = empObj ? empObj.position : (assignLabourRole || 'Site Worker');
 
-    const updatedLabour = [newAssignment, ...(activity.assignedLabour || [])];
+      if (isEmployeeAlreadyAssigned(normalizedLabour, selectedEmployeeId, workerName)) {
+        alert(`Notice: ${workerName} is already allocated to this task.`);
+        return;
+      }
+
+      const autoLabourLogId = `LAB-AUTO-${Date.now()}`;
+      newAssignmentsToAdd.push({
+        id: `TLA-${selectedEmployeeId || Date.now()}`,
+        employeeId: selectedEmployeeId,
+        name: workerName,
+        role: workerRole,
+        hours: assignedHours,
+        startDate: todayStr,
+        notes: assignLabourNotes,
+        labourLogId: autoLabourLogId
+      });
+
+      // Auto-register onto Labour Tracking Panel if not already logged today
+      const logCheck = getLoggedHoursForWorker(labourLogs, activity.id, workerName, todayStr);
+      if (!logCheck.isLogged) {
+        addLabourLog({
+          id: autoLabourLogId,
+          projectId: activity.projectId,
+          activityId: activity.id,
+          date: todayStr,
+          workerType: workerRole,
+          workerName: workerName,
+          startTime: '08:00',
+          endTime: '16:00',
+          hours: assignedHours,
+          hoursWorked: assignedHours,
+          notes: `Allocated to task "${activity.name}" (${assignedHours}h/shift)`
+        });
+      }
+    } else {
+      // Custom worker name entry (supports single or comma-separated lists)
+      const rawInput = customWorkerName || 'Site Worker';
+      const names = rawInput.split(',').map(s => s.trim()).filter(Boolean);
+
+      if (names.length === 0) {
+        alert('Please enter a worker name.');
+        return;
+      }
+
+      const addedNames: string[] = [];
+      names.forEach((singleName, idx) => {
+        const empMatch = employees.find(emp => `${emp.firstName} ${emp.lastName}`.toLowerCase() === singleName.toLowerCase());
+        const empId = empMatch?.id;
+        const finalName = empMatch ? `${empMatch.firstName} ${empMatch.lastName}` : singleName;
+        const finalRole = empMatch?.position || assignLabourRole || 'Site Worker';
+
+        if (!isEmployeeAlreadyAssigned(normalizedLabour, empId, finalName) && !addedNames.includes(finalName.toLowerCase())) {
+          addedNames.push(finalName.toLowerCase());
+          const autoLabourLogId = `LAB-AUTO-${Date.now()}-${idx}`;
+          newAssignmentsToAdd.push({
+            id: `TLA-${empId || Date.now()}-${idx}`,
+            employeeId: empId,
+            name: finalName,
+            role: finalRole,
+            hours: assignedHours,
+            startDate: todayStr,
+            notes: assignLabourNotes,
+            labourLogId: autoLabourLogId
+          });
+
+          const logCheck = getLoggedHoursForWorker(labourLogs, activity.id, finalName, todayStr);
+          if (!logCheck.isLogged) {
+            addLabourLog({
+              id: autoLabourLogId,
+              projectId: activity.projectId,
+              activityId: activity.id,
+              date: todayStr,
+              workerType: finalRole,
+              workerName: finalName,
+              startTime: '08:00',
+              endTime: '16:00',
+              hours: assignedHours,
+              hoursWorked: assignedHours,
+              notes: `Allocated to task "${activity.name}" (${assignedHours}h/shift)`
+            });
+          }
+        }
+      });
+
+      if (newAssignmentsToAdd.length === 0) {
+        alert('All specified workers are already allocated to this task.');
+        return;
+      }
+    }
+
+    const updatedLabour = [...newAssignmentsToAdd, ...normalizedLabour];
     const updatedActivity = { ...activity, assignedLabour: updatedLabour };
     setActivity(updatedActivity);
     if (onSave) onSave(updatedActivity);
@@ -566,7 +641,7 @@ ${subtaskSummaryLines}
       projectId: activity.projectId,
       userId: userRole === 'Manager' ? 'Current User' : 'Current User',
       action: 'Labour Assigned to Task',
-      details: `Assigned ${workerName} (${workerRole}) to Task "${activity.name}" (${activity.id}) and registered on Labour Tracking`,
+      details: `Assigned ${newAssignmentsToAdd.map(a => `${a.name} (${a.role})`).join(', ')} to Task "${activity.name}" (${activity.id})`,
       timestamp: new Date().toISOString()
     });
 
@@ -642,11 +717,11 @@ ${subtaskSummaryLines}
   };
 
   const handleRemoveLabourAssignment = (assignmentId: string) => {
-    const targetLabour = (activity.assignedLabour || []).find(l => l.id === assignmentId);
+    const targetLabour = normalizedLabour.find(l => l.id === assignmentId);
     if (targetLabour?.labourLogId) {
       deleteLabourLog(targetLabour.labourLogId);
     }
-    const updated = (activity.assignedLabour || []).filter(l => l.id !== assignmentId);
+    const updated = normalizedLabour.filter(l => l.id !== assignmentId);
     const updatedActivity = { ...activity, assignedLabour: updated };
     setActivity(updatedActivity);
     if (onSave) onSave(updatedActivity);
@@ -1058,9 +1133,14 @@ ${subtaskSummaryLines}
       doc.text("Description:", 40, 200);
       doc.setFontSize(10);
       doc.setTextColor(50, 50, 50);
-      const splitDesc = doc.splitTextToSize(activity.description || "No description provided.", 500);
-      doc.text(splitDesc, 40, 220);
-      doc.save(`Activity_${activity.name?.replace(/\s+/g, "_")}_Detail.pdf`);
+      const filename = `Activity_${activity.name?.replace(/\s+/g, "_")}_Detail.pdf`;
+      const blob = doc.output('blob');
+      saveOrShareFile({
+        filename,
+        blob,
+        title: `Activity: ${activity.name}`,
+        text: `Constructfield Activity Details: ${activity.name}`
+      });
     } catch (error) {
       console.error("Failed to generate PDF:", error);
     }
@@ -1644,26 +1724,26 @@ ${subtaskSummaryLines}
               {/* Labour Assigned */}
               <div>
                 <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider mb-2.5 flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5 text-emerald-500" /> Allocated Labour & Personnel ({activity.assignedLabour?.length || 0})
+                  <Users className="h-3.5 w-3.5 text-emerald-500" /> Allocated Labour & Personnel ({normalizedLabour.length})
                 </h4>
-                {(!activity.assignedLabour || activity.assignedLabour.length === 0) ? (
+                {normalizedLabour.length === 0 ? (
                   <p className="text-xs text-slate-400 italic bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
                     No specific personnel assigned yet. Click "Assign Resources" to assign crew or workers.
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {activity.assignedLabour.map(lab => (
+                    {normalizedLabour.map(lab => (
                       <div key={lab.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center font-bold text-xs shrink-0">
-                            {lab.name.split(' ').map(n => n[0]).join('')}
+                            {getPersonInitials(lab.name)}
                           </div>
                           <div>
                             <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{lab.name}</p>
                             <p className="text-[11px] text-slate-500">{lab.role} • <span className="font-semibold text-emerald-600 dark:text-emerald-400">{lab.hours} hrs/shift</span></p>
                           </div>
                         </div>
-                        <Button size="sm" variant="ghost" onClick={() => handleRemoveLabourAssignment(lab.id)} className="h-7 w-7 p-0 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg">
+                        <Button size="sm" variant="ghost" onClick={() => handleRemoveLabourAssignment(lab.id)} className="h-7 w-7 p-0 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg" title="Remove worker from task">
                           <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
@@ -3069,25 +3149,33 @@ ${subtaskSummaryLines}
                     onChange={e => setSelectedEmployeeId(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="">-- Choose Employee / Team --</option>
-                    {employees.map(emp => (
-                      <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} ({emp.position} - {emp.department})</option>
-                    ))}
-                    <option value="CUSTOM">Custom Worker / External Team Entry...</option>
+                    <option value="">-- Choose Employee --</option>
+                    {employees.map(emp => {
+                      const isAssigned = isEmployeeAlreadyAssigned(normalizedLabour, emp.id, `${emp.firstName} ${emp.lastName}`);
+                      return (
+                        <option key={emp.id} value={emp.id} disabled={isAssigned}>
+                          {emp.firstName} {emp.lastName} ({emp.position} - {emp.department}) {isAssigned ? '✓ (Already Allocated)' : ''}
+                        </option>
+                      );
+                    })}
+                    <option value="CUSTOM">Custom Worker or Multi-Artisan List (Comma-Separated)...</option>
                   </select>
                 </div>
 
                 {(!selectedEmployeeId || selectedEmployeeId === 'CUSTOM') && (
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Worker / Team Name</label>
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Worker Name(s)</label>
                     <input 
                       type="text" 
-                      placeholder="e.g. Concrete Crew A or John Smith" 
+                      placeholder="e.g. John Doe, Jane Smith (auto-splits multiple workers)" 
                       value={customWorkerName} 
                       onChange={e => setCustomWorkerName(e.target.value)} 
                       required={!selectedEmployeeId}
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white" 
                     />
+                    <p className="text-[10px] text-slate-400">
+                      Tip: You can enter multiple workers separated by commas (e.g. "Dimi Maphanga, Refumuni Malungane"). The system automatically creates separate individual allocations.
+                    </p>
                   </div>
                 )}
 
@@ -3467,96 +3555,19 @@ ${subtaskSummaryLines}
         </div>
       )}
 
-      {/* Record Activity Modal */}
-      <PrintPreview
+      {/* Activity Detailed PDF & Print Modal */}
+      <ActivityDetailPdfModal
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
-        title={activity.name || "Activity Detail"}
-        onDownloadPdf={handleDownloadPDF}
-      >
-        <div className="p-8 font-sans">
-          <div className="border-b-2 border-[#0B5FFF] pb-6 mb-8 flex justify-between items-start">
-            <div>
-              <h1 className="text-3xl font-black text-slate-900 mb-2">{activity.name}</h1>
-              <p className="text-sm text-slate-500 font-medium">Activity Report / Task Allocation Summary</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">Generated</p>
-              <p className="text-sm font-bold text-slate-800">{new Date().toLocaleDateString()}</p>
-              <p className="text-sm text-slate-500">{new Date().toLocaleTimeString()}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-8 mb-10">
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Project & Status</h3>
-              <div className="space-y-2">
-                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">Project:</span> <span className="font-semibold text-slate-900">{projects.find(p => p.id === activity.projectId)?.name || activity.projectId}</span></p>
-                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">Status:</span> <span className="font-semibold text-slate-900">{activity.status || "Not Started"}</span></p>
-                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">Priority:</span> <span className="font-semibold text-slate-900">{activity.priority || "Medium"}</span></p>
-              </div>
-            </div>
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Schedule & Location</h3>
-              <div className="space-y-2">
-                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">Start Date:</span> <span className="font-semibold text-slate-900">{activity.startDate || "N/A"}</span></p>
-                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">End Date:</span> <span className="font-semibold text-slate-900">{activity.finishDate || "N/A"}</span></p>
-                <p className="text-sm"><span className="text-slate-500 w-24 inline-block">Location:</span> <span className="font-semibold text-slate-900">{activity.location || "N/A"}</span></p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-10">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 border-b border-slate-100 pb-2">Description / Scope of Work</h3>
-            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-              {activity.description || "No description provided."}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-8">
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 border-b border-slate-100 pb-2">Assigned Personnel</h3>
-              {activity.assignedLabour && activity.assignedLabour.length > 0 ? (
-                <ul className="space-y-2">
-                  {activity.assignedLabour.map((l, i) => (
-                    <li key={i} className="text-sm flex justify-between items-center py-1 border-b border-slate-50 border-dashed">
-                      <span className="font-medium text-slate-800">{l.name}</span>
-                      <span className="text-xs text-slate-500">{l.role}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-400 italic">No personnel assigned.</p>
-              )}
-            </div>
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 border-b border-slate-100 pb-2">Assigned Equipment</h3>
-              {activity.assignedEquipment && activity.assignedEquipment.length > 0 ? (
-                <ul className="space-y-2">
-                  {activity.assignedEquipment.map((e, i) => (
-                    <li key={i} className="text-sm flex justify-between items-center py-1 border-b border-slate-50 border-dashed">
-                      <span className="font-medium text-slate-800">{e.name}</span>
-                      <span className="text-xs text-slate-500">{e.operator || "Unassigned"}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-400 italic">No equipment assigned.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-12 bg-slate-50 rounded-xl p-6 border border-slate-100">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Task Completion</h3>
-              <span className="text-lg font-black text-[#0B5FFF]">{activity.progress || 0}%</span>
-            </div>
-            <div className="w-full bg-slate-200 rounded-full h-2">
-              <div className="bg-[#0B5FFF] h-2 rounded-full" style={{ width: `${activity.progress || 0}%` }}></div>
-            </div>
-          </div>
-        </div>
-      </PrintPreview>
+        activity={activity}
+        project={projects.find(p => p.id === activity.projectId)}
+        currentUserProfile={currentUserProfile}
+        employees={employees}
+        equipment={equipment}
+        materials={materials}
+        labourLogs={labourLogs}
+        equipmentLogs={equipmentLogs}
+      />
 
       {isRecordActivityModalOpen && (
         <RecordActivityForTaskModal

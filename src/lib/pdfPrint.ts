@@ -1,4 +1,7 @@
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Activity, DocumentItem, MaterialInventory, Project, AuditLog } from '../types';
+import { saveOrShareFile } from './fileExportService';
 
 export interface PrintActivityAuditOptions {
   project?: Project;
@@ -30,1270 +33,667 @@ interface PrintDocumentsOptions {
 }
 
 /**
- * Generates an executive, beautifully formatted printable HTML document
- * in a dedicated hidden iframe or window and triggers window.print().
- * This allows browser-native PDF export without disrupting the host iframe / main app.
+ * Generates an executive, beautifully formatted PDF document of activities
+ * and exports/shares it seamlessly across Desktop, PWA, and Android APK (Capacitor).
  */
-export function printActivitiesSummary({
+export async function printActivitiesSummary({
   project,
   activities,
   filterLabel = 'All Activities',
   totalActivitiesCount,
-}: PrintSummaryOptions) {
-  const currentDate = new Date().toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-  const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}: PrintSummaryOptions): Promise<boolean> {
+  try {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'pt',
+      format: 'a4',
+    });
 
-  // Calculate high-level summary KPIs
-  const total = activities.length;
-  const inProgress = activities.filter(a => a.status === 'In Progress').length;
-  const completed = activities.filter(a => a.status === 'Completed').length;
-  const blocked = activities.filter(a => a.status === 'Blocked' || a.status === 'Waiting' || a.status === 'Cancelled').length;
-  const notStarted = activities.filter(a => a.status === 'Not Started' || a.status === 'Ready').length;
-  const avgProgress = total > 0 
-    ? Math.round(activities.reduce((acc, a) => acc + (a.progress || 0), 0) / total) 
-    : 0;
+    const currentDate = new Date().toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
-      case 'Completed':
-        return 'background-color: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0;';
-      case 'In Progress':
-        return 'background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;';
-      case 'Blocked':
-      case 'Cancelled':
-        return 'background-color: #fef2f2; color: #991b1b; border: 1px solid #fecaca;';
-      default:
-        return 'background-color: #fefce8; color: #854d0e; border: 1px solid #fef08a;';
-    }
-  };
+    // Calculate metrics
+    const total = activities.length;
+    const inProgress = activities.filter(a => a.status === 'In Progress').length;
+    const completed = activities.filter(a => a.status === 'Completed').length;
+    const blocked = activities.filter(a => a.status === 'Blocked' || a.status === 'Waiting' || a.status === 'Cancelled').length;
+    const notStarted = activities.filter(a => a.status === 'Not Started' || a.status === 'Ready').length;
+    const avgProgress = total > 0 
+      ? Math.round(activities.reduce((acc, a) => acc + (a.progress || 0), 0) / total) 
+      : 0;
 
-  const getPriorityStyle = (priority?: string) => {
-    if (priority === 'Critical') return 'color: #dc2626; font-weight: 700;';
-    if (priority === 'High') return 'color: #ea580c; font-weight: 600;';
-    return 'color: #4b5563; font-weight: 500;';
-  };
+    // Header Background Accent (#0B5FFF)
+    doc.setFillColor(11, 95, 255);
+    doc.rect(0, 0, 842, 48, 'F');
 
-  const tableRows = activities.map((act, index) => `
-    <tr style="border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; background-color: ${index % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-      <td style="padding: 8px 10px; font-family: monospace; font-weight: bold; font-size: 11px; color: #334155;">${act.id}</td>
-      <td style="padding: 8px 10px;">
-        <div style="font-weight: 600; color: #0f172a; font-size: 12px;">${act.name}</div>
-        <div style="font-size: 10px; color: #64748b; margin-top: 2px;">
-          ${act.area ? `Area: <strong>${act.area}</strong>` : ''} 
-          ${act.workPackage ? `• Package: <strong>${act.workPackage}</strong>` : ''}
-          ${act.supervisor ? `• Sup: <strong>${act.supervisor}</strong>` : ''}
-        </div>
-      </td>
-      <td style="padding: 8px 10px; font-size: 11px;">
-        <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; background-color: #e0f2fe; color: #0369a1;">
-          ${act.discipline || 'Civil'}
-        </span>
-      </td>
-      <td style="padding: 8px 10px; font-size: 11px; ${getPriorityStyle(act.priority)}">
-        ${act.priority || 'Medium'}
-      </td>
-      <td style="padding: 8px 10px; font-size: 11px; font-weight: 600; color: #334155; white-space: nowrap;">
-        ${act.actualQuantity ?? 0} / ${act.targetQuantity ?? 0} <span style="font-size: 9px; color: #64748b; font-weight: normal;">${act.unit || 'units'}</span>
-      </td>
-      <td style="padding: 8px 10px; font-size: 11px; white-space: nowrap;">
-        <span style="display: inline-block; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 700; ${getStatusBadgeStyle(act.status)}">
-          ${act.status}
-        </span>
-      </td>
-      <td style="padding: 8px 10px; font-size: 11px; color: #475569; font-family: monospace; white-space: nowrap;">
-        ${act.startDate || '—'}
-      </td>
-      <td style="padding: 8px 10px; text-align: right; white-space: nowrap;">
-        <div style="font-weight: 700; font-size: 11px; color: #0f172a;">${act.progress}%</div>
-        <div style="width: 55px; height: 5px; background-color: #e2e8f0; border-radius: 9999px; margin-left: auto; margin-top: 3px; overflow: hidden;">
-          <div style="width: ${Math.min(act.progress, 100)}%; height: 100%; background-color: ${act.progress === 100 ? '#10b981' : '#0b5fff'}; border-radius: 9999px;"></div>
-        </div>
-      </td>
-    </tr>
-  `).join('');
+    // Title
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text('CONSTRUCTFIELD — Activities Summary Report', 36, 30);
 
-  const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Construction Activities Summary - ${project?.name || 'Project'}</title>
-  <style>
-    @page {
-      size: A4 landscape;
-      margin: 12mm 12mm 12mm 12mm;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #0f172a;
-      background: #ffffff;
-      margin: 0;
-      padding: 0;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    .header-container {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      border-bottom: 2px solid #0b5fff;
-      padding-bottom: 12px;
-      margin-bottom: 14px;
-    }
-    .title-area h1 {
-      margin: 0;
-      font-size: 20px;
-      color: #0f172a;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-    .title-area p {
-      margin: 3px 0 0 0;
-      font-size: 11px;
-      color: #64748b;
-    }
-    .meta-box {
-      text-align: right;
-      font-size: 11px;
-      color: #475569;
-    }
-    .meta-box strong {
-      color: #0f172a;
-    }
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 10px;
-      margin-bottom: 16px;
-    }
-    .kpi-card {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 8px 10px;
-      text-align: center;
-    }
-    .kpi-label {
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #64748b;
-      font-weight: 700;
-      margin-bottom: 2px;
-    }
-    .kpi-value {
-      font-size: 16px;
-      font-weight: 800;
-      color: #0f172a;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11px;
-      text-align: left;
-    }
-    th {
-      background-color: #f1f5f9;
-      color: #475569;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 700;
-      padding: 8px 10px;
-      border-top: 1px solid #cbd5e1;
-      border-bottom: 1px solid #cbd5e1;
-    }
-    .footer {
-      margin-top: 18px;
-      border-top: 1px solid #e2e8f0;
-      padding-top: 8px;
-      display: flex;
-      justify-content: space-between;
-      font-size: 9px;
-      color: #94a3b8;
-    }
-  </style>
-</head>
-<body>
-  <div class="header-container">
-    <div class="title-area">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="background: #0b5fff; color: white; padding: 3px 6px; border-radius: 4px; font-weight: 900; font-size: 10px; letter-spacing: 0.05em;">CONSTRUCTFIELD</span>
-        <h1>Construction Activities Summary Report</h1>
-      </div>
-      <p>Project: <strong>${project?.name || 'Main Project'}</strong> • Location: <strong>${project?.location || 'Jobsite'}</strong> • View: <strong>${filterLabel}</strong></p>
-    </div>
-    <div class="meta-box">
-      <div>Generated on: <strong>${currentDate} at ${currentTime}</strong></div>
-      <div>Showing: <strong>${total}</strong> of <strong>${totalActivitiesCount ?? total}</strong> recorded tasks</div>
-    </div>
-  </div>
+    // Subheader metadata
+    doc.setTextColor(51, 65, 85);
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Project: ${project?.name || 'Main Construction Site'}  •  Location: ${project?.location || 'Jobsite'}  •  Scope: ${filterLabel}`, 36, 68);
+    doc.text(`Generated on: ${currentDate} at ${currentTime}  •  Showing ${total} of ${totalActivitiesCount ?? total} activities`, 36, 82);
 
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">Total Selected</div>
-      <div class="kpi-value" style="color: #0b5fff;">${total}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">In Progress</div>
-      <div class="kpi-value" style="color: #2563eb;">${inProgress}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Completed</div>
-      <div class="kpi-value" style="color: #059669;">${completed}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Blocked / Delayed</div>
-      <div class="kpi-value" style="color: ${blocked > 0 ? '#dc2626' : '#64748b'};">${blocked}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Not Started</div>
-      <div class="kpi-value" style="color: #d97706;">${notStarted}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Avg. Progress</div>
-      <div class="kpi-value" style="color: #4f46e5;">${avgProgress}%</div>
-    </div>
-  </div>
+    // Summary KPI Cards Box
+    const startY = 96;
+    const cardWidth = 120;
+    const cardHeight = 36;
+    const cards = [
+      { label: 'TOTAL SELECTED', val: `${total}`, color: [11, 95, 255] },
+      { label: 'IN PROGRESS', val: `${inProgress}`, color: [37, 99, 235] },
+      { label: 'COMPLETED', val: `${completed}`, color: [5, 150, 105] },
+      { label: 'BLOCKED / DELAYED', val: `${blocked}`, color: [220, 38, 38] },
+      { label: 'NOT STARTED', val: `${notStarted}`, color: [217, 119, 6] },
+      { label: 'AVG. PROGRESS', val: `${avgProgress}%`, color: [79, 70, 229] },
+    ];
 
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 70px;">ID</th>
-        <th>Activity Name & Scope Details</th>
-        <th style="width: 80px;">Discipline</th>
-        <th style="width: 70px;">Priority</th>
-        <th style="width: 100px;">Qty / Target</th>
-        <th style="width: 100px;">Status</th>
-        <th style="width: 90px;">Start Date</th>
-        <th style="width: 80px; text-align: right;">Progress</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRows}
-    </tbody>
-  </table>
+    cards.forEach((c, i) => {
+      const x = 36 + i * (cardWidth + 10);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(x, startY, cardWidth, cardHeight, 4, 4, 'FD');
 
-  <div class="footer">
-    <div>Constructfield Enterprise Field Management • Official Site Record</div>
-    <div>Page 1 of 1 • Signed by Site Supervisor: __________________________</div>
-  </div>
-</body>
-</html>
-  `;
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(c.label, x + 8, startY + 14);
 
-  // Use a hidden iframe to print cleanly without opening unwanted blank popups or navigating away
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = '0';
-  document.body.appendChild(iframe);
+      doc.setFontSize(12);
+      doc.setTextColor(c.color[0], c.color[1], c.color[2]);
+      doc.text(c.val, x + 8, startY + 30);
+    });
 
-  const doc = iframe.contentWindow?.document;
-  if (!doc) {
-    // Fallback to window.print if iframe document not accessible
-    window.print();
-    return;
-  }
+    // AutoTable for Activities
+    const tableHeaders = [
+      ['ID', 'Activity Name & Scope Details', 'Discipline', 'Priority', 'Qty / Target', 'Status', 'Start Date', 'Progress %']
+    ];
 
-  doc.open();
-  doc.write(htmlContent);
-  doc.close();
+    const tableData = activities.map(act => [
+      act.id,
+      `${act.name}${act.workPackage ? `\nPackage: ${act.workPackage}` : ''}${act.area ? ` | Area: ${act.area}` : ''}`,
+      act.discipline || 'General',
+      act.priority || 'Medium',
+      `${act.actualQuantity || 0} / ${act.targetQuantity || 0} ${act.unit || 'units'}`,
+      act.status || 'Not Started',
+      act.startDate || '—',
+      `${act.progress || 0}%`
+    ]);
 
-  // Wait for rendering then trigger native print
-  setTimeout(() => {
-    try {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-    } catch (err) {
-      console.error('Error invoking print:', err);
+    autoTable(doc, {
+      head: tableHeaders,
+      body: tableData,
+      startY: startY + cardHeight + 14,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [71, 85, 105],
+        fontSize: 8,
+        fontStyle: 'bold',
+        halign: 'left',
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 5,
+        textColor: [15, 23, 42],
+        lineColor: [226, 232, 240],
+      },
+      columnStyles: {
+        0: { cellWidth: 60, fontStyle: 'bold' },
+        1: { cellWidth: 260 },
+        2: { cellWidth: 70 },
+        3: { cellWidth: 60 },
+        4: { cellWidth: 85 },
+        5: { cellWidth: 75 },
+        6: { cellWidth: 70 },
+        7: { cellWidth: 70, halign: 'right', fontStyle: 'bold' },
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Constructfield Enterprise Field Management  •  Page ${data.pageNumber}`,
+          36,
+          doc.internal.pageSize.getHeight() - 14
+        );
+      }
+    });
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `constructfield_activities_summary_${dateStr}.pdf`;
+    const blob = doc.output('blob');
+
+    await saveOrShareFile({
+      filename,
+      blob,
+      title: 'Activities Summary Report PDF',
+      text: `Constructfield Activities Summary Report - ${currentDate}`
+    });
+
+    return true;
+  } catch (err) {
+    console.error('Error generating activities PDF:', err);
+    if (typeof window !== 'undefined' && window.print) {
       window.print();
-    } finally {
-      // Remove iframe after user dismisses print dialogue
-      setTimeout(() => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-      }, 2000);
     }
-  }, 350);
+    return false;
+  }
 }
 
 /**
- * Generates an executive, beautifully formatted printable HTML report of Material Inventory
- * and triggers browser print / PDF export.
+ * Generates an executive, beautifully formatted PDF report of Material Inventory
+ * and exports/shares it across Mobile APK, PWA, and Desktop.
  */
-export function printMaterialsSummary({
+export async function printMaterialsSummary({
   project,
   materials,
   filterLabel = 'All Material Items',
   totalMaterialsCount,
-}: PrintMaterialsOptions) {
-  const currentDate = new Date().toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-  const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}: PrintMaterialsOptions): Promise<boolean> {
+  try {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'pt',
+      format: 'a4',
+    });
 
-  // Calculate Materials KPIs
-  const total = materials.length;
-  let inStockCount = 0;
-  let lowStockCount = 0;
-  let outOfStockCount = 0;
-  let overEstimateCount = 0;
-  let totalEstimatedUnits = 0;
-  let totalReceivedUnits = 0;
-  let totalUsedUnits = 0;
+    const currentDate = new Date().toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  materials.forEach(m => {
-    const balance = m.receivedQuantity - m.usedQuantity;
-    const thresh = m.reorderLevel !== undefined && m.reorderLevel >= 0 
-      ? m.reorderLevel 
-      : Math.round((m.estimatedQuantity || 100) * 0.1);
-    
-    totalEstimatedUnits += m.estimatedQuantity || 0;
-    totalReceivedUnits += m.receivedQuantity || 0;
-    totalUsedUnits += m.usedQuantity || 0;
+    // Calculate Materials KPIs
+    const total = materials.length;
+    let inStockCount = 0;
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
+    let totalEstimatedUnits = 0;
+    let totalReceivedUnits = 0;
+    let totalUsedUnits = 0;
 
-    if (balance <= 0) {
-      outOfStockCount++;
-    } else if (balance <= thresh) {
-      lowStockCount++;
-    } else if (m.usedQuantity > m.estimatedQuantity) {
-      overEstimateCount++;
-    } else {
-      inStockCount++;
-    }
-  });
+    materials.forEach(m => {
+      const balance = m.receivedQuantity - m.usedQuantity;
+      const thresh = m.reorderLevel !== undefined && m.reorderLevel >= 0 
+        ? m.reorderLevel 
+        : Math.round((m.estimatedQuantity || 100) * 0.1);
+      
+      totalEstimatedUnits += m.estimatedQuantity || 0;
+      totalReceivedUnits += m.receivedQuantity || 0;
+      totalUsedUnits += m.usedQuantity || 0;
 
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
-      case 'In Stock':
-        return 'background-color: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0;';
-      case 'Low Stock':
-        return 'background-color: #fffbeb; color: #92400e; border: 1px solid #fde68a;';
-      case 'Out of Stock':
-        return 'background-color: #fef2f2; color: #991b1b; border: 1px solid #fecaca;';
-      case 'Over Estimate':
-        return 'background-color: #faf5ff; color: #6b21a8; border: 1px solid #e9d5ff;';
-      default:
-        return 'background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;';
-    }
-  };
+      if (balance <= 0) {
+        outOfStockCount++;
+      } else if (balance <= thresh) {
+        lowStockCount++;
+      } else {
+        inStockCount++;
+      }
+    });
 
-  const tableRows = materials.map((mat, index) => {
-    const balance = mat.receivedQuantity - mat.usedQuantity;
-    const threshold = mat.reorderLevel !== undefined && mat.reorderLevel >= 0 
-      ? mat.reorderLevel 
-      : Math.round((mat.estimatedQuantity || 100) * 0.1);
-    const isLow = balance <= threshold;
-    const usageRatio = mat.estimatedQuantity > 0 ? Math.min(100, Math.round((mat.usedQuantity / mat.estimatedQuantity) * 100)) : 0;
+    // Header Background Accent (#0B5FFF)
+    doc.setFillColor(11, 95, 255);
+    doc.rect(0, 0, 842, 48, 'F');
 
-    let computedStatus = mat.status;
-    if (balance <= 0) computedStatus = 'Out of Stock';
-    else if (isLow) computedStatus = 'Low Stock';
-    else if (mat.usedQuantity > mat.estimatedQuantity) computedStatus = 'Over Estimate';
-    else computedStatus = 'In Stock';
+    // Title
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text('CONSTRUCTFIELD — Material Inventory & Reorder Report', 36, 30);
 
-    return `
-    <tr style="border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; background-color: ${index % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-      <td style="padding: 8px 10px; font-family: monospace; font-weight: bold; font-size: 11px; color: #334155;">
-        ${mat.id}
-        ${mat.sku ? `<div style="font-size: 9px; color: #64748b; font-weight: normal;">SKU: ${mat.sku}</div>` : ''}
-      </td>
-      <td style="padding: 8px 10px;">
-        <div style="font-weight: 700; color: #0f172a; font-size: 12px;">${mat.name}</div>
-        ${mat.location ? `<div style="font-size: 10px; color: #64748b; margin-top: 1px;">Loc / Supplier: <strong>${mat.location}</strong></div>` : ''}
-      </td>
-      <td style="padding: 8px 10px; font-size: 11px;">
-        <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;">
-          ${mat.category || 'General'}
-        </span>
-      </td>
-      <td style="padding: 8px 10px; text-align: right; font-size: 11px; font-weight: 600; color: #334155;">
-        ${mat.estimatedQuantity.toLocaleString()} <span style="font-size: 9px; color: #64748b; font-weight: normal;">${mat.unit}</span>
-      </td>
-      <td style="padding: 8px 10px; text-align: right; font-size: 11px; color: #64748b; font-weight: 500;">
-        ${threshold.toLocaleString()} <span style="font-size: 9px;">${mat.unit}</span>
-      </td>
-      <td style="padding: 8px 10px; text-align: right; font-size: 11px; font-weight: 600; color: #0f172a;">
-        ${mat.receivedQuantity.toLocaleString()}
-      </td>
-      <td style="padding: 8px 10px; text-align: right; font-size: 11px; font-weight: 600; color: #475569;">
-        ${mat.usedQuantity.toLocaleString()}
-      </td>
-      <td style="padding: 8px 10px; text-align: right; font-size: 11px; font-weight: 800; color: ${isLow ? '#dc2626' : '#059669'};">
-        ${balance.toLocaleString()} <span style="font-size: 9px; font-weight: normal;">${mat.unit}</span>
-      </td>
-      <td style="padding: 8px 10px; text-align: center; white-space: nowrap;">
-        <span style="display: inline-block; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 700; ${getStatusBadgeStyle(computedStatus)}">
-          ${computedStatus}
-        </span>
-      </td>
-      <td style="padding: 8px 10px; text-align: right; white-space: nowrap;">
-        <div style="font-weight: 700; font-size: 11px; color: #0f172a;">${usageRatio}%</div>
-        <div style="width: 55px; height: 5px; background-color: #e2e8f0; border-radius: 9999px; margin-left: auto; margin-top: 3px; overflow: hidden;">
-          <div style="width: ${usageRatio}%; height: 100%; background-color: ${usageRatio > 90 ? '#ef4444' : '#0b5fff'}; border-radius: 9999px;"></div>
-        </div>
-      </td>
-    </tr>
-    `;
-  }).join('');
+    // Subheader
+    doc.setTextColor(51, 65, 85);
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Project: ${project?.name || 'Main Construction Site'}  •  Scope: ${filterLabel}`, 36, 68);
+    doc.text(`Report Date: ${currentDate} at ${currentTime}  •  Listed Materials: ${total} of ${totalMaterialsCount ?? total} items`, 36, 82);
 
-  const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Material Inventory & Reorder Summary - ${project?.name || 'Constructfield Site'}</title>
-  <style>
-    @page {
-      size: A4 landscape;
-      margin: 12mm 12mm 12mm 12mm;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #0f172a;
-      background: #ffffff;
-      margin: 0;
-      padding: 0;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    .header-container {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      border-bottom: 2px solid #0b5fff;
-      padding-bottom: 12px;
-      margin-bottom: 14px;
-    }
-    .title-area h1 {
-      margin: 0;
-      font-size: 20px;
-      color: #0f172a;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-    .title-area p {
-      margin: 3px 0 0 0;
-      font-size: 11px;
-      color: #64748b;
-    }
-    .meta-box {
-      text-align: right;
-      font-size: 11px;
-      color: #475569;
-    }
-    .meta-box strong {
-      color: #0f172a;
-    }
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 10px;
-      margin-bottom: 16px;
-    }
-    .kpi-card {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 8px 10px;
-      text-align: center;
-    }
-    .kpi-label {
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #64748b;
-      font-weight: 700;
-      margin-bottom: 2px;
-    }
-    .kpi-value {
-      font-size: 16px;
-      font-weight: 800;
-      color: #0f172a;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11px;
-      text-align: left;
-    }
-    th {
-      background-color: #f1f5f9;
-      color: #475569;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 700;
-      padding: 8px 10px;
-      border-top: 1px solid #cbd5e1;
-      border-bottom: 1px solid #cbd5e1;
-    }
-    .footer {
-      margin-top: 18px;
-      border-top: 1px solid #e2e8f0;
-      padding-top: 8px;
-      display: flex;
-      justify-content: space-between;
-      font-size: 9px;
-      color: #94a3b8;
-    }
-  </style>
-</head>
-<body>
-  <div class="header-container">
-    <div class="title-area">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="background: #0b5fff; color: white; padding: 3px 6px; border-radius: 4px; font-weight: 900; font-size: 10px; letter-spacing: 0.05em;">CONSTRUCTFIELD</span>
-        <h1>Material Inventory & Reorder Report</h1>
-      </div>
-      <p>Project: <strong>${project?.name || 'Main Construction Site'}</strong> • Scope: <strong>${filterLabel}</strong></p>
-    </div>
-    <div class="meta-box">
-      <div>Report Date: <strong>${currentDate} at ${currentTime}</strong></div>
-      <div>Listed Materials: <strong>${total}</strong> of <strong>${totalMaterialsCount ?? total}</strong> items</div>
-    </div>
-  </div>
+    // KPI Cards Box
+    const startY = 96;
+    const cardWidth = 120;
+    const cardHeight = 36;
+    const cards = [
+      { label: 'TOTAL SKUS', val: `${total}`, color: [11, 95, 255] },
+      { label: 'IN STOCK', val: `${inStockCount}`, color: [5, 150, 105] },
+      { label: 'BELOW THRESHOLD', val: `${lowStockCount}`, color: [220, 38, 38] },
+      { label: 'OUT OF STOCK', val: `${outOfStockCount}`, color: [220, 38, 38] },
+      { label: 'TOTAL RECEIVED', val: `${totalReceivedUnits.toLocaleString()}`, color: [37, 99, 235] },
+      { label: 'TOTAL USED', val: `${totalUsedUnits.toLocaleString()}`, color: [79, 70, 229] },
+    ];
 
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">Total SKUs</div>
-      <div class="kpi-value" style="color: #0b5fff;">${total}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">In Stock</div>
-      <div class="kpi-value" style="color: #059669;">${inStockCount}</div>
-    </div>
-    <div class="kpi-card" style="${lowStockCount > 0 ? 'border-color: #fca5a5; background: #fff1f2;' : ''}">
-      <div class="kpi-label" style="${lowStockCount > 0 ? 'color: #b91c1c;' : ''}">Below Threshold</div>
-      <div class="kpi-value" style="color: ${lowStockCount > 0 ? '#dc2626' : '#64748b'};">${lowStockCount}</div>
-    </div>
-    <div class="kpi-card" style="${outOfStockCount > 0 ? 'border-color: #fca5a5; background: #fff1f2;' : ''}">
-      <div class="kpi-label" style="${outOfStockCount > 0 ? 'color: #b91c1c;' : ''}">Out of Stock</div>
-      <div class="kpi-value" style="color: ${outOfStockCount > 0 ? '#dc2626' : '#64748b'};">${outOfStockCount}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Total Received</div>
-      <div class="kpi-value" style="color: #2563eb;">${totalReceivedUnits.toLocaleString()}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Total Used</div>
-      <div class="kpi-value" style="color: #4f46e5;">${totalUsedUnits.toLocaleString()}</div>
-    </div>
-  </div>
+    cards.forEach((c, i) => {
+      const x = 36 + i * (cardWidth + 10);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(x, startY, cardWidth, cardHeight, 4, 4, 'FD');
 
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 80px;">Material ID</th>
-        <th>Material Name & Location</th>
-        <th style="width: 85px;">Category</th>
-        <th style="width: 85px; text-align: right;">Estimate</th>
-        <th style="width: 85px; text-align: right;">Alert Min</th>
-        <th style="width: 80px; text-align: right;">Received</th>
-        <th style="width: 75px; text-align: right;">Used</th>
-        <th style="width: 95px; text-align: right;">Available Bal.</th>
-        <th style="width: 90px; text-align: center;">Status</th>
-        <th style="width: 80px; text-align: right;">Usage %</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRows}
-    </tbody>
-  </table>
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(c.label, x + 8, startY + 14);
 
-  <div class="footer">
-    <div>Constructfield Materials Management • Official Warehouse & Jobsite Log</div>
-    <div>Verified & Signed by Storekeeper / Engineer: __________________________</div>
-  </div>
-</body>
-</html>
-  `;
+      doc.setFontSize(12);
+      doc.setTextColor(c.color[0], c.color[1], c.color[2]);
+      doc.text(c.val, x + 8, startY + 30);
+    });
 
-  // Hidden iframe pattern
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = '0';
-  document.body.appendChild(iframe);
+    // AutoTable for Materials
+    const tableHeaders = [
+      ['ID / SKU', 'Material Name & Storage Location', 'Category', 'Estimated', 'Min Reorder', 'Received', 'Used', 'Balance', 'Status', 'Usage %']
+    ];
 
-  const doc = iframe.contentWindow?.document;
-  if (!doc) {
-    window.print();
-    return;
-  }
+    const tableData = materials.map(mat => {
+      const balance = mat.receivedQuantity - mat.usedQuantity;
+      const threshold = mat.reorderLevel !== undefined && mat.reorderLevel >= 0 
+        ? mat.reorderLevel 
+        : Math.round((mat.estimatedQuantity || 100) * 0.1);
+      const isLow = balance <= threshold;
+      const usageRatio = mat.estimatedQuantity > 0 ? Math.min(100, Math.round((mat.usedQuantity / mat.estimatedQuantity) * 100)) : 0;
+      let computedStatus = mat.status;
+      if (balance <= 0) computedStatus = 'Out of Stock';
+      else if (isLow) computedStatus = 'Low Stock';
+      else if (mat.usedQuantity > mat.estimatedQuantity) computedStatus = 'Over Estimate';
+      else computedStatus = 'In Stock';
 
-  doc.open();
-  doc.write(htmlContent);
-  doc.close();
+      return [
+        mat.sku ? `${mat.id}\nSKU: ${mat.sku}` : mat.id,
+        `${mat.name}${mat.location ? `\nLoc: ${mat.location}` : ''}`,
+        mat.category || 'General',
+        `${mat.estimatedQuantity?.toLocaleString() || 0} ${mat.unit || ''}`,
+        `${threshold.toLocaleString()} ${mat.unit || ''}`,
+        mat.receivedQuantity?.toLocaleString() || '0',
+        mat.usedQuantity?.toLocaleString() || '0',
+        `${balance.toLocaleString()} ${mat.unit || ''}`,
+        computedStatus,
+        `${usageRatio}%`
+      ];
+    });
 
-  setTimeout(() => {
-    try {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-    } catch (err) {
-      console.error('Error invoking print:', err);
+    autoTable(doc, {
+      head: tableHeaders,
+      body: tableData,
+      startY: startY + cardHeight + 14,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [71, 85, 105],
+        fontSize: 8,
+        fontStyle: 'bold',
+        halign: 'left',
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 5,
+        textColor: [15, 23, 42],
+        lineColor: [226, 232, 240],
+      },
+      columnStyles: {
+        0: { cellWidth: 70, fontStyle: 'bold' },
+        1: { cellWidth: 200 },
+        2: { cellWidth: 70 },
+        3: { cellWidth: 65, halign: 'right' },
+        4: { cellWidth: 65, halign: 'right' },
+        5: { cellWidth: 60, halign: 'right' },
+        6: { cellWidth: 60, halign: 'right' },
+        7: { cellWidth: 70, halign: 'right', fontStyle: 'bold' },
+        8: { cellWidth: 65, halign: 'center' },
+        9: { cellWidth: 50, halign: 'right', fontStyle: 'bold' },
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Constructfield Enterprise Materials Inventory  •  Page ${data.pageNumber}`,
+          36,
+          doc.internal.pageSize.getHeight() - 14
+        );
+      }
+    });
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `constructfield_materials_inventory_${dateStr}.pdf`;
+    const blob = doc.output('blob');
+
+    await saveOrShareFile({
+      filename,
+      blob,
+      title: 'Materials Inventory Report PDF',
+      text: `Constructfield Materials Inventory Report - ${currentDate}`
+    });
+
+    return true;
+  } catch (err) {
+    console.error('Error generating materials PDF:', err);
+    if (typeof window !== 'undefined' && window.print) {
       window.print();
-    } finally {
-      setTimeout(() => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-      }, 2000);
     }
-  }, 350);
+    return false;
+  }
 }
 
 /**
- * Generates an executive, beautifully formatted printable HTML report of Document Register & Drawings Hub
- * and triggers browser print / PDF export.
+ * Generates an executive, beautifully formatted PDF report of Document Register & Drawings Hub
+ * and exports/shares it across Mobile APK, PWA, and Desktop.
  */
-export function printDocumentsSummary({
+export async function printDocumentsSummary({
   project,
   documents,
   filterLabel = 'All Project Documents',
   totalDocumentsCount,
-}: PrintDocumentsOptions) {
-  const currentDate = new Date().toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-  const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}: PrintDocumentsOptions): Promise<boolean> {
+  try {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'pt',
+      format: 'a4',
+    });
 
-  // Calculate Document KPIs
-  const total = documents.length;
-  const approvedCount = documents.filter(d => d.status === 'Approved').length;
-  const underReviewCount = documents.filter(d => d.status === 'Under Review').length;
-  const assignedToActivityCount = documents.filter(d => !!d.linkedActivityId).length;
-  const drawingsCount = documents.filter(d => d.category === 'Drawings & Blueprints' || d.fileType === 'cad').length;
-  const spreadsheetsCount = documents.filter(d => d.fileType === 'excel').length;
+    const currentDate = new Date().toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
-      case 'Approved':
-        return 'background-color: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0;';
-      case 'Under Review':
-        return 'background-color: #fffbeb; color: #92400e; border: 1px solid #fde68a;';
-      case 'Draft':
-        return 'background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;';
-      case 'Archived':
-        return 'background-color: #f8fafc; color: #64748b; border: 1px solid #e2e8f0;';
-      case 'Superseded':
-        return 'background-color: #fef2f2; color: #991b1b; border: 1px solid #fecaca;';
-      default:
-        return 'background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;';
-    }
-  };
+    // Calculate Document KPIs
+    const total = documents.length;
+    const approvedCount = documents.filter(d => d.status === 'Approved').length;
+    const underReviewCount = documents.filter(d => d.status === 'Under Review').length;
+    const assignedToActivityCount = documents.filter(d => !!d.linkedActivityId).length;
+    const drawingsCount = documents.filter(d => d.category === 'Drawings & Blueprints' || d.fileType === 'cad').length;
+    const spreadsheetsCount = documents.filter(d => d.fileType === 'excel').length;
 
-  const getFileTypeBadgeStyle = (type: string) => {
-    switch (type) {
-      case 'pdf':
-        return 'background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca;';
-      case 'excel':
-        return 'background-color: #ecfdf5; color: #059669; border: 1px solid #a7f3d0;';
-      case 'word':
-        return 'background-color: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;';
-      case 'cad':
-        return 'background-color: #fff7ed; color: #ea580c; border: 1px solid #ffedd5;';
-      default:
-        return 'background-color: #f8fafc; color: #475569; border: 1px solid #e2e8f0;';
-    }
-  };
+    // Header Background Accent (#0B5FFF)
+    doc.setFillColor(11, 95, 255);
+    doc.rect(0, 0, 842, 48, 'F');
 
-  const tableRows = documents.map((doc, index) => {
-    const uploadDateStr = doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('en-GB') : '-';
-    
-    return `
-    <tr style="border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; background-color: ${index % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-      <td style="padding: 8px 10px; font-family: monospace; font-weight: bold; font-size: 11px; color: #334155;">
-        ${doc.id}
-        <div style="font-size: 9px; color: #64748b; font-weight: normal; margin-top: 2px;">${doc.version}</div>
-      </td>
-      <td style="padding: 8px 10px;">
-        <div style="font-weight: 700; color: #0f172a; font-size: 12px;">${doc.title}</div>
-        <div style="font-size: 10px; color: #64748b; font-family: monospace; margin-top: 1px;">${doc.fileName} (${doc.fileSizeFormatted || 'Unknown'})</div>
-        ${doc.description ? `<div style="font-size: 10px; color: #475569; margin-top: 3px; font-style: italic;">${doc.description}</div>` : ''}
-      </td>
-      <td style="padding: 8px 10px; font-size: 10px; white-space: nowrap;">
-        <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; text-transform: uppercase; ${getFileTypeBadgeStyle(doc.fileType)}">
-          ${doc.fileExtension.toUpperCase()}
-        </span>
-      </td>
-      <td style="padding: 8px 10px; font-size: 11px; color: #334155; font-weight: 500;">
-        ${doc.category}
-      </td>
-      <td style="padding: 8px 10px; font-size: 11px;">
-        ${doc.linkedActivityName ? `
-          <div style="font-weight: 700; color: #0b5fff; font-size: 11px;">${doc.linkedActivityName}</div>
-          <div style="font-size: 9px; color: #64748b;">ID: ${doc.linkedActivityId}</div>
-        ` : `
-          <span style="color: #94a3b8; font-size: 10px; font-style: italic;">Unassigned</span>
-        `}
-      </td>
-      <td style="padding: 8px 10px; text-align: center; white-space: nowrap;">
-        <span style="display: inline-block; padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 700; ${getStatusBadgeStyle(doc.status)}">
-          ${doc.status}
-        </span>
-      </td>
-      <td style="padding: 8px 10px; font-size: 10px; color: #475569; white-space: nowrap;">
-        <div>${doc.uploadedBy}</div>
-        <div style="font-size: 9px; color: #64748b;">${uploadDateStr}</div>
-      </td>
-    </tr>
-    `;
-  }).join('');
+    // Title
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text('CONSTRUCTFIELD — Document Register & Transmittal Report', 36, 30);
 
-  const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Document Register & Technical Drawings - ${project?.name || 'Constructfield Project'}</title>
-  <style>
-    @page {
-      size: A4 landscape;
-      margin: 12mm 12mm 12mm 12mm;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #0f172a;
-      background: #ffffff;
-      margin: 0;
-      padding: 0;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    .header-container {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      border-bottom: 2px solid #0b5fff;
-      padding-bottom: 12px;
-      margin-bottom: 14px;
-    }
-    .title-area h1 {
-      margin: 0;
-      font-size: 20px;
-      color: #0f172a;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-    .title-area p {
-      margin: 3px 0 0 0;
-      font-size: 11px;
-      color: #64748b;
-    }
-    .meta-box {
-      text-align: right;
-      font-size: 11px;
-      color: #475569;
-    }
-    .meta-box strong {
-      color: #0f172a;
-    }
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 10px;
-      margin-bottom: 16px;
-    }
-    .kpi-card {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 8px 10px;
-      text-align: center;
-    }
-    .kpi-label {
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #64748b;
-      font-weight: 700;
-      margin-bottom: 2px;
-    }
-    .kpi-value {
-      font-size: 16px;
-      font-weight: 800;
-      color: #0f172a;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11px;
-      text-align: left;
-    }
-    th {
-      background-color: #f1f5f9;
-      color: #475569;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 700;
-      padding: 8px 10px;
-      border-top: 1px solid #cbd5e1;
-      border-bottom: 1px solid #cbd5e1;
-    }
-    .footer {
-      margin-top: 18px;
-      border-top: 1px solid #e2e8f0;
-      padding-top: 8px;
-      display: flex;
-      justify-content: space-between;
-      font-size: 9px;
-      color: #94a3b8;
-    }
-  </style>
-</head>
-<body>
-  <div class="header-container">
-    <div class="title-area">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="background: #0b5fff; color: white; padding: 3px 6px; border-radius: 4px; font-weight: 900; font-size: 10px; letter-spacing: 0.05em;">CONSTRUCTFIELD</span>
-        <h1>Project Document Register & Drawing Transmittal</h1>
-      </div>
-      <p>Project: <strong>${project?.name || 'Main Construction Site'}</strong> • Scope: <strong>${filterLabel}</strong></p>
-    </div>
-    <div class="meta-box">
-      <div>Report Date: <strong>${currentDate} at ${currentTime}</strong></div>
-      <div>Listed Files: <strong>${total}</strong> of <strong>${totalDocumentsCount ?? total}</strong> documents</div>
-    </div>
-  </div>
+    // Subheader
+    doc.setTextColor(51, 65, 85);
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Project: ${project?.name || 'Main Construction Site'}  •  Scope: ${filterLabel}`, 36, 68);
+    doc.text(`Report Date: ${currentDate} at ${currentTime}  •  Listed Files: ${total} of ${totalDocumentsCount ?? total} documents`, 36, 82);
 
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">Total Documents</div>
-      <div class="kpi-value" style="color: #0b5fff;">${total}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Approved</div>
-      <div class="kpi-value" style="color: #059669;">${approvedCount}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Under Review</div>
-      <div class="kpi-value" style="color: #d97706;">${underReviewCount}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Activity Linked</div>
-      <div class="kpi-value" style="color: #2563eb;">${assignedToActivityCount}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Drawings & CAD</div>
-      <div class="kpi-value" style="color: #ea580c;">${drawingsCount}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Excel Spreadsheets</div>
-      <div class="kpi-value" style="color: #059669;">${spreadsheetsCount}</div>
-    </div>
-  </div>
+    // KPI Cards Box
+    const startY = 96;
+    const cardWidth = 120;
+    const cardHeight = 36;
+    const cards = [
+      { label: 'TOTAL DOCUMENTS', val: `${total}`, color: [11, 95, 255] },
+      { label: 'APPROVED', val: `${approvedCount}`, color: [5, 150, 105] },
+      { label: 'UNDER REVIEW', val: `${underReviewCount}`, color: [217, 119, 6] },
+      { label: 'ACTIVITY LINKED', val: `${assignedToActivityCount}`, color: [37, 99, 235] },
+      { label: 'DRAWINGS & CAD', val: `${drawingsCount}`, color: [234, 88, 12] },
+      { label: 'SPREADSHEETS', val: `${spreadsheetsCount}`, color: [5, 150, 105] },
+    ];
 
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 80px;">Doc ID</th>
-        <th>Document Title & File</th>
-        <th style="width: 60px;">Format</th>
-        <th style="width: 140px;">Category</th>
-        <th style="width: 160px;">Assigned Activity</th>
-        <th style="width: 95px; text-align: center;">Status</th>
-        <th style="width: 110px;">Uploaded By</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRows}
-    </tbody>
-  </table>
+    cards.forEach((c, i) => {
+      const x = 36 + i * (cardWidth + 10);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(x, startY, cardWidth, cardHeight, 4, 4, 'FD');
 
-  <div class="footer">
-    <div>Constructfield Document Control & Field Quality System • Confidential Transmittal Register</div>
-    <div>Document Controller Signature: __________________________ Date: _____________</div>
-  </div>
-</body>
-</html>
-  `;
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(c.label, x + 8, startY + 14);
 
-  // Hidden iframe pattern
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = 'none';
-  iframe.style.visibility = 'hidden';
-  document.body.appendChild(iframe);
+      doc.setFontSize(12);
+      doc.setTextColor(c.color[0], c.color[1], c.color[2]);
+      doc.text(c.val, x + 8, startY + 30);
+    });
 
-  const doc = iframe.contentWindow?.document || iframe.contentDocument;
-  if (!doc) {
-    window.print();
-    return;
-  }
+    // AutoTable for Documents
+    const tableHeaders = [
+      ['Doc ID', 'Document Title & File', 'Format', 'Category', 'Assigned Activity', 'Status', 'Uploaded By']
+    ];
 
-  doc.open();
-  doc.write(htmlContent);
-  doc.close();
+    const tableData = documents.map(d => [
+      d.id,
+      `${d.title}\n${d.fileName || ''} (${d.fileSizeFormatted || ''})`,
+      d.fileExtension?.toUpperCase() || 'FILE',
+      d.category || 'General',
+      d.linkedActivityName ? `${d.linkedActivityName}\nID: ${d.linkedActivityId}` : 'Unassigned',
+      d.status || 'Draft',
+      `${d.uploadedBy || 'System'}\n${d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString('en-GB') : '-'}`
+    ]);
 
-  setTimeout(() => {
-    try {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-    } catch (err) {
-      console.error('Error invoking print:', err);
+    autoTable(doc, {
+      head: tableHeaders,
+      body: tableData,
+      startY: startY + cardHeight + 14,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [71, 85, 105],
+        fontSize: 8,
+        fontStyle: 'bold',
+        halign: 'left',
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 5,
+        textColor: [15, 23, 42],
+        lineColor: [226, 232, 240],
+      },
+      columnStyles: {
+        0: { cellWidth: 70, fontStyle: 'bold' },
+        1: { cellWidth: 240 },
+        2: { cellWidth: 55, halign: 'center' },
+        3: { cellWidth: 120 },
+        4: { cellWidth: 140 },
+        5: { cellWidth: 75, halign: 'center' },
+        6: { cellWidth: 80 },
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Constructfield Enterprise Document Management  •  Page ${data.pageNumber}`,
+          36,
+          doc.internal.pageSize.getHeight() - 14
+        );
+      }
+    });
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `constructfield_documents_register_${dateStr}.pdf`;
+    const blob = doc.output('blob');
+
+    await saveOrShareFile({
+      filename,
+      blob,
+      title: 'Documents Register Report PDF',
+      text: `Constructfield Documents Register Report - ${currentDate}`
+    });
+
+    return true;
+  } catch (err) {
+    console.error('Error generating documents PDF:', err);
+    if (typeof window !== 'undefined' && window.print) {
       window.print();
-    } finally {
-      setTimeout(() => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-      }, 2000);
     }
-  }, 350);
+    return false;
+  }
 }
 
 /**
- * Generates an executive, beautifully formatted printable HTML document
- * for the Activity & Subtask Audit Ledger in a dedicated hidden iframe.
- * Avoids interactive inputs, buttons, and giant padding from polluting the print output.
+ * Generates an executive, beautifully formatted PDF document
+ * for the Activity & Subtask Audit Ledger across Mobile APK, PWA, and Desktop.
  */
-export function printActivityAuditSummary({
+export async function printActivityAuditSummary({
   project,
   logs,
   filterLabel = 'All Events',
   totalLogsCount,
   activityName,
-}: PrintActivityAuditOptions) {
-  const currentDate = new Date().toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-  const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}: PrintActivityAuditOptions): Promise<boolean> {
+  try {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'pt',
+      format: 'a4',
+    });
 
-  // Calculate high-level summary KPIs
-  const total = logs.length;
-  const subtaskEvents = logs.filter(l => 
-    l.action.toLowerCase().includes('subtask') || l.details.toLowerCase().includes('subtask')
-  ).length;
-  const qaApprovals = logs.filter(l => 
-    l.action.toLowerCase().includes('qa') || l.details.toLowerCase().includes('qa hold point') || l.details.toLowerCase().includes('qa inspection')
-  ).length;
-  const progressLogs = logs.filter(l => 
-    l.action.toLowerCase().includes('progress') || l.details.toLowerCase().includes('progress logged')
-  ).length;
-  const deletions = logs.filter(l => 
-    l.actionType === 'delete' || l.action.toLowerCase().includes('delete') || l.action.toLowerCase().includes('remove')
-  ).length;
-
-  const getActionBadgeHtml = (action: string, actionType?: string, details?: string) => {
-    const actLower = action.toLowerCase();
-    const detLower = (details || '').toLowerCase();
-
-    if (actLower.includes('qa') || detLower.includes('qa hold point') || detLower.includes('qa inspection')) {
-      return `<span style="background-color: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 9px; text-transform: uppercase;">QA APPROVED</span>`;
-    }
-    if (actLower.includes('progress') || detLower.includes('progress logged')) {
-      return `<span style="background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 9px; text-transform: uppercase;">PROGRESS LOGGED</span>`;
-    }
-    if (actLower.includes('subtask') && (actLower.includes('completed') || detLower.includes('completed'))) {
-      return `<span style="background-color: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 9px; text-transform: uppercase;">SUBTASK COMPLETED</span>`;
-    }
-    if (actionType === 'delete' || actLower.includes('delete') || actLower.includes('remove')) {
-      return `<span style="background-color: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 9px; text-transform: uppercase;">DELETED</span>`;
-    }
-    if (actionType === 'update' || actLower.includes('edit') || actLower.includes('update') || actLower.includes('modify')) {
-      return `<span style="background-color: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 9px; text-transform: uppercase;">EDITED</span>`;
-    }
-    if (actionType === 'create' || actLower.includes('add') || actLower.includes('create')) {
-      return `<span style="background-color: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 9px; text-transform: uppercase;">CREATED</span>`;
-    }
-    if (actionType === 'status_change' || actLower.includes('status')) {
-      return `<span style="background-color: #fffbeb; color: #92400e; border: 1px solid #fde68a; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 9px; text-transform: uppercase;">STATUS CHANGE</span>`;
-    }
-    return `<span style="background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 9px; text-transform: uppercase;">LOGGED</span>`;
-  };
-
-  const tableRows = logs.map((log, index) => {
-    const formattedDate = new Date(log.timestamp).toLocaleString('en-GB', {
+    const currentDate = new Date().toLocaleDateString('en-GB', {
+      weekday: 'short',
       day: '2-digit',
       month: 'short',
       year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    });
+    const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Calculate metrics
+    const total = logs.length;
+    const subtaskEvents = logs.filter(l => 
+      l.action.toLowerCase().includes('subtask') || l.details.toLowerCase().includes('subtask')
+    ).length;
+    const qaApprovals = logs.filter(l => 
+      l.action.toLowerCase().includes('qa') || l.details.toLowerCase().includes('qa hold point') || l.details.toLowerCase().includes('qa inspection')
+    ).length;
+    const progressLogs = logs.filter(l => 
+      l.action.toLowerCase().includes('progress') || l.details.toLowerCase().includes('progress logged')
+    ).length;
+    const deletions = logs.filter(l => 
+      l.actionType === 'delete' || l.action.toLowerCase().includes('delete') || l.action.toLowerCase().includes('remove')
+    ).length;
+
+    // Header Background Accent (#0B5FFF)
+    doc.setFillColor(11, 95, 255);
+    doc.rect(0, 0, 842, 48, 'F');
+
+    // Title
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text('CONSTRUCTFIELD — Activity Audit Trail & Compliance Ledger', 36, 30);
+
+    // Subheader
+    doc.setTextColor(51, 65, 85);
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Project: ${project?.name || 'Main Site'}${activityName ? `  •  Activity: ${activityName}` : ''}  •  Scope: ${filterLabel}`, 36, 68);
+    doc.text(`Generated: ${currentDate} at ${currentTime}  •  Showing ${total} of ${totalLogsCount ?? total} audit records`, 36, 82);
+
+    // KPI Cards Box
+    const startY = 96;
+    const cardWidth = 145;
+    const cardHeight = 36;
+    const cards = [
+      { label: 'TOTAL AUDIT EVENTS', val: `${total}`, color: [11, 95, 255] },
+      { label: 'SUBTASK UPDATES', val: `${subtaskEvents}`, color: [5, 150, 105] },
+      { label: 'QA INSPECTIONS', val: `${qaApprovals}`, color: [79, 70, 229] },
+      { label: 'PROGRESS LOGS', val: `${progressLogs}`, color: [37, 99, 235] },
+      { label: 'RECORD DELETIONS', val: `${deletions}`, color: [220, 38, 38] },
+    ];
+
+    cards.forEach((c, i) => {
+      const x = 36 + i * (cardWidth + 10);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(x, startY, cardWidth, cardHeight, 4, 4, 'FD');
+
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(c.label, x + 8, startY + 14);
+
+      doc.setFontSize(12);
+      doc.setTextColor(c.color[0], c.color[1], c.color[2]);
+      doc.text(c.val, x + 8, startY + 30);
     });
 
-    const diffContent = (log.previousValue || log.newValue) ? `
-      <div style="margin-top: 3px; font-family: monospace; font-size: 9.5px; color: #64748b; background: #f8fafc; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; display: inline-block;">
-        ${log.previousValue ? `<span style="text-decoration: line-through; color: #ef4444;">${log.previousValue}</span> → ` : ''}
-        <strong style="color: #059669;">${log.newValue || ''}</strong>
-      </div>
-    ` : '';
+    // AutoTable for Audit Logs
+    const tableHeaders = [
+      ['Date & Time', 'Action Type', 'Activity / Scope', 'Details & State Mutations', 'User / Role', 'Audit ID']
+    ];
 
-    const inspectorContent = log.inspectorName ? `
-      <div style="margin-top: 3px; font-size: 10px; color: #065f46; background: #ecfdf5; padding: 2px 6px; border-radius: 4px; border: 1px solid #a7f3d0;">
-        <strong>QA Inspector:</strong> ${log.inspectorName} ${log.metadata?.signatureNote ? `• <em>"${log.metadata.signatureNote}"</em>` : ''}
-      </div>
-    ` : '';
+    const tableData = logs.map(l => [
+      l.timestamp ? new Date(l.timestamp).toLocaleString('en-GB') : '-',
+      l.action || 'System Event',
+      l.activityName || l.activityId || '-',
+      l.details || '-',
+      `${l.userId || 'User'} (${l.userRole || 'Field'})`,
+      l.id || '-'
+    ]);
 
-    return `
-      <tr style="border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; background-color: ${index % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-        <td style="padding: 6px 8px; font-family: monospace; font-size: 10px; color: #475569; white-space: nowrap;">
-          ${formattedDate}
-        </td>
-        <td style="padding: 6px 8px; white-space: nowrap;">
-          ${getActionBadgeHtml(log.action, log.actionType, log.details)}
-        </td>
-        <td style="padding: 6px 8px; font-size: 11px; font-weight: 600; color: #0f172a;">
-          ${log.activityName || log.entityId || 'Activity'}
-        </td>
-        <td style="padding: 6px 8px; font-size: 10.5px; color: #6d28d9; font-weight: 500;">
-          ${log.subtaskTitle || '—'}
-        </td>
-        <td style="padding: 6px 8px; font-size: 11px; color: #1e293b; max-width: 320px;">
-          <div>${log.details}</div>
-          ${diffContent}
-          ${inspectorContent}
-        </td>
-        <td style="padding: 6px 8px; font-size: 10.5px; color: #334155; font-weight: 600; white-space: nowrap;">
-          ${log.userId || 'Current User'}
-        </td>
-        <td style="padding: 6px 8px; font-family: monospace; font-size: 9.5px; color: #94a3b8; text-align: center; white-space: nowrap;">
-          ${log.id}
-        </td>
-      </tr>
-    `;
-  }).join('');
+    autoTable(doc, {
+      head: tableHeaders,
+      body: tableData,
+      startY: startY + cardHeight + 14,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [71, 85, 105],
+        fontSize: 8,
+        fontStyle: 'bold',
+        halign: 'left',
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 5,
+        textColor: [15, 23, 42],
+        lineColor: [226, 232, 240],
+      },
+      columnStyles: {
+        0: { cellWidth: 100 },
+        1: { cellWidth: 100, fontStyle: 'bold' },
+        2: { cellWidth: 130 },
+        3: { cellWidth: 260 },
+        4: { cellWidth: 100 },
+        5: { cellWidth: 80, fontStyle: 'bold' },
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Constructfield Enterprise Field Governance & Audit Trail  •  Page ${data.pageNumber}`,
+          36,
+          doc.internal.pageSize.getHeight() - 14
+        );
+      }
+    });
 
-  const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Activity & Subtask Audit Ledger - ${project?.name || 'Project'}</title>
-  <style>
-    @page {
-      size: A4 landscape;
-      margin: 10mm 10mm 10mm 10mm;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #0f172a;
-      background: #ffffff;
-      margin: 0;
-      padding: 0;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    .header-container {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      border-bottom: 2px solid #0b5fff;
-      padding-bottom: 8px;
-      margin-bottom: 10px;
-    }
-    .title-area h1 {
-      margin: 0;
-      font-size: 18px;
-      color: #0f172a;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-    .title-area p {
-      margin: 2px 0 0 0;
-      font-size: 10.5px;
-      color: #64748b;
-    }
-    .meta-box {
-      text-align: right;
-      font-size: 10.5px;
-      color: #475569;
-    }
-    .meta-box strong {
-      color: #0f172a;
-    }
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .kpi-card {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 6px 8px;
-      text-align: center;
-    }
-    .kpi-label {
-      font-size: 8.5px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #64748b;
-      font-weight: 700;
-      margin-bottom: 1px;
-    }
-    .kpi-value {
-      font-size: 15px;
-      font-weight: 800;
-      color: #0f172a;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 10.5px;
-      text-align: left;
-    }
-    thead {
-      display: table-header-group;
-    }
-    tr {
-      page-break-inside: avoid;
-    }
-    th {
-      background-color: #f1f5f9;
-      color: #475569;
-      font-size: 9.5px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 700;
-      padding: 6px 8px;
-      border-top: 1px solid #cbd5e1;
-      border-bottom: 1px solid #cbd5e1;
-    }
-    .footer {
-      margin-top: 14px;
-      border-top: 1px solid #e2e8f0;
-      padding-top: 6px;
-      display: flex;
-      justify-content: space-between;
-      font-size: 8.5px;
-      color: #94a3b8;
-    }
-  </style>
-</head>
-<body>
-  <div class="header-container">
-    <div class="title-area">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="background: #0b5fff; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 900; font-size: 9.5px; letter-spacing: 0.05em;">CONSTRUCTFIELD</span>
-        <h1>Activity & Subtasks Audit Ledger Report</h1>
-      </div>
-      <p>Project: <strong>${project?.name || 'Constructfield Project'}</strong> • Filter: <strong>${filterLabel}</strong> ${activityName ? `• Activity: <strong>${activityName}</strong>` : ''}</p>
-    </div>
-    <div class="meta-box">
-      <div>Generated: <strong>${currentDate} at ${currentTime}</strong></div>
-      <div>Showing: <strong>${total}</strong> of <strong>${totalLogsCount ?? total}</strong> recorded audit events</div>
-    </div>
-  </div>
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `constructfield_activity_audit_trail_${dateStr}.pdf`;
+    const blob = doc.output('blob');
 
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">Total Events</div>
-      <div class="kpi-value" style="color: #0b5fff;">${total}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Subtask Updates</div>
-      <div class="kpi-value" style="color: #059669;">${subtaskEvents}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">QA Hold Points</div>
-      <div class="kpi-value" style="color: #4f46e5;">${qaApprovals}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Progress Logs</div>
-      <div class="kpi-value" style="color: #2563eb;">${progressLogs}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Deletions</div>
-      <div class="kpi-value" style="color: ${deletions > 0 ? '#dc2626' : '#64748b'};">${deletions}</div>
-    </div>
-  </div>
+    await saveOrShareFile({
+      filename,
+      blob,
+      title: 'Activity Audit Trail PDF',
+      text: `Constructfield Activity Audit Trail Report - ${currentDate}`
+    });
 
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 110px;">Date & Time</th>
-        <th style="width: 120px;">Action Type</th>
-        <th style="width: 140px;">Activity / Scope</th>
-        <th style="width: 130px;">Subtask Deliverable</th>
-        <th>Details, Notes & State Mutations</th>
-        <th style="width: 110px;">Actor / User</th>
-        <th style="width: 75px; text-align: center;">Audit ID</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRows.length > 0 ? tableRows : `
-        <tr>
-          <td colspan="7" style="padding: 24px; text-align: center; color: #94a3b8; font-style: italic;">
-            No audit records matching the specified filters.
-          </td>
-        </tr>
-      `}
-    </tbody>
-  </table>
-
-  <div class="footer">
-    <div>Constructfield Enterprise Field Governance & Audit Trail • Official Project Record</div>
-    <div>QA / Site Manager Sign-Off Signature: _________________________________ Date: _________________</div>
-  </div>
-</body>
-</html>
-  `;
-
-  // Hidden iframe print pattern
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = '0';
-  document.body.appendChild(iframe);
-
-  const doc = iframe.contentWindow?.document;
-  if (!doc) {
-    window.print();
-    return;
-  }
-
-  doc.open();
-  doc.write(htmlContent);
-  doc.close();
-
-  setTimeout(() => {
-    try {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-    } catch (err) {
-      console.error('Error invoking print:', err);
+    return true;
+  } catch (err) {
+    console.error('Error generating audit PDF:', err);
+    if (typeof window !== 'undefined' && window.print) {
       window.print();
-    } finally {
-      setTimeout(() => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-      }, 2000);
     }
-  }, 350);
+    return false;
+  }
 }
-
-
 

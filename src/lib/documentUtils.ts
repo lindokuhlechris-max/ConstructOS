@@ -24,8 +24,23 @@ export function detectFileType(extension: string, mimeType?: string): 'pdf' | 'e
   return 'other';
 }
 
-export function downloadDocumentFile(fileUrl?: string, fileName?: string, textContent?: string) {
+export async function downloadDocumentFile(fileUrl?: string, fileName?: string, textContent?: string) {
+  const { saveOrShareFile } = await import('./fileExportService');
   if (fileUrl) {
+    try {
+      if (fileUrl.startsWith('data:') || fileUrl.startsWith('blob:')) {
+        const res = await fetch(fileUrl);
+        const blob = await res.blob();
+        await saveOrShareFile({
+          filename: fileName || 'document',
+          blob,
+          title: fileName || 'Document Download'
+        });
+        return;
+      }
+    } catch (e) {
+      console.warn('Direct fetch failed, using anchor fallback:', e);
+    }
     const link = document.createElement('a');
     link.href = fileUrl;
     link.download = fileName || 'document';
@@ -38,12 +53,9 @@ export function downloadDocumentFile(fileUrl?: string, fileName?: string, textCo
   // If we only have textContent or plain data
   const content = textContent || `Constructfield Project Transmittal Document: ${fileName || 'Document'}\nGenerated at ${new Date().toISOString()}`;
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName || 'document.txt';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  await saveOrShareFile({
+    filename: fileName || 'document.txt',
+    blob,
+    title: fileName || 'Document Download'
+  });
 }

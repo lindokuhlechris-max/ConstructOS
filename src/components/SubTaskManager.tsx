@@ -9,9 +9,11 @@ import {
   Save, X, Minus, Check, Calendar, Flag, AlertTriangle, Lock, ShieldCheck,
   CornerDownRight, CheckSquare, Sparkle, Info, Search, Users, UserCheck,
   Compass, Link2, Unlink, ExternalLink, Scale, Ruler, Square, Box, Hash,
-  Percent, ToggleLeft, ToggleRight, ListChecks, ListTodo
+  Percent, ToggleLeft, ToggleRight, ListChecks, ListTodo,
+  LayoutGrid, ListOrdered, List
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { getPersonInitials, getSubtaskProgressionNumber } from '../lib/labourUtils';
 
 export const MEASUREMENT_TYPES: {
   type: SubTaskMeasurementType;
@@ -541,6 +543,7 @@ export function SubTaskManager({
   const [isExpanded, setIsExpanded] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
   
   // Cross-Activity Linking Memos: group other activities by discipline/workPackage/category
   const otherActivities = React.useMemo(() => {
@@ -1674,6 +1677,38 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
           </p>
         </div>
         <div className="flex gap-2 shrink-0 items-center flex-wrap">
+          {/* View Mode Toggle: Clean Progression List vs Cards View */}
+          {totalCount > 0 && (
+            <div className="inline-flex p-0.5 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  viewMode === 'list'
+                    ? 'bg-white dark:bg-slate-900 text-[#0B5FFF] shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+                title="Clean Progression List View (Numbered Sequence)"
+              >
+                <ListOrdered className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Progression List</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  viewMode === 'cards'
+                    ? 'bg-white dark:bg-slate-900 text-[#0B5FFF] shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+                title="Detailed Cards View"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Card View</span>
+              </button>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
@@ -2959,113 +2994,111 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                                   </div>
                                 </div>
                               ) : (
+                                /* SUBTASK ITEM (LIST OR CARD VIEW) */
+                                  (() => {
+                                    // Predecessor calculations
+                                    const predTask = st.predecessorId ? subtasks.find(p => p.id === st.predecessorId) : null;
+                                    const predIndex = st.predecessorId ? subtasks.findIndex(p => p.id === st.predecessorId) : -1;
+                                    const isPredBlocked = predTask ? predTask.status !== 'Completed' : false;
 
-                                /* SUBTASK CARD VIEW */
-                                (() => {
-                                  // Predecessor calculations
-                                  const predTask = st.predecessorId ? subtasks.find(p => p.id === st.predecessorId) : null;
-                                  const predIndex = st.predecessorId ? subtasks.findIndex(p => p.id === st.predecessorId) : -1;
-                                  const isPredBlocked = predTask ? predTask.status !== 'Completed' : false;
+                                    // Hold point calculations
+                                    const isHoldPointPending = !!st.isHoldPoint && !st.holdPointSignOff?.approved;
+                                    const isAnyBlocked = isBlockedByChildren || isPredBlocked;
 
-                                  // Hold point calculations
-                                  const isHoldPointPending = !!st.isHoldPoint && !st.holdPointSignOff?.approved;
-                                  const isAnyBlocked = isBlockedByChildren || isPredBlocked;
+                                    // Progression numbering sequence (e.g. 1.0, 2.0, 2.1)
+                                    const progressionNumber = getSubtaskProgressionNumber(subtasks, index);
 
-                                  return (
-                                    <div
-                                      className={`flex flex-col gap-3 p-4 rounded-xl border transition-all ${
-                                        st.status === 'Completed'
-                                          ? 'bg-emerald-50/40 dark:bg-emerald-950/10 border-emerald-200 dark:border-emerald-900/40'
-                                          : st.status === 'In Progress'
-                                          ? 'bg-blue-50/40 dark:bg-blue-950/10 border-blue-200 dark:border-blue-900/40'
-                                          : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800'
-                                      } ${st.isMilestone ? 'ring-1 ring-purple-300 dark:ring-purple-800/60' : ''} ${st.isHoldPoint ? 'border-l-4 border-l-rose-500' : ''}`}
-                                    >
-                                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                                        <div className="flex items-start gap-3 min-w-0 flex-1">
-                                          <div {...provided.dragHandleProps} className="mt-1 cursor-grab opacity-50 hover:opacity-100 flex items-center justify-center shrink-0">
-                                            <GripVertical className="h-4 w-4 text-slate-400" />
-                                          </div>
+                                    // Normalized worker names array
+                                    const rawWorkers = (st.assignedWorkers && st.assignedWorkers.length > 0)
+                                      ? st.assignedWorkers
+                                      : st.assignedPerson
+                                      ? [st.assignedPerson]
+                                      : [];
+                                    const splitWorkers = rawWorkers.flatMap(w => w.includes(',') ? w.split(',').map(s => s.trim()).filter(Boolean) : [w.trim()]);
 
-                                          {/* Status Toggle Icon Button */}
-                                          <button
-                                            type="button"
-                                            onClick={() => handleToggleStatus(st.id)}
-                                            disabled={readOnly}
-                                            className="mt-0.5 shrink-0 transition-transform active:scale-95"
-                                            title={
-                                              isBlockedByChildren 
-                                                ? `Cannot complete: ${incompleteChildren.length} child subtasks pending` 
-                                                : isPredBlocked
-                                                ? `Cannot complete: waiting on predecessor #${predIndex + 1} "${predTask?.title}"`
-                                                : isHoldPointPending
-                                                ? 'QA Hold Point: Click to conduct inspection and sign off'
-                                                : 'Click to toggle status (Not Started ➔ In Progress ➔ Completed)'
-                                            }
-                                          >
-                                            {st.status === 'Completed' ? (
-                                              <CheckCircle2 className="h-5 w-5 text-emerald-500 fill-emerald-100 dark:fill-emerald-950/50" />
-                                            ) : st.status === 'In Progress' ? (
-                                              <Clock className="h-5 w-5 text-blue-500 animate-pulse" />
-                                            ) : isBlockedByChildren || isPredBlocked ? (
-                                              <Lock className="h-5 w-5 text-amber-500 opacity-80" />
-                                            ) : isHoldPointPending ? (
-                                              <Lock className="h-5 w-5 text-rose-500" />
-                                            ) : (
-                                              <Circle className="h-5 w-5 text-slate-400 hover:text-slate-600" />
-                                            )}
-                                          </button>
+                                    if (viewMode === 'list') {
+                                      /* ==================== CLEAN PROGRESSION LIST VIEW ==================== */
+                                      return (
+                                        <div
+                                          className={`group flex flex-col lg:flex-row lg:items-center justify-between gap-3 px-3.5 py-3 rounded-xl border transition-all ${
+                                            st.status === 'Completed'
+                                              ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-300'
+                                              : st.status === 'In Progress'
+                                              ? 'bg-blue-50/40 dark:bg-blue-950/20 border-blue-200/80 dark:border-blue-900/40 hover:border-blue-300'
+                                              : 'bg-white dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                                          } ${st.isMilestone ? 'ring-1 ring-purple-300 dark:ring-purple-800/60' : ''} ${st.isHoldPoint ? 'border-l-4 border-l-rose-500' : ''}`}
+                                        >
+                                          {/* Left: Drag Handle, Progression Number, Status Icon, Title & Badges */}
+                                          <div className="flex items-center gap-2.5 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
+                                            <div {...provided.dragHandleProps} className="cursor-grab opacity-40 group-hover:opacity-100 flex items-center justify-center shrink-0">
+                                              <GripVertical className="h-4 w-4 text-slate-400" />
+                                            </div>
 
-                                          <div className="space-y-1 min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                              {/* Title */}
-                                              <span className={`text-sm font-bold ${st.status === 'Completed' ? 'line-through text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                                            {/* Progression Sequence Index Pill */}
+                                            <div 
+                                              className={`h-6 min-w-[2.4rem] px-1.5 rounded-lg font-mono font-black text-[11px] flex items-center justify-center shrink-0 shadow-2xs ${
+                                                st.status === 'Completed'
+                                                  ? 'bg-emerald-600 text-white'
+                                                  : st.status === 'In Progress'
+                                                  ? 'bg-[#0B5FFF] text-white'
+                                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                                              }`}
+                                              title={`WBS Progression Step ${progressionNumber}`}
+                                            >
+                                              {progressionNumber}
+                                            </div>
+
+                                            {/* Quick Status Toggle Icon */}
+                                            <button
+                                              type="button"
+                                              onClick={() => handleToggleStatus(st.id)}
+                                              disabled={readOnly}
+                                              className="shrink-0 transition-transform active:scale-95"
+                                              title={
+                                                isBlockedByChildren 
+                                                  ? `Cannot complete: ${incompleteChildren.length} child subtasks pending` 
+                                                  : isPredBlocked
+                                                  ? `Cannot complete: waiting on predecessor #${predIndex + 1} "${predTask?.title}"`
+                                                  : isHoldPointPending
+                                                  ? 'QA Hold Point: Click to conduct inspection and sign off'
+                                                  : 'Click to toggle status (Not Started ➔ In Progress ➔ Completed)'
+                                              }
+                                            >
+                                              {st.status === 'Completed' ? (
+                                                <CheckCircle2 className="h-4 w-4 text-emerald-500 fill-emerald-100 dark:fill-emerald-950/50" />
+                                              ) : st.status === 'In Progress' ? (
+                                                <Clock className="h-4 w-4 text-blue-500 animate-pulse" />
+                                              ) : isBlockedByChildren || isPredBlocked ? (
+                                                <Lock className="h-4 w-4 text-amber-500 opacity-80" />
+                                              ) : isHoldPointPending ? (
+                                                <Lock className="h-4 w-4 text-rose-500" />
+                                              ) : (
+                                                <Circle className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                                              )}
+                                            </button>
+
+                                            {/* Subtask Title & Metadata Chips */}
+                                            <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+                                              <span className={`text-xs font-bold truncate max-w-[240px] sm:max-w-[320px] lg:max-w-none ${st.status === 'Completed' ? 'line-through text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-slate-100'}`}>
                                                 {st.title}
                                               </span>
 
-                                              {/* Category Badge */}
-                                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getCategoryBadgeColor(st.category)}`}>
+                                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${getCategoryBadgeColor(st.category)} shrink-0`}>
                                                 {st.category}
                                               </span>
 
-                                               {/* Cross-Activity Linked Badge */}
-                                               {st.linkedActivityId && (
-                                                 <span 
-                                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-xs"
-                                                   title={`Linked to Activity: ${st.linkedActivityName || activities.find(a => a.id === st.linkedActivityId)?.name || st.linkedActivityId}`}
-                                                 >
-                                                   <Link2 className="h-3 w-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                                                   Linked: {st.linkedActivityName || activities.find(a => a.id === st.linkedActivityId)?.name || st.linkedActivityId}
-                                                 </span>
-                                               )}
-
-                                               {/* Cross-Activity Source Badge */}
-                                               {st.sourceActivityId && !st.linkedActivityId && (
-                                                 <span 
-                                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] dark:text-blue-300 border-blue-200 dark:border-blue-800 shadow-xs"
-                                                   title={`Synced from Source Activity: ${st.sourceActivityName || activities.find(a => a.id === st.sourceActivityId)?.name || st.sourceActivityId}`}
-                                                 >
-                                                   <Link2 className="h-3 w-3 text-[#0B5FFF] shrink-0" />
-                                                   Source: {st.sourceActivityName || activities.find(a => a.id === st.sourceActivityId)?.name || st.sourceActivityId}
-                                                 </span>
-                                               )}
-
-                                              {/* Milestone Checkpoint Badge */}
-                                              {st.isMilestone && (
+                                              {/* Linked Activity Badge */}
+                                              {st.linkedActivityId && (
                                                 <span 
-                                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border shadow-xs ${
-                                                    st.status === 'Completed'
-                                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                                                      : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800'
-                                                  }`}
-                                                  title={st.milestoneCriteria ? `Criteria: ${st.milestoneCriteria}` : 'Key delivery milestone checkpoint'}
+                                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shrink-0"
+                                                  title={`Linked Activity: ${st.linkedActivityName || st.linkedActivityId}`}
                                                 >
-                                                  <Flag className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
-                                                  Milestone Checkpoint
+                                                  <Link2 className="h-2.5 w-2.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                                                  <span className="truncate max-w-[120px]">Linked: {st.linkedActivityName || st.linkedActivityId}</span>
                                                 </span>
                                               )}
 
-                                              {/* QA Hold Point Badge & Sign-Off Trigger */}
+                                              {/* QA Hold Point Status Button */}
                                               {st.isHoldPoint && (
                                                 st.holdPointSignOff?.approved ? (
                                                   <button
@@ -3076,11 +3109,10 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                                                       setSignOffNotes(st.holdPointSignOff?.signatureNote || '');
                                                       setSignOffPhotoUrl(st.holdPointSignOff?.photoUrl || '');
                                                     }}
-                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shadow-xs hover:bg-emerald-200 transition-colors"
-                                                    title={`QA Approved by ${st.holdPointSignOff.signedBy}. Click to view verification certificate.`}
+                                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 shrink-0 hover:bg-emerald-200 transition-colors"
+                                                    title={`QA Approved by ${st.holdPointSignOff.signedBy}`}
                                                   >
-                                                    <ShieldCheck className="h-3 w-3 text-emerald-600 shrink-0" />
-                                                    QA Approved: {st.holdPointSignOff.signedBy}
+                                                    <ShieldCheck className="h-2.5 w-2.5 text-emerald-600 shrink-0" /> QA Approved
                                                   </button>
                                                 ) : (
                                                   <button
@@ -3092,336 +3124,608 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                                                       setSignOffNotes('');
                                                       setSignOffPhotoUrl('');
                                                     }}
-                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 shadow-xs transition-colors cursor-pointer"
-                                                    title="Mandatory Quality Gate. Click to inspect & sign off hold point."
+                                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 shrink-0 transition-colors"
+                                                    title="Quality Hold Point Gate"
                                                   >
-                                                    <Lock className="h-3 w-3 text-rose-600 shrink-0" />
-                                                    🔒 QA Hold Point: Sign Off
+                                                    <Lock className="h-2.5 w-2.5 text-rose-600 shrink-0" /> 🔒 QA Gate
                                                   </button>
                                                 )
                                               )}
 
-                                              {/* Predecessor Dependency Badge */}
-                                              {predTask && (
-                                                <span 
-                                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border shadow-xs ${
-                                                    !isPredBlocked 
-                                                      ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                                      : 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                                                  }`}
-                                                  title={!isPredBlocked ? `Predecessor #${predIndex + 1} "${predTask.title}" is completed` : `Blocked until predecessor #${predIndex + 1} "${predTask.title}" is completed`}
-                                                >
-                                                  {!isPredBlocked ? (
-                                                    <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
-                                                  ) : (
-                                                    <Lock className="h-3 w-3 text-amber-600 shrink-0" />
-                                                  )}
-                                                  {!isPredBlocked ? `After #${predIndex + 1}: ${predTask.title}` : `Waiting on #${predIndex + 1}: ${predTask.title}`}
+                                              {/* Milestone Badge */}
+                                              {st.isMilestone && (
+                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 shrink-0">
+                                                  <Flag className="h-2.5 w-2.5 text-purple-600 shrink-0" /> Milestone
                                                 </span>
                                               )}
 
-                                              {/* Parent Hierarchy Child Tag */}
-                                              {parentTaskObj && (
-                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                                  <CornerDownRight className="h-2.5 w-2.5" />
-                                                  Subtask of: {parentTaskObj.title}
-                                                </span>
-                                              )}
-
-                                              {/* Parent Summary Tag if this task has children */}
-                                              {hasChildren && (
-                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
-                                                  isBlockedByChildren
-                                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200'
-                                                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200'
-                                                }`}>
-                                                  {isBlockedByChildren ? <AlertTriangle className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
-                                                  {completedChildrenCount}/{childTasks.length} Child Tasks Complete
-                                                </span>
-                                              )}
-                                            </div>
-
-                                            {/* Milestone criteria display */}
-                                            {st.isMilestone && st.milestoneCriteria && (
-                                              <p className="text-[11px] font-medium text-purple-700 dark:text-purple-300 italic flex items-center gap-1">
-                                                <Info className="h-3 w-3 shrink-0" /> Milestone Requirement: {st.milestoneCriteria}
-                                              </p>
-                                            )}
-
-                                            {/* QA Hold Point Notes display */}
-                                            {st.isHoldPoint && st.holdPointSignOff?.approved && (
-                                              <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300 italic flex items-center gap-1">
-                                                <ShieldCheck className="h-3 w-3 shrink-0" /> QA Verification ({new Date(st.holdPointSignOff.signedAt).toLocaleDateString()}): "{st.holdPointSignOff.signatureNote}"
-                                              </p>
-                                            )}
-
-                                            {/* Checklist inline steps viewer if measurementType is Checklist */}
-                                            {st.measurementType === 'Checklist' && st.checklist && st.checklist.length > 0 && (
-                                              <div className="space-y-1.5 p-2.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 mt-1">
-                                                <div className="flex items-center justify-between text-[11px] font-bold text-emerald-900 dark:text-emerald-200">
-                                                  <span className="flex items-center gap-1">
-                                                    <ListChecks className="h-3.5 w-3.5 text-emerald-600" />
-                                                    Checklist Steps ({st.checklist.filter(c => c.completed).length}/{st.checklist.length} Complete):
-                                                  </span>
-                                                </div>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
-                                                  {st.checklist.map((item, idx) => (
-                                                    <label 
-                                                      key={item.id} 
-                                                      className={`flex items-center gap-2 p-1.5 rounded-md border text-xs cursor-pointer transition-all ${
-                                                        item.completed 
-                                                          ? 'bg-emerald-100/70 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-slate-500 dark:text-slate-400' 
-                                                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-emerald-400'
-                                                      }`}
+                                              {/* Assigned Personnel Chips */}
+                                              {splitWorkers.length > 0 && (
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                  {splitWorkers.slice(0, 2).map((wName, wIdx) => (
+                                                    <div 
+                                                      key={wIdx} 
+                                                      className="h-5 px-1.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold text-[9px] flex items-center border border-amber-200 dark:border-amber-800 gap-1 shrink-0"
+                                                      title={`Assigned: ${wName}`}
                                                     >
-                                                      <input 
-                                                        type="checkbox"
-                                                        disabled={readOnly}
-                                                        checked={item.completed}
-                                                        onChange={() => handleToggleSubtaskChecklistItem(st.id, item.id)}
-                                                        className="rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
-                                                      />
-                                                      <span className={`text-[11px] font-medium truncate ${item.completed ? 'line-through text-slate-400' : ''}`}>
-                                                        #{idx + 1}: {item.text}
-                                                      </span>
-                                                    </label>
+                                                      <HardHat className="h-2.5 w-2.5 text-amber-600 shrink-0" />
+                                                      <span className="truncate max-w-[85px]">{wName}</span>
+                                                    </div>
                                                   ))}
+                                                  {splitWorkers.length > 2 && (
+                                                    <span className="text-[9px] font-bold text-slate-400">+{splitWorkers.length - 2}</span>
+                                                  )}
                                                 </div>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* Right: Stepper / Quantity Controls + Progress Bar + Quick Complete + Actions */}
+                                          <div className="flex items-center gap-2.5 shrink-0 self-end lg:self-center flex-wrap sm:flex-nowrap">
+                                            {/* Stepper / Deliverable Controls */}
+                                            <div className="flex items-center gap-1.5">
+                                              {st.targetQuantity ? (
+                                                <div className="flex items-center gap-1">
+                                                  {!readOnly && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) - 1)}
+                                                      className="w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-[10px]"
+                                                      title="Decrease Quantity"
+                                                    >
+                                                      <Minus className="h-2.5 w-2.5" />
+                                                    </button>
+                                                  )}
+                                                  <input
+                                                    type="number"
+                                                    min="0"
+                                                    max={st.targetQuantity}
+                                                    disabled={readOnly}
+                                                    value={st.completedQuantity || 0}
+                                                    onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
+                                                    className="w-12 h-6 text-center font-bold text-[11px] border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-[#0B5FFF]"
+                                                  />
+                                                  <span className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
+                                                    / {st.targetQuantity} {st.unit}
+                                                  </span>
+                                                  {!readOnly && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) + 1)}
+                                                      className="w-5 h-5 rounded bg-blue-100 dark:bg-blue-900/60 hover:bg-blue-200 text-[#0B5FFF] flex items-center justify-center font-bold text-[10px]"
+                                                      title="Increase Quantity"
+                                                    >
+                                                      <Plus className="h-2.5 w-2.5" />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              ) : st.measurementType === 'Checklist' && st.checklist && st.checklist.length > 0 ? (
+                                                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                                                  <ListChecks className="h-3 w-3 text-emerald-600" />
+                                                  {st.checklist.filter(c => c.completed).length}/{st.checklist.length} Steps
+                                                </span>
+                                              ) : (
+                                                <span className="text-[10px] text-slate-400 font-medium">{st.status}</span>
+                                              )}
+
+                                              {/* Mini Progress Bar */}
+                                              <div className="w-14 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden shrink-0 hidden sm:block">
+                                                <div 
+                                                  className={`h-full transition-all duration-300 rounded-full ${itemPercent === 100 ? 'bg-emerald-500' : 'bg-[#0B5FFF]'}`}
+                                                  style={{ width: `${itemPercent}%` }} 
+                                                />
                                               </div>
+                                              <span className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 w-8 text-right shrink-0">
+                                                {itemPercent}%
+                                              </span>
+                                            </div>
+
+                                            {/* Quick Complete / QA Sign-Off Button */}
+                                            {!readOnly && st.status !== 'Completed' && (
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleQuickComplete(st)}
+                                                disabled={isAnyBlocked}
+                                                className={`h-6 text-[9px] font-bold px-2 py-0 gap-1 shrink-0 ${
+                                                  isAnyBlocked
+                                                    ? 'border-amber-300 text-amber-700 dark:text-amber-300 bg-amber-50/50 cursor-not-allowed opacity-75'
+                                                    : isHoldPointPending
+                                                    ? 'border-rose-300 text-rose-700 hover:bg-rose-50'
+                                                    : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                                                }`}
+                                              >
+                                                {isAnyBlocked ? (
+                                                  <>
+                                                    <Lock className="h-2.5 w-2.5 text-amber-600" />
+                                                    Blocked
+                                                  </>
+                                                ) : isHoldPointPending ? (
+                                                  <>
+                                                    <ShieldCheck className="h-2.5 w-2.5 text-rose-600" />
+                                                    Sign-Off
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <Check className="h-2.5 w-2.5 text-emerald-600" />
+                                                    Done
+                                                  </>
+                                                )}
+                                              </Button>
                                             )}
 
-                                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                                              {/* Assigned Workers */}
-                                              {((st.assignedWorkers && st.assignedWorkers.length > 0) || st.assignedPerson) && (
-                                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-medium">
-                                                  <HardHat className="h-3 w-3 text-amber-600 shrink-0" />
-                                                  <span>{st.assignedWorkers?.length ? st.assignedWorkers.join(', ') : st.assignedPerson}</span>
-                                                </span>
-                                              )}
-
-                                              {/* Assigned Machinery */}
-                                              {((st.assignedEquipmentList && st.assignedEquipmentList.length > 0) || st.assignedEquipment) && (
-                                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium">
-                                                  <Truck className="h-3 w-3 text-blue-600 shrink-0" />
-                                                  <span>{st.assignedEquipmentList?.length ? st.assignedEquipmentList.join(', ') : st.assignedEquipment}</span>
-                                                </span>
-                                              )}
-
-                                              {/* Assigned Team */}
-                                              {((st.assignedTeams && st.assignedTeams.length > 0) || st.assignedTeam) && (
-                                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-medium">
-                                                  <Users className="h-3 w-3 text-purple-600 shrink-0" />
-                                                  <span>{st.assignedTeams?.length ? st.assignedTeams.join(', ') : st.assignedTeam}</span>
-                                                </span>
-                                              )}
-
-                                              {(st.startDate || st.endDate) && (
-                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                                                  <Calendar className="h-3 w-3 text-emerald-500" />
-                                                  {st.startDate ? new Date(st.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '...'} - {st.endDate ? new Date(st.endDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '...'}
-                                                </span>
-                                              )}
-                                              {st.notes && (
-                                                <span className="italic text-slate-400">"{st.notes}"</span>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        {/* Action dropdown and controls */}
-                                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                                          <select
-                                            value={st.status}
-                                            disabled={readOnly}
-                                            onChange={(e) => handleSelectStatus(st.id, e.target.value as SubTask['status'])}
-                                            className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border cursor-pointer ${
-                                              st.status === 'Completed'
-                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-300'
-                                                : st.status === 'In Progress'
-                                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-300'
-                                                : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300 border-slate-300'
-                                            }`}
-                                          >
-                                            <option value="Not Started">Not Started</option>
-                                            <option value="In Progress">In Progress</option>
-                                            <option 
-                                              value="Completed"
-                                              disabled={isAnyBlocked}
-                                            >
-                                              {isBlockedByChildren ? 'Completed (Blocked by children)' : isPredBlocked ? 'Completed (Blocked by predecessor)' : 'Completed'}
-                                            </option>
-                                          </select>
-
-                                          {!readOnly && (
-                                            <button
-                                              type="button"
-                                              onClick={(e) => handleStartEditSubtask(st, e)}
-                                              className="p-1 text-slate-400 hover:text-blue-600 transition-colors rounded-md"
-                                              title="Edit Subtask Details"
-                                            >
-                                              <Edit3 className="h-4 w-4" />
-                                            </button>
-                                          )}
-                                          {!readOnly && (
-                                            <button
-                                              type="button"
-                                              onClick={(e) => handleDeleteSubTask(st.id, e)}
-                                              className="p-1 text-slate-400 hover:text-rose-500 transition-colors rounded-md"
-                                              title="Delete Subtask"
-                                            >
-                                              <Trash2 className="h-4 w-4" />
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Progress & Quantity Logging Bar */}
-                                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 bg-white/60 dark:bg-slate-900/40 p-2.5 rounded-lg">
-                                        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-                                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300 shrink-0">
-                                            Progress:
-                                          </span>
-                                          {hasChildren ? (
-                                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                              {completedChildrenCount} / {childTasks.length} child tasks completed
-                                            </span>
-                                          ) : st.measurementType === 'Checklist' && st.checklist ? (
-                                            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
-                                              <ListChecks className="h-3.5 w-3.5 text-emerald-600" />
-                                              {st.checklist.filter(c => c.completed).length} / {st.checklist.length} steps checked
-                                            </span>
-                                          ) : st.measurementType === 'Percentage' ? (
-                                            <div className="flex items-center gap-1.5">
-                                              <input
-                                                type="number"
-                                                min="0"
-                                                max="100"
-                                                disabled={readOnly}
-                                                value={st.completedQuantity ?? (st.status === 'Completed' ? 100 : 0)}
-                                                onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
-                                                className="w-14 h-7 text-center font-bold text-xs border border-indigo-300 dark:border-indigo-700 rounded bg-white dark:bg-slate-900 text-indigo-600"
-                                              />
-                                              <span className="text-xs font-bold text-indigo-600">%</span>
-                                            </div>
-                                          ) : st.measurementType === 'Yes/No' ? (
-                                            <button
-                                              type="button"
+                                            {/* Compact Status Dropdown */}
+                                            <select
+                                              value={st.status}
                                               disabled={readOnly}
-                                              onClick={() => handleToggleStatus(st.id)}
-                                              className={`px-2.5 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all ${
+                                              onChange={(e) => handleSelectStatus(st.id, e.target.value as SubTask['status'])}
+                                              className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border cursor-pointer shrink-0 ${
                                                 st.status === 'Completed'
-                                                  ? 'bg-emerald-600 text-white shadow-xs'
-                                                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300'
+                                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-300'
+                                                  : st.status === 'In Progress'
+                                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-300'
+                                                  : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 border-slate-300'
                                               }`}
                                             >
-                                              {st.status === 'Completed' ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                                              {st.status === 'Completed' ? 'Yes (Done)' : 'No (Pending)'}
-                                            </button>
-                                          ) : st.targetQuantity ? (
-                                            <div className="flex items-center gap-1">
-                                              {!readOnly && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) - 1)}
-                                                  className="w-6 h-6 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold hover:bg-slate-300 text-xs"
-                                                  title="Decrease Completed Quantity"
-                                                >
-                                                  <Minus className="h-3 w-3" />
-                                                </button>
-                                              )}
-                                              <input
-                                                type="number"
-                                                min="0"
-                                                max={st.targetQuantity}
-                                                disabled={readOnly}
-                                                value={st.completedQuantity || 0}
-                                                onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
-                                                className="w-14 h-7 text-center font-bold text-xs border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-[#0B5FFF]"
-                                              />
-                                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                                                / {st.targetQuantity} {st.unit}
-                                              </span>
-                                              {!readOnly && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) + 1)}
-                                                  className="w-6 h-6 rounded bg-blue-100 dark:bg-blue-900/60 text-[#0B5FFF] dark:text-blue-300 flex items-center justify-center font-bold hover:bg-blue-200 text-xs"
-                                                  title="Increase Completed Quantity"
-                                                >
-                                                  <Plus className="h-3 w-3" />
-                                                </button>
-                                              )}
-                                            </div>
-                                          ) : (
-                                            <span className="text-xs text-slate-500 font-medium">{st.status}</span>
-                                          )}
-                                        </div>
+                                              <option value="Not Started">Not Started</option>
+                                              <option value="In Progress">In Progress</option>
+                                              <option value="Completed" disabled={isAnyBlocked}>
+                                                {isBlockedByChildren ? 'Completed (Blocked)' : isPredBlocked ? 'Completed (Blocked)' : 'Completed'}
+                                              </option>
+                                            </select>
 
-                                        {/* Mini Progress Visual Bar & Quick Complete */}
-                                        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                                          <div className="flex items-center gap-2 flex-1 sm:w-36">
-                                            <div className="h-2 flex-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                              <div 
-                                                className={`h-full transition-all duration-300 rounded-full ${itemPercent === 100 ? 'bg-emerald-500' : 'bg-[#0B5FFF]'}`}
-                                                style={{ width: `${itemPercent}%` }} 
-                                              />
+                                            {/* Edit & Delete Action Buttons */}
+                                            <div className="flex items-center gap-1 shrink-0">
+                                              {!readOnly && (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => handleStartEditSubtask(st, e)}
+                                                  className="p-1 text-slate-400 hover:text-blue-600 transition-colors rounded"
+                                                  title="Edit Subtask"
+                                                >
+                                                  <Edit3 className="h-3.5 w-3.5" />
+                                                </button>
+                                              )}
+                                              {!readOnly && (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => handleDeleteSubTask(st.id, e)}
+                                                  className="p-1 text-slate-400 hover:text-rose-500 transition-colors rounded"
+                                                  title="Delete Subtask"
+                                                >
+                                                  <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                              )}
                                             </div>
-                                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 w-9 text-right">
-                                              {itemPercent}%
-                                            </span>
                                           </div>
+                                        </div>
+                                      );
+                                    }
 
-                                          {!readOnly && st.status !== 'Completed' && (
-                                            <Button
-                                              type="button"
-                                              size="sm"
-                                              variant="outline"
-                                              onClick={() => handleQuickComplete(st)}
-                                              disabled={isAnyBlocked}
-                                              className={`h-7 text-[10px] font-bold px-2 py-0 gap-1 shrink-0 ${
-                                                isAnyBlocked
-                                                  ? 'border-amber-300 text-amber-700 dark:text-amber-300 bg-amber-50/50 dark:bg-amber-950/20 cursor-not-allowed opacity-75'
-                                                  : isHoldPointPending
-                                                  ? 'border-rose-300 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40'
-                                                  : 'border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                                    /* ==================== DETAILED CARD VIEW ==================== */
+                                    return (
+                                      <div
+                                        className={`flex flex-col gap-3 p-4 rounded-xl border transition-all ${
+                                          st.status === 'Completed'
+                                            ? 'bg-emerald-50/40 dark:bg-emerald-950/10 border-emerald-200 dark:border-emerald-900/40'
+                                            : st.status === 'In Progress'
+                                            ? 'bg-blue-50/40 dark:bg-blue-950/10 border-blue-200 dark:border-blue-900/40'
+                                            : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800'
+                                        } ${st.isMilestone ? 'ring-1 ring-purple-300 dark:ring-purple-800/60' : ''} ${st.isHoldPoint ? 'border-l-4 border-l-rose-500' : ''}`}
+                                      >
+                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                                            <div {...provided.dragHandleProps} className="mt-1 cursor-grab opacity-50 hover:opacity-100 flex items-center justify-center shrink-0">
+                                              <GripVertical className="h-4 w-4 text-slate-400" />
+                                            </div>
+
+                                            {/* Progression Sequence Index Pill */}
+                                            <div 
+                                              className={`mt-0.5 h-6 min-w-[2.4rem] px-1.5 rounded-lg font-mono font-black text-[11px] flex items-center justify-center shrink-0 shadow-2xs ${
+                                                st.status === 'Completed'
+                                                  ? 'bg-emerald-600 text-white'
+                                                  : st.status === 'In Progress'
+                                                  ? 'bg-[#0B5FFF] text-white'
+                                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                                               }`}
+                                              title={`WBS Progression Step ${progressionNumber}`}
+                                            >
+                                              {progressionNumber}
+                                            </div>
+
+                                            {/* Status Toggle Icon Button */}
+                                            <button
+                                              type="button"
+                                              onClick={() => handleToggleStatus(st.id)}
+                                              disabled={readOnly}
+                                              className="mt-0.5 shrink-0 transition-transform active:scale-95"
                                               title={
                                                 isBlockedByChildren 
-                                                  ? `Blocked: ${incompleteChildren.length} child tasks incomplete` 
+                                                  ? `Cannot complete: ${incompleteChildren.length} child subtasks pending` 
                                                   : isPredBlocked
-                                                  ? `Blocked: Predecessor #${predIndex + 1} incomplete`
+                                                  ? `Cannot complete: waiting on predecessor #${predIndex + 1} "${predTask?.title}"`
                                                   : isHoldPointPending
-                                                  ? 'Requires QA Inspection Sign-Off'
-                                                  : 'Mark this subtask 100% completed'
+                                                  ? 'QA Hold Point: Click to conduct inspection and sign off'
+                                                  : 'Click to toggle status (Not Started ➔ In Progress ➔ Completed)'
                                               }
                                             >
-                                              {isAnyBlocked ? (
-                                                <>
-                                                  <Lock className="h-3 w-3 text-amber-600" />
-                                                  Blocked
-                                                </>
+                                              {st.status === 'Completed' ? (
+                                                <CheckCircle2 className="h-5 w-5 text-emerald-500 fill-emerald-100 dark:fill-emerald-950/50" />
+                                              ) : st.status === 'In Progress' ? (
+                                                <Clock className="h-5 w-5 text-blue-500 animate-pulse" />
+                                              ) : isBlockedByChildren || isPredBlocked ? (
+                                                <Lock className="h-5 w-5 text-amber-500 opacity-80" />
                                               ) : isHoldPointPending ? (
-                                                <>
-                                                  <ShieldCheck className="h-3 w-3 text-rose-600" />
-                                                  QA Sign-Off
-                                                </>
+                                                <Lock className="h-5 w-5 text-rose-500" />
                                               ) : (
-                                                <>
-                                                  <Check className="h-3 w-3 text-emerald-600" />
-                                                  Complete
-                                                </>
+                                                <Circle className="h-5 w-5 text-slate-400 hover:text-slate-600" />
                                               )}
-                                            </Button>
-                                          )}
+                                            </button>
+
+                                            <div className="min-w-0 flex-1 space-y-1.5">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <h4 className={`text-sm font-bold ${st.status === 'Completed' ? 'line-through text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                                                  {st.title}
+                                                </h4>
+
+                                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shadow-xs ${getCategoryBadgeColor(st.category)}`}>
+                                                  {st.category}
+                                                </span>
+
+                                                {/* Cross-Activity Link Badge */}
+                                                {st.linkedActivityId && (
+                                                  <span 
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 shadow-xs"
+                                                    title={`Linked to Target Activity: ${st.linkedActivityName || activities.find(a => a.id === st.linkedActivityId)?.name || st.linkedActivityId}`}
+                                                  >
+                                                    <Link2 className="h-3 w-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                                                    Linked: {st.linkedActivityName || activities.find(a => a.id === st.linkedActivityId)?.name || st.linkedActivityId}
+                                                  </span>
+                                                )}
+
+                                                {/* Cross-Activity Source Badge */}
+                                                {st.sourceActivityId && !st.linkedActivityId && (
+                                                  <span 
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] dark:text-blue-300 border-blue-200 dark:border-blue-800 shadow-xs"
+                                                    title={`Synced from Source Activity: ${st.sourceActivityName || activities.find(a => a.id === st.sourceActivityId)?.name || st.sourceActivityId}`}
+                                                  >
+                                                    <Link2 className="h-3 w-3 text-[#0B5FFF] shrink-0" />
+                                                    Source: {st.sourceActivityName || activities.find(a => a.id === st.sourceActivityId)?.name || st.sourceActivityId}
+                                                  </span>
+                                                )}
+
+                                                {/* Milestone Checkpoint Badge */}
+                                                {st.isMilestone && (
+                                                  <span 
+                                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border shadow-xs ${
+                                                      st.status === 'Completed'
+                                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                                                        : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800'
+                                                    }`}
+                                                    title={st.milestoneCriteria ? `Criteria: ${st.milestoneCriteria}` : 'Key delivery milestone checkpoint'}
+                                                  >
+                                                    <Flag className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                                                    Milestone Checkpoint
+                                                  </span>
+                                                )}
+
+                                                {/* QA Hold Point Badge & Sign-Off Trigger */}
+                                                {st.isHoldPoint && (
+                                                  st.holdPointSignOff?.approved ? (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        setSignOffSubtask(st);
+                                                        setSignOffInspectorName(st.holdPointSignOff?.signedBy || 'Site QA/QC Engineer');
+                                                        setSignOffNotes(st.holdPointSignOff?.signatureNote || '');
+                                                        setSignOffPhotoUrl(st.holdPointSignOff?.photoUrl || '');
+                                                      }}
+                                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shadow-xs hover:bg-emerald-200 transition-colors"
+                                                      title={`QA Approved by ${st.holdPointSignOff.signedBy}. Click to view verification certificate.`}
+                                                    >
+                                                      <ShieldCheck className="h-3 w-3 text-emerald-600 shrink-0" />
+                                                      QA Approved: {st.holdPointSignOff.signedBy}
+                                                    </button>
+                                                  ) : (
+                                                    <button
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSignOffSubtask(st);
+                                                        setSignOffInspectorName('Site QA/QC Engineer');
+                                                        setSignOffNotes('');
+                                                        setSignOffPhotoUrl('');
+                                                      }}
+                                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 shadow-xs transition-colors cursor-pointer"
+                                                      title="Mandatory Quality Gate. Click to inspect & sign off hold point."
+                                                    >
+                                                      <Lock className="h-3 w-3 text-rose-600 shrink-0" />
+                                                      🔒 QA Hold Point: Sign Off
+                                                    </button>
+                                                  )
+                                                )}
+                                              </div>
+
+                                              {/* Milestone & Hold Point Info */}
+                                              {st.isMilestone && st.milestoneCriteria && (
+                                                <p className="text-[11px] font-medium text-purple-700 dark:text-purple-300 italic flex items-center gap-1">
+                                                  <Info className="h-3 w-3 shrink-0" /> Milestone Requirement: {st.milestoneCriteria}
+                                                </p>
+                                              )}
+                                              {st.isHoldPoint && st.holdPointSignOff?.approved && (
+                                                <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300 italic flex items-center gap-1">
+                                                  <ShieldCheck className="h-3 w-3 shrink-0" /> QA Verification ({new Date(st.holdPointSignOff.signedAt).toLocaleDateString()}): "{st.holdPointSignOff.signatureNote}"
+                                                </p>
+                                              )}
+
+                                              {/* Checklist Viewer */}
+                                              {st.measurementType === 'Checklist' && st.checklist && st.checklist.length > 0 && (
+                                                <div className="space-y-1.5 p-2.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 mt-1">
+                                                  <div className="flex items-center justify-between text-[11px] font-bold text-emerald-900 dark:text-emerald-200">
+                                                    <span className="flex items-center gap-1">
+                                                      <ListChecks className="h-3.5 w-3.5 text-emerald-600" />
+                                                      Checklist Steps ({st.checklist.filter(c => c.completed).length}/{st.checklist.length} Complete):
+                                                    </span>
+                                                  </div>
+                                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+                                                    {st.checklist.map((item, idx) => (
+                                                      <label 
+                                                        key={item.id} 
+                                                        className={`flex items-center gap-2 p-1.5 rounded-md border text-xs cursor-pointer transition-all ${
+                                                          item.completed 
+                                                            ? 'bg-emerald-100/70 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-slate-500 dark:text-slate-400' 
+                                                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-emerald-400'
+                                                        }`}
+                                                      >
+                                                        <input 
+                                                          type="checkbox"
+                                                          disabled={readOnly}
+                                                          checked={item.completed}
+                                                          onChange={() => handleToggleSubtaskChecklistItem(st.id, item.id)}
+                                                          className="rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                                                        />
+                                                        <span className={`text-[11px] font-medium truncate ${item.completed ? 'line-through text-slate-400' : ''}`}>
+                                                          #{idx + 1}: {item.text}
+                                                        </span>
+                                                      </label>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
+
+                                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                                                {/* Assigned Workers */}
+                                                {splitWorkers.length > 0 && (
+                                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-medium">
+                                                    <HardHat className="h-3 w-3 text-amber-600 shrink-0" />
+                                                    <span>{splitWorkers.join(', ')}</span>
+                                                  </span>
+                                                )}
+
+                                                {/* Assigned Machinery */}
+                                                {((st.assignedEquipmentList && st.assignedEquipmentList.length > 0) || st.assignedEquipment) && (
+                                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium">
+                                                    <Truck className="h-3 w-3 text-blue-600 shrink-0" />
+                                                    <span>{st.assignedEquipmentList?.length ? st.assignedEquipmentList.join(', ') : st.assignedEquipment}</span>
+                                                  </span>
+                                                )}
+
+                                                {/* Assigned Team */}
+                                                {((st.assignedTeams && st.assignedTeams.length > 0) || st.assignedTeam) && (
+                                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-medium">
+                                                    <Users className="h-3 w-3 text-purple-600 shrink-0" />
+                                                    <span>{st.assignedTeams?.length ? st.assignedTeams.join(', ') : st.assignedTeam}</span>
+                                                  </span>
+                                                )}
+
+                                                {(st.startDate || st.endDate) && (
+                                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                                    <Calendar className="h-3 w-3 text-emerald-500" />
+                                                    {st.startDate ? new Date(st.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '...'} - {st.endDate ? new Date(st.endDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '...'}
+                                                  </span>
+                                                )}
+                                                {st.notes && (
+                                                  <span className="italic text-slate-400">"{st.notes}"</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Action dropdown and controls */}
+                                          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                                            <select
+                                              value={st.status}
+                                              disabled={readOnly}
+                                              onChange={(e) => handleSelectStatus(st.id, e.target.value as SubTask['status'])}
+                                              className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border cursor-pointer ${
+                                                st.status === 'Completed'
+                                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-300'
+                                                  : st.status === 'In Progress'
+                                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-300'
+                                                  : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300 border-slate-300'
+                                              }`}
+                                            >
+                                              <option value="Not Started">Not Started</option>
+                                              <option value="In Progress">In Progress</option>
+                                              <option 
+                                                value="Completed"
+                                                disabled={isAnyBlocked}
+                                              >
+                                                {isBlockedByChildren ? 'Completed (Blocked by children)' : isPredBlocked ? 'Completed (Blocked by predecessor)' : 'Completed'}
+                                              </option>
+                                            </select>
+
+                                            {!readOnly && (
+                                              <button
+                                                type="button"
+                                                onClick={(e) => handleStartEditSubtask(st, e)}
+                                                className="p-1 text-slate-400 hover:text-blue-600 transition-colors rounded-md"
+                                                title="Edit Subtask Details"
+                                              >
+                                                <Edit3 className="h-4 w-4" />
+                                              </button>
+                                            )}
+                                            {!readOnly && (
+                                              <button
+                                                type="button"
+                                                onClick={(e) => handleDeleteSubTask(st.id, e)}
+                                                className="p-1 text-slate-400 hover:text-rose-500 transition-colors rounded-md"
+                                                title="Delete Subtask"
+                                              >
+                                                <Trash2 className="h-4 w-4" />
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Progress & Quantity Logging Bar */}
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 bg-white/60 dark:bg-slate-900/40 p-2.5 rounded-lg">
+                                          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 shrink-0">
+                                              Progress:
+                                            </span>
+                                            {hasChildren ? (
+                                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                {completedChildrenCount} / {childTasks.length} child tasks completed
+                                              </span>
+                                            ) : st.measurementType === 'Checklist' && st.checklist ? (
+                                              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                                                <ListChecks className="h-3.5 w-3.5 text-emerald-600" />
+                                                {st.checklist.filter(c => c.completed).length} / {st.checklist.length} steps checked
+                                              </span>
+                                            ) : st.measurementType === 'Percentage' ? (
+                                              <div className="flex items-center gap-1.5">
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  max="100"
+                                                  disabled={readOnly}
+                                                  value={st.completedQuantity ?? (st.status === 'Completed' ? 100 : 0)}
+                                                  onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
+                                                  className="w-14 h-7 text-center font-bold text-xs border border-indigo-300 dark:border-indigo-700 rounded bg-white dark:bg-slate-900 text-indigo-600"
+                                                />
+                                                <span className="text-xs font-bold text-indigo-600">%</span>
+                                              </div>
+                                            ) : st.measurementType === 'Yes/No' ? (
+                                              <button
+                                                type="button"
+                                                disabled={readOnly}
+                                                onClick={() => handleToggleStatus(st.id)}
+                                                className={`px-2.5 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all ${
+                                                  st.status === 'Completed'
+                                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300'
+                                                }`}
+                                              >
+                                                {st.status === 'Completed' ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                                                {st.status === 'Completed' ? 'Yes (Done)' : 'No (Pending)'}
+                                              </button>
+                                            ) : st.targetQuantity ? (
+                                              <div className="flex items-center gap-1">
+                                                {!readOnly && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) - 1)}
+                                                    className="w-6 h-6 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold hover:bg-slate-300 text-xs"
+                                                    title="Decrease Completed Quantity"
+                                                  >
+                                                    <Minus className="h-3 w-3" />
+                                                  </button>
+                                                )}
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  max={st.targetQuantity}
+                                                  disabled={readOnly}
+                                                  value={st.completedQuantity || 0}
+                                                  onChange={(e) => handleUpdateSubtaskQuantity(st.id, Number(e.target.value))}
+                                                  className="w-14 h-7 text-center font-bold text-xs border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-[#0B5FFF]"
+                                                />
+                                                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                                  / {st.targetQuantity} {st.unit}
+                                                </span>
+                                                {!readOnly && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleUpdateSubtaskQuantity(st.id, (st.completedQuantity || 0) + 1)}
+                                                    className="w-6 h-6 rounded bg-blue-100 dark:bg-blue-900/60 text-[#0B5FFF] dark:text-blue-300 flex items-center justify-center font-bold hover:bg-blue-200 text-xs"
+                                                    title="Increase Completed Quantity"
+                                                  >
+                                                    <Plus className="h-3 w-3" />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <span className="text-xs text-slate-500 font-medium">{st.status}</span>
+                                            )}
+                                          </div>
+
+                                          {/* Mini Progress Visual Bar & Quick Complete */}
+                                          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                                            <div className="flex items-center gap-2 flex-1 sm:w-36">
+                                              <div className="h-2 flex-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                <div 
+                                                  className={`h-full transition-all duration-300 rounded-full ${itemPercent === 100 ? 'bg-emerald-500' : 'bg-[#0B5FFF]'}`}
+                                                  style={{ width: `${itemPercent}%` }} 
+                                                />
+                                              </div>
+                                              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 w-9 text-right">
+                                                {itemPercent}%
+                                              </span>
+                                            </div>
+
+                                            {!readOnly && st.status !== 'Completed' && (
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleQuickComplete(st)}
+                                                disabled={isAnyBlocked}
+                                                className={`h-7 text-[10px] font-bold px-2 py-0 gap-1 shrink-0 ${
+                                                  isAnyBlocked
+                                                    ? 'border-amber-300 text-amber-700 dark:text-amber-300 bg-amber-50/50 dark:bg-amber-950/20 cursor-not-allowed opacity-75'
+                                                    : isHoldPointPending
+                                                    ? 'border-rose-300 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                                                    : 'border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                                                }`}
+                                                title={
+                                                  isBlockedByChildren 
+                                                    ? `Blocked: ${incompleteChildren.length} child tasks incomplete` 
+                                                    : isPredBlocked
+                                                    ? `Blocked: Predecessor #${predIndex + 1} incomplete`
+                                                    : isHoldPointPending
+                                                    ? 'Requires QA Inspection Sign-Off'
+                                                    : 'Mark this subtask 100% completed'
+                                                }
+                                              >
+                                                {isAnyBlocked ? (
+                                                  <>
+                                                    <Lock className="h-3 w-3 text-amber-600" />
+                                                    Blocked
+                                                  </>
+                                                ) : isHoldPointPending ? (
+                                                  <>
+                                                    <ShieldCheck className="h-3 w-3 text-rose-600" />
+                                                    QA Sign-Off
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <Check className="h-3 w-3 text-emerald-600" />
+                                                    Complete
+                                                  </>
+                                                )}
+                                              </Button>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
-                                    </div>
-                                  );
-                                })()
-                              )}
-                            </div>
-                          )}
-                        </Draggable>
+                                    );
+                                  })()
+                                )}
+                              </div>
+                            )}
+                          </Draggable>
                       );
                     })}
                     {provided.placeholder}

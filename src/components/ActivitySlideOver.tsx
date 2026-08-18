@@ -35,6 +35,7 @@ import {
   Link2
 } from 'lucide-react';
 import { Activity, ActivityStatus, Priority, WORKSTREAMS } from '../types';
+import { normalizeLabourAssignments } from '../lib/labourUtils';
 import { Badge, Button, ProgressBar } from './ui';
 import { useAppContext } from '../context/AppContext';
 import { printActivitiesSummary } from '../lib/pdfPrint';
@@ -475,25 +476,29 @@ export function ActivitySlideOver({
                 </div>
 
                 {/* Assigned Labour Allocation Breakdown */}
-                {activity.assignedLabour && activity.assignedLabour.length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Assigned Trades & Labour ({activity.assignedLabour.length})</h4>
-                    <div className="space-y-1.5">
-                      {activity.assignedLabour.map((lab, lIdx) => (
-                        <div key={lIdx} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-xs">
-                          <div className="flex items-center gap-2">
-                            <HardHat className="h-4 w-4 text-amber-500 shrink-0" />
-                            <div>
-                              <div className="font-bold text-slate-800 dark:text-slate-200">{lab.name || lab.role}</div>
-                              <div className="text-[10px] text-slate-400">{lab.role || 'Field Operative'}</div>
+                {(() => {
+                  const normalizedAssigned = normalizeLabourAssignments(activity.assignedLabour);
+                  if (normalizedAssigned.length === 0) return null;
+                  return (
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Assigned Trades & Labour ({normalizedAssigned.length})</h4>
+                      <div className="space-y-1.5">
+                        {normalizedAssigned.map((lab, lIdx) => (
+                          <div key={lab.id || lIdx} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-xs">
+                            <div className="flex items-center gap-2">
+                              <HardHat className="h-4 w-4 text-amber-500 shrink-0" />
+                              <div>
+                                <div className="font-bold text-slate-800 dark:text-slate-200">{lab.name || lab.role}</div>
+                                <div className="text-[10px] text-slate-400">{lab.role || 'Field Operative'}</div>
+                              </div>
                             </div>
+                            <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{lab.hours} hrs</span>
                           </div>
-                          <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{lab.hours} hrs</span>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Assigned Equipment Allocation */}
                 {activity.assignedEquipment && activity.assignedEquipment.length > 0 && (

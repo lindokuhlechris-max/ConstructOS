@@ -83,9 +83,10 @@ html.dark, html.dark body {
   }
 
   /* Handle Print Modal Visibility overrides */
-  body.print-modal-open { visibility: hidden; }
-  body.print-modal-open .print-modal-wrapper, body.print-modal-open .print-modal-wrapper * { visibility: visible; }
-  body.print-modal-open .print-modal-wrapper { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; width: 100% !important; }
+  body.print-modal-open > #root { visibility: hidden !important; }
+  body.print-modal-open .print-modal-wrapper { visibility: visible !important; position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; width: 100% !important; background: white !important; }
+  body.print-modal-open .print-modal-wrapper * { visibility: visible; }
+  body.print-modal-open .no-print, body.print-modal-open .no-print * { display: none !important; visibility: hidden !important; }
 
   .print-modal-wrapper {
     display: block !important;

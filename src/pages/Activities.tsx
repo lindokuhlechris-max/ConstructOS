@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, Badge, ProgressBar, Button } from '../components/ui';
 import { Activity, ActivityStatus, SubTask, DailyReport, canManage } from '../types';
 import { ActivityDetail } from '../components/ActivityDetail';
@@ -25,7 +25,8 @@ import {
   Trash2, 
   MoreVertical, 
   Layers, 
-  ChevronRight, 
+  ChevronRight,
+  ChevronDown, 
   FileSpreadsheet, 
   Mic, 
   PanelRightOpen, 
@@ -60,18 +61,21 @@ import {
   Building2
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { exportActivitiesToCSV } from '../lib/csvExport';
+import { exportActivitiesToExcel } from '../lib/excelExport';
 import { printActivitiesSummary } from '../lib/pdfPrint';
 import { WORKSTREAMS, WorkstreamType } from '../types';
 import { ActivityKanbanBoard } from '../components/ActivityKanbanBoard';
 import { ActivityDataTable } from '../components/ActivityDataTable';
 import { PTSCrossDisciplineMatrix } from '../components/PTSCrossDisciplineMatrix';
 import { DisciplineTrackerView } from '../components/DisciplineTrackerView';
+import { DailyLogsTrackerView } from '../components/DailyLogsTrackerView';
+import { ActivitiesPdfModal } from '../components/ActivitiesPdfModal';
 
 export function Activities() {
-  const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole, hasPermission } = useAppContext();
+  const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole, currentUserProfile, hasPermission } = useAppContext();
   const canEditActivities = hasPermission('activities');
-  const [mainScreen, setMainScreen] = useState<'activities' | 'disciplines'>('activities');
+  const [mainScreen, setMainScreen] = useState<'activities' | 'disciplines' | 'daily_logs'>('activities');
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [slideOverActivity, setSlideOverActivity] = useState<Activity | null>(null);
   const [capturingActivityId, setCapturingActivityId] = useState<string | null>(null);
@@ -82,8 +86,49 @@ export function Activities() {
   const [duplicateInitialValues, setDuplicateInitialValues] = useState<Partial<Activity> | null>(null);
   const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<'board' | 'grid' | 'list' | 'table' | 'timeline'>('board');
   const [timeframe, setTimeframe] = useState<'all' | 'day' | 'week' | 'month'>('all');
+  const [isTimeframeOpen, setIsTimeframeOpen] = useState(false);
+  const timeframeDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isSearchExpanded) {
+      searchInputRef.current?.focus();
+    }
+  }, [isSearchExpanded]);
+
+  useEffect(() => {
+    function handleSearchClickOutside(event: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        if (!searchTerm) {
+          setIsSearchExpanded(false);
+        }
+      }
+    }
+    if (isSearchExpanded) {
+      document.addEventListener('mousedown', handleSearchClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleSearchClickOutside);
+    };
+  }, [isSearchExpanded, searchTerm]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (timeframeDropdownRef.current && !timeframeDropdownRef.current.contains(event.target as Node)) {
+        setIsTimeframeOpen(false);
+      }
+    }
+    if (isTimeframeOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isTimeframeOpen]);
 
   // Quick Log Progress Modal State
   const [loggingProgressActivity, setLoggingProgressActivity] = useState<Activity | null>(null);
@@ -528,6 +573,22 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
               Scope of Work
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setMainScreen('daily_logs')}
+            className={`px-5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all ${
+              mainScreen === 'daily_logs'
+                ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <CheckSquare className="h-4 w-4 text-emerald-600" />
+            <span>Daily Logs</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
+              Site Diary
+            </span>
+          </button>
         </div>
 
         {/* Global Audit & Export Actions */}
@@ -543,25 +604,20 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
           </Button>
 
           <Button 
-            onClick={() => exportActivitiesToCSV(filtered, projects)} 
+            onClick={() => exportActivitiesToExcel(filtered, projects)} 
             variant="outline" 
             className="gap-2 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 h-9 text-xs"
-            title="Export activities to offline CSV spreadsheet"
+            title="Export comprehensive multi-tab Excel spreadsheet report (.xlsx)"
           >
             <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span className="hidden sm:inline">Export CSV</span>
+            <span className="hidden sm:inline">Export Excel</span>
           </Button>
 
           <Button 
-            onClick={() => printActivitiesSummary({
-              project: projects[0],
-              activities: filtered,
-              filterLabel: searchTerm ? `Search query: "${searchTerm}"` : 'All Activities',
-              totalActivitiesCount: activities.length
-            })} 
+            onClick={() => setIsPdfModalOpen(true)} 
             variant="outline" 
             className="gap-2 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 h-9 text-xs"
-            title="Print or Export summary report as clean PDF"
+            title="Open Interactive Print Preview & PDF Report Builder"
           >
             <Printer className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
             <span className="hidden sm:inline">Print / PDF</span>
@@ -569,8 +625,12 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
         </div>
       </div>
 
-      {/* Screen 2: Dedicated Discipline Tracker */}
-      {mainScreen === 'disciplines' ? (
+      {/* Screen 3: Dedicated Daily Shift Logs */}
+      {mainScreen === 'daily_logs' ? (
+        <DailyLogsTrackerView
+          onOpenActivityDetail={setSelectedActivity}
+        />
+      ) : mainScreen === 'disciplines' ? (
         <DisciplineTrackerView
           activities={activities}
           onSelectActivity={setSelectedActivity}
@@ -608,84 +668,147 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
                 </Button>
               )}
 
-              {/* Search Box */}
-              <div className="relative w-full md:w-56">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Search activities, codes..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 text-xs sm:text-sm focus:border-[#0B5FFF] focus:outline-none focus:ring-1 focus:ring-[#0B5FFF] dark:border-slate-800 dark:bg-slate-900"
-                />
+              {/* Expandable Search Button / Input */}
+              <div className="relative flex items-center" ref={searchContainerRef}>
+                <div
+                  className={`flex items-center transition-all duration-300 ease-in-out overflow-hidden rounded-xl border ${
+                    isSearchExpanded || searchTerm
+                      ? 'w-48 sm:w-60 bg-white dark:bg-slate-900 border-[#0B5FFF]/50 shadow-xs ring-1 ring-[#0B5FFF]/30'
+                      : 'w-10 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSearchExpanded(true);
+                      searchInputRef.current?.focus();
+                    }}
+                    className="h-10 w-10 flex items-center justify-center shrink-0 text-slate-500 dark:text-slate-400 hover:text-[#0B5FFF] transition-colors"
+                    title="Search activities, codes..."
+                    aria-label="Search activities"
+                  >
+                    <Search className="h-4 w-4" />
+                  </button>
+                  <input 
+                    ref={searchInputRef}
+                    type="text" 
+                    placeholder="Search activities, codes..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className={`h-10 w-full bg-transparent pr-7 text-xs sm:text-sm focus:outline-none dark:text-white transition-opacity duration-200 ${
+                      isSearchExpanded || searchTerm ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                    }`}
+                  />
+                  {(isSearchExpanded || searchTerm) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchTerm('');
+                        setIsSearchExpanded(false);
+                      }}
+                      className="absolute right-2 h-5 w-5 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="Clear & close search"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Timeframe Filter */}
-              <div className="hidden lg:flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-medium border border-slate-200/80 dark:border-slate-700/80">
+              {/* Collapsible Timeframe Filter */}
+              <div className="relative" ref={timeframeDropdownRef}>
                 <button
-                  onClick={() => setTimeframe('all')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'all' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white font-bold' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  onClick={() => setIsTimeframeOpen(!isTimeframeOpen)}
+                  className={`h-10 px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs ${
+                    timeframe !== 'all'
+                      ? 'bg-blue-50 dark:bg-blue-950/50 border-[#0B5FFF]/40 text-[#0B5FFF] dark:text-blue-400 font-bold'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                  title="Filter activities by timeframe"
                 >
-                  All
+                  <CalendarClock className={`h-3.5 w-3.5 ${timeframe !== 'all' ? 'text-[#0B5FFF]' : 'text-slate-400'}`} />
+                  <span>
+                    {timeframe === 'all' ? 'Time: All' : timeframe === 'day' ? 'Today' : timeframe === 'week' ? 'This Week' : 'This Month'}
+                  </span>
+                  <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${isTimeframeOpen ? 'rotate-180 text-[#0B5FFF]' : ''}`} />
                 </button>
-                <button
-                  onClick={() => setTimeframe('day')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'day' ? 'bg-white dark:bg-slate-700 shadow-sm text-[#0B5FFF] font-bold' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >
-                  Today
-                </button>
-                <button
-                  onClick={() => setTimeframe('week')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'week' ? 'bg-white dark:bg-slate-700 shadow-sm text-[#0B5FFF] font-bold' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >
-                  This Week
-                </button>
-                <button
-                  onClick={() => setTimeframe('month')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors ${timeframe === 'month' ? 'bg-white dark:bg-slate-700 shadow-sm text-[#0B5FFF] font-bold' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >
-                  This Month
-                </button>
+
+                {/* Dropdown Menu */}
+                {isTimeframeOpen && (
+                  <div className="absolute right-0 sm:left-0 sm:right-auto top-12 w-48 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl p-1.5 z-40 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Select Timeframe
+                    </div>
+                    {[
+                      { key: 'all', label: 'All Activities', desc: 'Full project timeline' },
+                      { key: 'day', label: 'Today', desc: 'Active shift today' },
+                      { key: 'week', label: 'This Week', desc: 'Current 7-day schedule' },
+                      { key: 'month', label: 'This Month', desc: 'Current monthly window' },
+                    ].map(item => (
+                      <button
+                        key={item.key}
+                        onClick={() => {
+                          setTimeframe(item.key as any);
+                          setIsTimeframeOpen(false);
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
+                          timeframe === item.key
+                            ? 'bg-blue-50 dark:bg-blue-900/40 text-[#0B5FFF] font-bold'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="leading-tight">{item.label}</span>
+                          <span className="text-[10px] text-slate-400 font-normal leading-tight">{item.desc}</span>
+                        </div>
+                        {timeframe === item.key && <Check className="h-3.5 w-3.5 text-[#0B5FFF]" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* View Mode Switcher Toolbar */}
+              {/* View Mode Switcher Toolbar (Icon Only) */}
               <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-0.5 border border-slate-200/80 dark:border-slate-700/80">
                 <button
                   onClick={() => setViewMode('board')}
-                  className={`px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-bold ${viewMode === 'board' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                  className={`p-2 rounded-lg transition-all flex items-center justify-center text-xs font-bold ${viewMode === 'board' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
                   title="Kanban Board View"
+                  aria-label="Kanban Board View"
                 >
-                  <Kanban className="h-3.5 w-3.5" />
-                  <span className="hidden xl:inline">Board</span>
+                  <Kanban className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('table')}
-                  className={`px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-bold ${viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                  className={`p-2 rounded-lg transition-all flex items-center justify-center text-xs font-bold ${viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
                   title="Spreadsheet / Data Table View"
+                  aria-label="Spreadsheet / Data Table View"
                 >
-                  <Table className="h-3.5 w-3.5" />
-                  <span className="hidden xl:inline">Table</span>
+                  <Table className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                  className={`p-2 rounded-lg transition-all flex items-center justify-center ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
                   title="Grid Card View"
+                  aria-label="Grid Card View"
                 >
-                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <LayoutGrid className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                  className={`p-2 rounded-lg transition-all flex items-center justify-center ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
                   title="List View"
+                  aria-label="List View"
                 >
-                  <ListIcon className="h-3.5 w-3.5" />
+                  <ListIcon className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('timeline')}
-                  className={`p-1.5 rounded-lg transition-all ${viewMode === 'timeline' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                  className={`p-2 rounded-lg transition-all flex items-center justify-center ${viewMode === 'timeline' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
                   title="Timeline Schedule"
+                  aria-label="Timeline Schedule"
                 >
-                  <CalendarDays className="h-3.5 w-3.5" />
+                  <CalendarDays className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -728,7 +851,7 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
               onOpenLogProgress={handleOpenLogProgress} 
               onUpdateStatus={handleQuickUpdateStatus} 
               onBulkStatusChange={handleBulkStatusChange} 
-              onExportSelected={(selected) => exportActivitiesToCSV(selected, projects)} 
+              onExportSelected={(selected) => exportActivitiesToExcel(selected, projects, 'selected')} 
             />
           ) : viewMode === 'timeline' ? (
             <ActivityTimeline activities={filtered} onSelectActivity={(id) => setExpandedActivityId(expandedActivityId === id ? null : id)} />
@@ -1459,6 +1582,19 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
         onCancel={() => setDeletingActivityId(null)}
         confirmLabel="Delete Activity"
       />
+
+      {/* Interactive Activities Print Preview & PDF Report Modal */}
+      {isPdfModalOpen && (
+        <ActivitiesPdfModal
+          isOpen={isPdfModalOpen}
+          onClose={() => setIsPdfModalOpen(false)}
+          activities={filtered}
+          projects={projects}
+          currentUserProfile={currentUserProfile}
+          defaultProjectId={projects[0]?.id || 'all'}
+          defaultFilterLabel={searchTerm ? `Search query: "${searchTerm}"` : timeframe !== 'all' ? `Timeframe: ${timeframe}` : 'All Filtered Activities'}
+        />
+      )}
     </div>
   );
 }

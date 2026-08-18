@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, Employee } from '../types';
+import { saveOrShareFile } from './fileExportService';
 
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
@@ -303,10 +304,16 @@ export const generateAccommodationMonthlyPDF = (
     doc.text(`Camp Contact / Supervisor: ${unit.contactPerson || 'Site Camp Supervisor'} ${unit.contactPhone ? `(${unit.contactPhone})` : ''}`, 14, currentY);
     doc.text('Constructfield OS Facility Automated Statement', pageWidth - 14, currentY, { align: 'right' });
 
-    // Save the PDF
+    // Save or share the PDF
     const sanitizedName = unit.name.replace(/[^a-zA-Z0-9]/g, '_');
     const fileName = `Constructfield_Accommodation_${sanitizedName}_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
+    const blob = doc.output('blob');
+    saveOrShareFile({
+      filename: fileName,
+      blob,
+      title: `Accommodation: ${unit.name}`,
+      text: `Constructfield Accommodation Statement - ${unit.name}`
+    });
   } catch (error) {
     console.error('Failed to generate accommodation monthly PDF:', error);
     alert('Unable to generate PDF report. Please check the accommodation data.');
@@ -443,5 +450,12 @@ export const generateAllAccommodationsSummaryPDF = (
   doc.text('Constructfield OS Facility Portfolio Master Statement', 14, currentY);
   doc.text(`Page 1 of 1 • ${reportDate}`, pageWidth - 14, currentY, { align: 'right' });
 
-  doc.save(`Constructfield_Accommodations_Portfolio_Summary_${new Date().toISOString().split('T')[0]}.pdf`);
+  const filename = `Constructfield_Accommodations_Portfolio_Summary_${new Date().toISOString().split('T')[0]}.pdf`;
+  const blob = doc.output('blob');
+  saveOrShareFile({
+    filename,
+    blob,
+    title: 'Accommodations Portfolio Master Statement',
+    text: `Constructfield Accommodations Portfolio Summary`
+  });
 };

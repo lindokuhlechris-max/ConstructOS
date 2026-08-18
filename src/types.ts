@@ -485,6 +485,7 @@ export interface ResourceAllocation {
   subtaskId?: string;
   resourceId?: string;
   equipmentId?: string;
+  materialId?: string;
   resourceType: 'Material' | 'Equipment';
   name: string;
   quantity: number;

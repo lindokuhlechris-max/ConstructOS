@@ -10,6 +10,7 @@ import autoTable from 'jspdf-autotable';
 import { useAppContext } from '../context/AppContext';
 import { Project } from '../types';
 import { exportFullProjectCSV } from '../lib/csvExport';
+import { saveOrShareFile } from '../lib/fileExportService';
 
 interface ProjectSummaryPdfModalProps {
   isOpen: boolean;
@@ -235,7 +236,14 @@ export function ProjectSummaryPdfModal({
     doc.text(`Project Manager: ${selectedProject.engineer || currentUserProfile?.name || 'Lead Admin'}`, 18, yPos + 20);
     doc.text(`Digital Seal: [VERIFIED CONSTRUCTFIELD SEAL]`, 120, yPos + 20);
 
-    doc.save(`${selectedProject.name.replace(/\s+/g, '_')}_Summary_Report.pdf`);
+    const filename = `${selectedProject.name.replace(/\s+/g, '_')}_Summary_Report.pdf`;
+    const blob = doc.output('blob');
+    saveOrShareFile({
+      filename,
+      blob,
+      title: `Project Summary: ${selectedProject.name}`,
+      text: `Constructfield Project Summary Report - ${selectedProject.name}`
+    });
 
     addAuditLog({
       id: `AUD-${Date.now()}`,

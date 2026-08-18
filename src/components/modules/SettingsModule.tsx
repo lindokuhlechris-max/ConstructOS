@@ -375,13 +375,9 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
         storage: { ...localStorage },
         idbData: allData
       };
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `constructfield-backup-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const { exportJsonFile } = await import('../../lib/fileExportService');
+      const filename = `constructfield-backup-${new Date().toISOString().split('T')[0]}.json`;
+      await exportJsonFile(backupData, filename, 'Constructfield Settings Backup');
     } catch (e: any) {
       alert('Failed to export backup: ' + e.message);
     }

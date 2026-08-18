@@ -15,6 +15,7 @@ import { useAppContext } from '../context/AppContext';
 import { LabourLog } from '../types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveOrShareFile } from '../lib/fileExportService';
 
 interface DailyLaborSummaryModalProps {
   isOpen: boolean;
@@ -145,7 +146,14 @@ export function DailyLaborSummaryModal({
       yPos = (doc as any).lastAutoTable.finalY + 30;
     });
     
-    doc.save(`Daily_Labor_Summary_${selectedDate}.pdf`);
+    const filename = `Daily_Labor_Summary_${selectedDate}.pdf`;
+    const blob = doc.output('blob');
+    saveOrShareFile({
+      filename,
+      blob,
+      title: 'Daily Labor Summary',
+      text: `Constructfield Daily Labor Summary - ${selectedDate}`
+    });
   };
 
   if (!isOpen) return null;

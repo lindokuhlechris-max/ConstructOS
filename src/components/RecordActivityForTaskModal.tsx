@@ -3,6 +3,7 @@ import { Activity, DailyReport, ActivityStatus } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, ProgressBar } from './ui';
 import { CameraCapture } from './CameraCapture';
+import { saveOrShareFile } from '../lib/fileExportService';
 import {
   Mic,
   Square,
@@ -384,7 +385,14 @@ export function RecordActivityForTaskModal({ activity, onClose, onActivityUpdate
       });
     }
 
-    doc.save(`Activity_Daily_Report_${activity.id}_${createdReport.date}.pdf`);
+    const filename = `Activity_Daily_Report_${activity.id}_${createdReport.date}.pdf`;
+    const blob = doc.output('blob');
+    saveOrShareFile({
+      filename,
+      blob,
+      title: `Activity Report: ${activity.name}`,
+      text: `Constructfield Activity Daily Report - ${activity.name}`
+    });
   };
 
   return (
