@@ -195,6 +195,15 @@ export interface ActivityExplainerItem {
 
 export type SubtaskExplainerItem = ActivityExplainerItem;
 
+export interface ActivityChecklistItem {
+  id: string;
+  text: string;
+  category?: 'Permit & Safety' | 'Survey & Location' | 'Materials & Plant' | 'QA & Method Statement' | 'General';
+  completed: boolean;
+  completedAt?: string;
+  completedBy?: string;
+}
+
 export interface Activity {
   id: string;
   projectId: string;
@@ -243,6 +252,7 @@ export interface Activity {
   assignedLabour?: TaskLabourAssignment[];
   assignedEquipment?: TaskEquipmentAssignment[];
   subtasks?: SubTask[];
+  checklists?: ActivityChecklistItem[];
 
   // Multi-Discipline Workstream Metadata
   workstream?: WorkstreamType;

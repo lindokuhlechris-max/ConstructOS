@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ActivityStatus, Priority, TaskMaterialAssignment, TaskLabourAssignment, TaskEquipmentAssignment, SubTask, DailyReport, canUserEditSection, WORKSTREAMS, WorkstreamType, Comment } from '../types';
+import { Activity, ActivityStatus, Priority, TaskMaterialAssignment, TaskLabourAssignment, TaskEquipmentAssignment, SubTask, DailyReport, canUserEditSection, WORKSTREAMS, WorkstreamType, Comment, ActivityChecklistItem } from '../types';
 import { Card, CardHeader, CardTitle, CardContent, Badge, ProgressBar, Button } from './ui';
 import { InteractiveProgress } from './InteractiveProgress';
 import { CameraCapture } from './CameraCapture';
 import { ActivityLabourTracking } from './ActivityLabourTracking';
 import { ActivityEquipmentTracking } from './ActivityEquipmentTracking';
 import { SubTaskManager } from './SubTaskManager';
+import { ActivityChecklistPanel } from './ActivityChecklistPanel';
 import { ActivityExplainerBreakdown } from './ActivityExplainerBreakdown';
 import { RecordActivityForTaskModal } from './RecordActivityForTaskModal';
 import { PlanningCalendar } from './PlanningCalendar';
@@ -925,6 +926,26 @@ ${subtaskSummaryLines}
     } else {
       updateActivity(updatedActivity);
     }
+  };
+
+  const handleUpdateChecklists = (updatedChecklists: ActivityChecklistItem[]) => {
+    const updated = { ...activity, checklists: updatedChecklists };
+    setActivity(updated);
+    if (onSave) {
+      onSave(updated);
+    } else {
+      updateActivity(updated);
+    }
+
+    const completedCount = updatedChecklists.filter(c => c.completed).length;
+    addAuditLog({
+      id: `AL-${Math.random().toString(36).substr(2, 9)}`,
+      projectId: activity.projectId,
+      userId: currentUserProfile?.name || 'Current User',
+      action: 'Prerequisites Checklist Updated',
+      details: `Updated prerequisites on "${activity.name}" (${activity.id}): ${completedCount}/${updatedChecklists.length} completed`,
+      timestamp: new Date().toISOString()
+    });
   };
 
   const handleInputChange = (field: keyof Activity, value: any) => {
@@ -2283,6 +2304,13 @@ ${subtaskSummaryLines}
               </div>
             </CardContent>
           </Card>
+
+          {/* Prerequisites & Work Progression Checklist Panel */}
+          <ActivityChecklistPanel
+            activity={activity}
+            onUpdateChecklists={handleUpdateChecklists}
+            readOnly={!isEditable}
+          />
 
           {/* Media & Attachments */}
           <Card className="rounded-2xl">

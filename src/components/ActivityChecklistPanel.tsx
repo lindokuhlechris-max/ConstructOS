@@ -1,0 +1,629 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  CheckSquare, 
+  Plus, 
+  Sparkles, 
+  Trash2, 
+  Edit, 
+  X, 
+  Check, 
+  ShieldCheck, 
+  AlertTriangle, 
+  RotateCcw, 
+  ChevronDown, 
+  ChevronUp, 
+  FileCheck, 
+  Compass, 
+  Truck, 
+  Layers, 
+  HardHat, 
+  Zap, 
+  Clock, 
+  UserCheck, 
+  CheckCircle2,
+  ListChecks
+} from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from './ui';
+import { Activity, ActivityChecklistItem } from '../types';
+import { useAppContext } from '../context/AppContext';
+
+export interface ActivityChecklistPanelProps {
+  activity: Activity;
+  onUpdateChecklists: (updatedChecklists: ActivityChecklistItem[]) => void;
+  readOnly?: boolean;
+}
+
+const CATEGORY_STYLES: Record<string, { bg: string; text: string; border: string; icon: any }> = {
+  'Permit & Safety': { 
+    bg: 'bg-red-50 dark:bg-red-950/40', 
+    text: 'text-red-700 dark:text-red-300', 
+    border: 'border-red-200 dark:border-red-800',
+    icon: HardHat
+  },
+  'Survey & Location': { 
+    bg: 'bg-sky-50 dark:bg-sky-950/40', 
+    text: 'text-sky-700 dark:text-sky-300', 
+    border: 'border-sky-200 dark:border-sky-800',
+    icon: Compass
+  },
+  'Materials & Plant': { 
+    bg: 'bg-amber-50 dark:bg-amber-950/40', 
+    text: 'text-amber-700 dark:text-amber-300', 
+    border: 'border-amber-200 dark:border-amber-800',
+    icon: Truck
+  },
+  'QA & Method Statement': { 
+    bg: 'bg-purple-50 dark:bg-purple-950/40', 
+    text: 'text-purple-700 dark:text-purple-300', 
+    border: 'border-purple-200 dark:border-purple-800',
+    icon: ShieldCheck
+  },
+  'General': { 
+    bg: 'bg-slate-50 dark:bg-slate-800/60', 
+    text: 'text-slate-700 dark:text-slate-300', 
+    border: 'border-slate-200 dark:border-slate-700',
+    icon: FileCheck
+  }
+};
+
+const PRESET_TEMPLATES = [
+  {
+    title: 'Safety & Site Permits Pre-Start',
+    category: 'Permit & Safety' as const,
+    items: [
+      'Permit to Work (PTW) & Hot Work / Excavation Permit signed & displayed',
+      'Daily Pre-Shift Risk Assessment & Toolbox Talk conducted with crew',
+      'Mandatory PPE compliance checked (Hi-Vis, Hard Hat, Steel Toes, Eye Protection)',
+      'Site First-Aider & Emergency assembly point identified'
+    ]
+  },
+  {
+    title: 'Civil & Survey Setting-Out',
+    category: 'Survey & Location' as const,
+    items: [
+      'Pegging coordinates & survey pegs verified against approved construction drawings',
+      'Benchmark reference elevation (AMSL) verified with survey team',
+      'Underground services & buried utilities scanned (CAT & Genny clearance)',
+      'Trench center-line & boundary offset chalked out'
+    ]
+  },
+  {
+    title: 'Plant, Machinery & Tools Pre-Start',
+    category: 'Materials & Plant' as const,
+    items: [
+      'Plant & excavator 10-point daily pre-start inspection checklist completed',
+      'Plant operator license & competency certification verified',
+      'Audible reverse alarms, flashing beacon, and emergency stop operational',
+      'Trench shoring boxes / trench shields staged on site'
+    ]
+  },
+  {
+    title: 'Quality & Technical Method Statement',
+    category: 'QA & Method Statement' as const,
+    items: [
+      'Approved Method Statement & Inspection Test Plan (ITP) briefed to foreman',
+      'Bedding sand gradation & delivery batch approval certificate verified',
+      'Compaction density test equipment (nuclear gauge / DCP) scheduled for hold point',
+      'Environmental dust suppression & spill kit accessible'
+    ]
+  }
+];
+
+export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly = false }: ActivityChecklistPanelProps) {
+  const { currentUserProfile } = useAppContext();
+  const checklists = useMemo(() => activity.checklists || [], [activity.checklists]);
+
+  const [isAddingInline, setIsAddingInline] = useState(false);
+  const [newItemText, setNewItemText] = useState('');
+  const [newItemCategory, setNewItemCategory] = useState<'Permit & Safety' | 'Survey & Location' | 'Materials & Plant' | 'QA & Method Statement' | 'General'>('Permit & Safety');
+  const [isPresetsOpen, setIsPresetsOpen] = useState(false);
+
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemText, setEditingItemText] = useState('');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+
+  const totalCount = checklists.length;
+  const completedCount = checklists.filter(c => c.completed).length;
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const isAllCompleted = totalCount > 0 && completedCount === totalCount;
+
+  // Toggle single checklist item
+  const handleToggleItem = (itemId: string) => {
+    if (readOnly) return;
+    const nowIso = new Date().toISOString();
+    const verifierName = currentUserProfile?.name || 'Site Supervisor';
+
+    const updated = checklists.map(item => {
+      if (item.id === itemId) {
+        const nextCompleted = !item.completed;
+        return {
+          ...item,
+          completed: nextCompleted,
+          completedAt: nextCompleted ? nowIso : undefined,
+          completedBy: nextCompleted ? verifierName : undefined
+        };
+      }
+      return item;
+    });
+
+    onUpdateChecklists(updated);
+  };
+
+  // Add custom single item
+  const handleAddItem = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newItemText.trim()) return;
+
+    const newItem: ActivityChecklistItem = {
+      id: `CHK-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substr(2, 3)}`,
+      text: newItemText.trim(),
+      category: newItemCategory,
+      completed: false
+    };
+
+    onUpdateChecklists([...checklists, newItem]);
+    setNewItemText('');
+    setIsAddingInline(false);
+  };
+
+  // Add items from preset bundle
+  const handleAddPresetBundle = (preset: typeof PRESET_TEMPLATES[0]) => {
+    const newItems: ActivityChecklistItem[] = preset.items.map(text => ({
+      id: `CHK-${Date.now().toString().slice(-5)}-${Math.random().toString(36).substr(2, 4)}`,
+      text,
+      category: preset.category,
+      completed: false
+    }));
+
+    onUpdateChecklists([...checklists, ...newItems]);
+    setIsPresetsOpen(false);
+  };
+
+  // Delete single item
+  const handleDeleteItem = (itemId: string) => {
+    if (readOnly) return;
+    onUpdateChecklists(checklists.filter(c => c.id !== itemId));
+  };
+
+  // Save edited text
+  const handleSaveEdit = (itemId: string) => {
+    if (!editingItemText.trim()) return;
+    const updated = checklists.map(c => 
+      c.id === itemId ? { ...c, text: editingItemText.trim() } : c
+    );
+    onUpdateChecklists(updated);
+    setEditingItemId(null);
+    setEditingItemText('');
+  };
+
+  // Mark all completed / reset all
+  const handleCheckAll = (complete: boolean) => {
+    if (readOnly) return;
+    const nowIso = new Date().toISOString();
+    const verifierName = currentUserProfile?.name || 'Site Supervisor';
+
+    const updated = checklists.map(c => ({
+      ...c,
+      completed: complete,
+      completedAt: complete ? nowIso : undefined,
+      completedBy: complete ? verifierName : undefined
+    }));
+    onUpdateChecklists(updated);
+  };
+
+  // Filtered items
+  const filteredChecklists = useMemo(() => {
+    if (filterCategory === 'all') return checklists;
+    return checklists.filter(c => c.category === filterCategory);
+  }, [checklists, filterCategory]);
+
+  return (
+    <Card className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+      {/* 1. Header with Badge & Actions */}
+      <CardHeader className="py-4 px-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-[#0B5FFF]">
+              <ListChecks className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm font-bold uppercase text-slate-800 dark:text-slate-200 tracking-wider">
+                  Prerequisites & Progression Checklist
+                </CardTitle>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF] border border-blue-200 dark:border-blue-900/60">
+                  {completedCount}/{totalCount}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Mandatory pre-start permits, survey checks, and execution prerequisites
+              </p>
+            </div>
+          </div>
+
+          {!readOnly && (
+            <div className="flex items-center gap-1.5 flex-wrap self-end sm:self-auto">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsPresetsOpen(!isPresetsOpen)}
+                className="h-8 text-xs rounded-xl gap-1 border-indigo-200 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/30 hover:bg-indigo-100"
+                title="Add standard pre-start checklist templates"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                <span className="hidden sm:inline">Quick Templates</span>
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setIsAddingInline(!isAddingInline)}
+                className="h-8 text-xs font-bold rounded-xl gap-1 bg-[#0B5FFF] hover:bg-blue-600 text-white shadow-2xs"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add Item</span>
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* 2. Progress Bar & Readiness Strip */}
+        {totalCount > 0 && (
+          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 font-bold">
+                {isAllCompleted ? (
+                  <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> All Prerequisites Met — Cleared for Work
+                  </span>
+                ) : (
+                  <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5" /> {totalCount - completedCount} Pending Prerequisites
+                  </span>
+                )}
+              </div>
+              <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                {progressPercent}%
+              </span>
+            </div>
+
+            <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-300 ${
+                  isAllCompleted ? 'bg-emerald-500' : 'bg-[#0B5FFF]'
+                }`}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </CardHeader>
+
+      <CardContent className="p-4 sm:p-5 space-y-4">
+        {/* 3. Quick Templates Accordion Box */}
+        {isPresetsOpen && !readOnly && (
+          <div className="p-4 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-900/60 space-y-3 animate-in fade-in">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-indigo-600" />
+                <h4 className="text-xs font-bold text-indigo-950 dark:text-indigo-200">
+                  Standard Pre-Start Checklist Bundles
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPresetsOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {PRESET_TEMPLATES.map((preset, idx) => {
+                const style = CATEGORY_STYLES[preset.category];
+                const IconComp = style.icon;
+                return (
+                  <div 
+                    key={idx}
+                    className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all flex flex-col justify-between gap-2 shadow-2xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <IconComp className="h-3.5 w-3.5 text-indigo-600" />
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">{preset.title}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 line-clamp-2">
+                        {preset.items.join(' • ')}
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAddPresetBundle(preset)}
+                      className="h-7 text-[11px] font-bold rounded-lg gap-1 border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-300 self-start"
+                    >
+                      <Plus className="h-3 w-3" /> Add {preset.items.length} Items
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 4. Inline Add Item Form */}
+        {isAddingInline && !readOnly && (
+          <form onSubmit={handleAddItem} className="p-3 rounded-2xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2.5 animate-in fade-in">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#0B5FFF]">Add New Prerequisite Requirement</span>
+              <button
+                type="button"
+                onClick={() => setIsAddingInline(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="sm:col-span-2">
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Underground cable scan completed & permit signed..."
+                  value={newItemText}
+                  onChange={e => setNewItemText(e.target.value)}
+                  className="w-full h-8 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white outline-none focus:border-[#0B5FFF]"
+                />
+              </div>
+
+              <div>
+                <select
+                  value={newItemCategory}
+                  onChange={e => setNewItemCategory(e.target.value as any)}
+                  className="w-full h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
+                >
+                  <option value="Permit & Safety">Permit & Safety</option>
+                  <option value="Survey & Location">Survey & Location</option>
+                  <option value="Materials & Plant">Materials & Plant</option>
+                  <option value="QA & Method Statement">QA & Method</option>
+                  <option value="General">General</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-1.5 pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsAddingInline(false)}
+                className="h-7 text-xs rounded-lg"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="h-7 text-xs font-bold rounded-lg bg-[#0B5FFF] text-white px-3"
+              >
+                Add Requirement
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* 5. Category Filter Pills */}
+        {totalCount > 4 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">Filter:</span>
+            {['all', 'Permit & Safety', 'Survey & Location', 'Materials & Plant', 'QA & Method Statement', 'General'].map(cat => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setFilterCategory(cat)}
+                className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all ${
+                  filterCategory === cat
+                    ? 'bg-[#0B5FFF] text-white shadow-2xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                }`}
+              >
+                {cat === 'all' ? 'All' : cat}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 6. Checklist Items List */}
+        {checklists.length === 0 ? (
+          <div className="text-center py-8 px-4 rounded-2xl bg-slate-50/50 dark:bg-slate-900/40 border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF] flex items-center justify-center mx-auto">
+              <CheckSquare className="h-5 w-5" />
+            </div>
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              No Work Prerequisites Configured
+            </p>
+            <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+              Add mandatory pre-start permits, surveyor validations, or machinery safety checklists before starting work.
+            </p>
+            {!readOnly && (
+              <div className="pt-2 flex items-center justify-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsPresetsOpen(true)}
+                  className="h-7 text-xs rounded-xl gap-1 border-indigo-200 text-indigo-700 dark:text-indigo-300"
+                >
+                  <Sparkles className="h-3 w-3" /> Use Template
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setIsAddingInline(true)}
+                  className="h-7 text-xs font-bold rounded-xl gap-1 bg-[#0B5FFF] text-white"
+                >
+                  <Plus className="h-3 w-3" /> Add Custom
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredChecklists.map((item) => {
+              const categoryKey = item.category || 'General';
+              const style = CATEGORY_STYLES[categoryKey] || CATEGORY_STYLES['General'];
+              const IconComp = style.icon;
+              const isEditingThis = editingItemId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  className={`p-3 rounded-2xl border transition-all flex flex-col gap-2 ${
+                    item.completed
+                      ? 'bg-slate-50/60 dark:bg-slate-800/30 border-slate-200/80 dark:border-slate-800'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/80 hover:border-blue-300 dark:hover:border-blue-800 shadow-2xs'
+                  }`}
+                >
+                  {isEditingThis ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editingItemText}
+                        onChange={e => setEditingItemText(e.target.value)}
+                        className="flex-1 h-8 px-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-medium text-slate-900 dark:text-white outline-none focus:border-[#0B5FFF]"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleSaveEdit(item.id)}
+                        className="h-8 text-xs font-bold rounded-lg bg-emerald-600 text-white px-2.5"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingItemId(null)}
+                        className="h-8 text-xs rounded-lg"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-3">
+                      {/* Checkbox & Text */}
+                      <label className="flex items-start gap-2.5 cursor-pointer flex-1 select-none min-w-0">
+                        <input
+                          type="checkbox"
+                          disabled={readOnly}
+                          checked={item.completed}
+                          onChange={() => handleToggleItem(item.id)}
+                          className="mt-0.5 rounded border-slate-300 text-[#0B5FFF] focus:ring-[#0B5FFF] h-4 w-4 shrink-0 transition-all cursor-pointer"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-xs font-semibold leading-snug ${
+                            item.completed 
+                              ? 'line-through text-slate-400 dark:text-slate-500' 
+                              : 'text-slate-900 dark:text-slate-100'
+                          }`}>
+                            {item.text}
+                          </p>
+
+                          {/* Verification Meta */}
+                          {item.completed && item.completedBy && (
+                            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-1 flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3 inline" />
+                              <span>Verified by {item.completedBy}</span>
+                              {item.completedAt && (
+                                <span className="text-slate-400 ml-1">
+                                  • {new Date(item.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      </label>
+
+                      {/* Right Category Pill & Item Actions */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border flex items-center gap-1 ${style.bg} ${style.text} ${style.border}`}>
+                          <IconComp className="h-3 w-3" />
+                          <span className="hidden sm:inline">{categoryKey}</span>
+                        </span>
+
+                        {!readOnly && (
+                          <div className="flex items-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingItemId(item.id);
+                                setEditingItemText(item.text);
+                              }}
+                              className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                              title="Edit item"
+                            >
+                              <Edit className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteItem(item.id)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                              title="Delete item"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* 7. Footer Utility Buttons */}
+        {totalCount > 0 && !readOnly && (
+          <div className="pt-2 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleCheckAll(true)}
+                className="text-[11px] font-semibold text-[#0B5FFF] hover:underline"
+              >
+                Check All
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => handleCheckAll(false)}
+                className="text-[11px] font-semibold text-slate-500 hover:underline"
+              >
+                Reset All
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('Clear all checklist items from this activity?')) {
+                  onUpdateChecklists([]);
+                }
+              }}
+              className="text-[11px] text-rose-500 hover:underline"
+            >
+              Clear Checklist
+            </button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
