@@ -197,40 +197,43 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
         defaultTab={modalDefaultTab}
       />
 
-      {/* 1. Header with Badge & Actions */}
-      <CardHeader className="py-4 px-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-[#0B5FFF]">
+      {/* 1. Header with Badge & Actions (Responsive Layout) */}
+      <CardHeader className="py-3 sm:py-4 px-3 sm:px-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60">
+        <div className="flex items-center justify-between gap-2.5">
+          {/* Left Title & Counter Badge */}
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+            <div className="p-1.5 sm:p-2 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-[#0B5FFF] shrink-0">
               <ListChecks className="h-4 w-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-bold uppercase text-slate-800 dark:text-slate-200 tracking-wider">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <CardTitle className="text-xs sm:text-sm font-bold uppercase text-slate-800 dark:text-slate-200 tracking-wider truncate">
                   Prerequisites & Progression Checklist
                 </CardTitle>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF] border border-blue-200 dark:border-blue-900/60">
+                <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF] border border-blue-200 dark:border-blue-900/60 shrink-0">
                   {completedCount}/{totalCount}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate hidden sm:block">
                 Mandatory pre-start permits, survey checks, and execution prerequisites
               </p>
             </div>
           </div>
 
+          {/* Right Action Buttons */}
           {!readOnly && (
-            <div className="flex items-center gap-1.5 flex-wrap self-end sm:self-auto">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={openBrowseTemplates}
-                className="h-8 text-xs rounded-xl gap-1 border-indigo-200 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/30 hover:bg-indigo-100"
+                className="h-8 px-2 sm:px-2.5 text-xs rounded-xl gap-1 border-indigo-200 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/30 hover:bg-indigo-100"
                 title="Browse standard and custom saved checklist templates"
               >
-                <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
-                <span className="hidden sm:inline">Quick Templates</span>
+                <Sparkles className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                <span className="hidden md:inline">Quick Templates</span>
+                <span className="inline md:hidden text-[11px]">Templates</span>
               </Button>
 
               {checklists.length > 0 && (
@@ -239,11 +242,12 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                   variant="outline"
                   size="sm"
                   onClick={openSaveCurrentTemplate}
-                  className="h-8 text-xs rounded-xl gap-1 border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/30 hover:bg-emerald-100"
+                  className="h-8 px-2 sm:px-2.5 text-xs rounded-xl gap-1 border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/30 hover:bg-emerald-100"
                   title="Save current checklist items as a reusable template"
                 >
-                  <BookmarkPlus className="h-3.5 w-3.5 text-emerald-600" />
-                  <span className="hidden sm:inline">Save Template</span>
+                  <BookmarkPlus className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <span className="hidden md:inline">Save Template</span>
+                  <span className="inline md:hidden text-[11px]">Save</span>
                 </Button>
               )}
 
@@ -251,10 +255,11 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                 type="button"
                 size="sm"
                 onClick={() => setIsAddingInline(!isAddingInline)}
-                className="h-8 text-xs font-bold rounded-xl gap-1 bg-[#0B5FFF] hover:bg-blue-600 text-white shadow-2xs"
+                className="h-8 px-2.5 sm:px-3 text-xs font-bold rounded-xl gap-1 bg-[#0B5FFF] hover:bg-blue-600 text-white shadow-2xs shrink-0"
               >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Add Item</span>
+                <Plus className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline">Add Item</span>
+                <span className="inline sm:hidden">Add</span>
               </Button>
             </div>
           )}
