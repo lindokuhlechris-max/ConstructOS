@@ -24,6 +24,7 @@ import { triggerNotification } from '../lib/reminderNotificationService';
 import { printMaterialsSummary } from '../lib/pdfPrint';
 import { exportMaterialsToCSV, exportMaterialRequestsToCSV } from '../lib/csvExport';
 import { generateRequestsPDF, generateCostsPDF } from '../lib/pdfMaterials';
+import { exportCsvFile } from '../lib/fileExportService';
 
 export function Materials({ onBack }: { onBack?: () => void } = {}) {
   const { 
@@ -145,14 +146,7 @@ export function Materials({ onBack }: { onBack?: () => void } = {}) {
     const csvContent = "Name,Category,SKU,Unit,EstimatedQuantity,ReceivedQuantity,UsedQuantity,ReorderLevel,CostPerUnit,Location,Supplier,Type\n" +
                        "Cement,Raw Materials,CEM-01,Bags,100,50,10,20,5.50,Warehouse A,BuildIt,Consumable\n" +
                        "Drill,Tools,DR-01,Item,5,5,0,1,120.00,Tool Crib,ToolCorp,Non-Consumable\n";
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'Material_Import_Template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportCsvFile(csvContent, 'Material_Import_Template.csv', 'Material Import Template');
   };
   
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
