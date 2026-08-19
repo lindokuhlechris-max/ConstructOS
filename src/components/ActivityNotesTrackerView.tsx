@@ -37,7 +37,7 @@ import {
   BadgeCheck
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from './ui';
-import { Activity, SubTask, ActivityNote, NoteCategory, NotePriority, NoteChecklistItem } from '../types';
+import { Activity, SubTask, ActivityNote, NoteCategory, NotePriority, NoteChecklistItem, NoteColor } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { getPersonInitials, getSubtaskProgressionNumber } from '../lib/labourUtils';
 import { saveOrShareFile } from '../lib/fileExportService';
@@ -50,7 +50,9 @@ export interface ActivityNotesTrackerViewProps {
 }
 
 const CATEGORY_COLORS: Record<NoteCategory, { bg: string; text: string; border: string }> = {
+  'Site Diary': { bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' },
   'Site Observation': { bg: 'bg-amber-50 dark:bg-amber-950/40', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800' },
+  'Meeting Minutes': { bg: 'bg-indigo-50 dark:bg-indigo-950/40', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-200 dark:border-indigo-800' },
   'Technical Memo': { bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-[#0B5FFF] dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' },
   'QA & Inspection': { bg: 'bg-rose-50 dark:bg-rose-950/40', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800' },
   'Safety & Risk': { bg: 'bg-red-50 dark:bg-red-950/40', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-800' },
@@ -78,6 +80,7 @@ export function ActivityNotesTrackerView({ onOpenActivityDetail, filterByActivit
   const [selectedPriority, setSelectedPriority] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resolved'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'grouped'>('grid');
+  const [onlyPinned, setOnlyPinned] = useState(false);
 
   // -------------------------------------------------------------
   // Note Creator / Editor Modal State
@@ -96,7 +99,7 @@ export function ActivityNotesTrackerView({ onOpenActivityDetail, filterByActivit
   const [formChecklists, setFormChecklists] = useState<NoteChecklistItem[]>([]);
   const [newChecklistText, setNewChecklistText] = useState('');
   const [formLocation, setFormLocation] = useState('');
-  const [formColor, setFormColor] = useState<'blue' | 'amber' | 'emerald' | 'rose' | 'purple' | 'slate'>('blue');
+  const [formColor, setFormColor] = useState<NoteColor>('blue');
   const [formIsPinned, setFormIsPinned] = useState(false);
 
   // Derive subtasks for the currently chosen activity in form

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -48,6 +48,9 @@ interface AppContextType {
   addNote: (note: ActivityNote) => void;
   updateNote: (note: ActivityNote) => void;
   deleteNote: (id: string) => void;
+  togglePinNote: (id: string) => void;
+  toggleArchiveNote: (id: string) => void;
+  convertNoteToReminder: (note: ActivityNote, dueDate: string, dueTime?: string, priority?: Priority) => void;
   theme: 'light' | 'dark';
   units: 'metric' | 'imperial';
   currency: import('../types').CurrencyCode;
@@ -2536,6 +2539,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     triggerSyncToast(`Note removed`, 'info');
   };
 
+  const togglePinNote = (id: string) => {
+    setNotes(prev => {
+      const updated = prev.map(n => n.id === id ? { ...n, isPinned: !n.isPinned } : n);
+      localStorage.setItem('constructos_notes', JSON.stringify(updated));
+      return updated;
+    });
+    setHasPendingChanges(true);
+  };
+
+  const toggleArchiveNote = (id: string) => {
+    setNotes(prev => {
+      const updated = prev.map(n => n.id === id ? { ...n, isArchived: !n.isArchived } : n);
+      localStorage.setItem('constructos_notes', JSON.stringify(updated));
+      return updated;
+    });
+    setHasPendingChanges(true);
+    triggerSyncToast(`Note status updated`, 'info');
+  };
+
+  const convertNoteToReminder = (note: ActivityNote, dueDate: string, dueTime?: string, priority?: Priority) => {
+    const reminderId = `REM-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newRem: Reminder = {
+      id: reminderId,
+      title: note.title,
+      description: note.content,
+      dueDate,
+      dueTime: dueTime || '09:00',
+      status: 'Pending',
+      priority: priority || (note.priority as any) || 'Medium',
+      linkedModules: ['Notes', ...(note.activityId ? ['Activities'] : []), ...(note.linkedEquipmentId ? ['Equipment'] : []), ...(note.linkedEmployeeId ? ['Employees'] : [])],
+      linkedActivityId: note.activityId,
+      linkedEquipmentId: note.linkedEquipmentId,
+      linkedEmployeeId: note.linkedEmployeeId,
+      linkedNoteId: note.id,
+      attachments: note.photos || note.attachments || [],
+      createdBy: currentUserProfile?.name || 'Administrator',
+      createdAt: new Date().toISOString()
+    };
+
+    addReminder(newRem);
+
+    // Update note to link back to reminder
+    updateNote({
+      ...note,
+      linkedReminderId: reminderId
+    });
+
+    triggerSyncToast(`Converted note to reminder due on ${dueDate}`, 'success');
+  };
+
   const setTheme = (newTheme: 'light' | 'dark') => {
     setThemeState(newTheme);
     localStorage.setItem('theme', newTheme);
@@ -2860,7 +2913,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addAccommodationPayment, updateAccommodationPayment, deleteAccommodationPayment,
       surveyRecords, addSurveyRecord, updateSurveyRecord, deleteSurveyRecord,
       batchGenerateSurveySections, linkSurveyRecordToActivity, unlinkSurveyRecordFromActivity,
-      notes, addNote, updateNote, deleteNote
+      notes, addNote, updateNote, deleteNote, togglePinNote, toggleArchiveNote, convertNoteToReminder
     }}>
       {children}
       <SyncNotificationToast />

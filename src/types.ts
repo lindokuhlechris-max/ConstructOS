@@ -30,6 +30,7 @@ export interface Reminder {
   linkedEmployeeId?: string;
   linkedEquipmentId?: string;
   linkedActivityId?: string;
+  linkedNoteId?: string;
   attachments?: string[];
   createdBy: string;
   createdAt: string;
@@ -1249,6 +1250,7 @@ export interface AccommodationPaymentLog {
 }
 
 // -------------------------------------------------------------------
+// -------------------------------------------------------------------
 // Activity & Field Notes Architecture
 // -------------------------------------------------------------------
 
@@ -1259,7 +1261,9 @@ export interface NoteChecklistItem {
 }
 
 export type NoteCategory = 
+  | 'Site Diary'
   | 'Site Observation'
+  | 'Meeting Minutes'
   | 'Technical Memo'
   | 'QA & Inspection'
   | 'Safety & Risk'
@@ -1268,6 +1272,7 @@ export type NoteCategory =
   | 'General';
 
 export type NotePriority = 'Low' | 'Medium' | 'High' | 'Urgent';
+export type NoteColor = 'default' | 'blue' | 'amber' | 'emerald' | 'rose' | 'purple' | 'indigo' | 'cyan' | 'slate';
 
 export interface ActivityNote {
   id: string;
@@ -1284,16 +1289,24 @@ export interface ActivityNote {
   tags?: string[];
   isPinned?: boolean;
   isResolved?: boolean;
+  isArchived?: boolean;
   author: string;
   authorRole?: string;
   authorInitials?: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   checklists?: NoteChecklistItem[];
   photos?: string[];
+  attachments?: string[];
   voiceNotes?: string[];
   location?: string;
   chainage?: string;
-  color?: 'blue' | 'amber' | 'emerald' | 'rose' | 'purple' | 'slate';
+  color?: NoteColor;
+  linkedEmployeeId?: string;
+  linkedEquipmentId?: string;
+  linkedReminderId?: string;
 }
+
+export type FieldNote = ActivityNote;
+
 
