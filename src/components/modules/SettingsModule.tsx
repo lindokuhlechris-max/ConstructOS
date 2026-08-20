@@ -42,11 +42,28 @@ import {
   KeyRound,
   Fingerprint,
   Sparkles,
-  Layers
+  Layers,
+  AlertTriangle,
+  Activity,
+  FileText,
+  Users,
+  Package,
+  CheckSquare,
+  Truck,
+  Home,
+  Compass,
+  FolderOpen
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { CustomFieldDefinition, UserProfile, UserRole, ProjectSectionPermissions } from '../../types';
 import { DataMigrationEngineModal } from '../DataMigrationEngineModal';
+import { 
+  APP_SECTIONS, 
+  AppSectionKey, 
+  getLiveSectionCounts,
+  createExportArchive 
+} from '../../lib/dataArchiveService';
+import { saveOrShareFile } from '../../lib/fileExportService';
 
 declare global {
   interface Window {
@@ -83,7 +100,8 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
     isManualSyncMode,
     setIsManualSyncMode,
     hasPendingChanges,
-    pendingChangesCount
+    pendingChangesCount,
+    clearDataSections
   } = useAppContext();
 
   // Strict Admin Authority Check: Only users with role === 'Admin' have access to Admin & Access Control
@@ -265,6 +283,113 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
   const [clientIdSavedMsg, setClientIdSavedMsg] = useState(false);
   const [isMigrationModalOpen, setIsMigrationModalOpen] = useState(false);
   const [migrationModalTab, setMigrationModalTab] = useState<'export' | 'restore'>('export');
+
+  // Data Purge & Clear Workspace Engine State
+  const [liveSectionCounts, setLiveSectionCounts] = useState<Record<AppSectionKey, number>>({} as any);
+  const [selectedClearSections, setSelectedClearSections] = useState<AppSectionKey[]>([]);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [isClearingData, setIsClearingData] = useState(false);
+  const [confirmClearText, setConfirmClearText] = useState('');
+  const [clearSuccessReport, setClearSuccessReport] = useState<{ message: string; count: number; sections: AppSectionKey[] } | null>(null);
+  const [isCreatingSafetyBackup, setIsCreatingSafetyBackup] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'data') {
+      getLiveSectionCounts().then(setLiveSectionCounts).catch(console.warn);
+    }
+  }, [activeTab]);
+
+  const toggleClearSection = (key: AppSectionKey) => {
+    setSelectedClearSections(prev => 
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
+  const handleSelectAllClear = () => {
+    const allKeys = (Object.keys(APP_SECTIONS) as AppSectionKey[]).filter(k => k !== 'settings');
+    setSelectedClearSections(allKeys);
+  };
+
+  const handleSelectLogsClear = () => {
+    setSelectedClearSections(['activities', 'reports', 'labour', 'equipment']);
+  };
+
+  const handleSelectQASafetyClear = () => {
+    setSelectedClearSections(['safety', 'quality']);
+  };
+
+  const handleSelectInventoryClear = () => {
+    setSelectedClearSections(['materials', 'equipment', 'accommodation']);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedClearSections([]);
+  };
+
+  const handleQuickDownloadBackup = async () => {
+    try {
+      setIsCreatingSafetyBackup(true);
+      const allSections = Object.keys(APP_SECTIONS) as AppSectionKey[];
+      const { packageString, filename } = await createExportArchive({
+        selectedSections: allSections,
+        label: `Constructfield Pre-Clear Backup (${new Date().toLocaleDateString()})`,
+        notes: 'Full safety snapshot created prior to executing clear data function in Settings.'
+      });
+      const blob = new Blob([packageString], { type: 'application/json' });
+      await saveOrShareFile({
+        filename,
+        blob,
+        title: 'Constructfield Pre-Clear Backup',
+        text: 'Full safety snapshot created prior to executing clear data function in Settings.'
+      });
+    } catch (err: any) {
+      console.error('Backup creation error:', err);
+      alert('Failed to generate safety backup file: ' + err.message);
+    } finally {
+      setIsCreatingSafetyBackup(false);
+    }
+  };
+
+  const handleExecuteClear = async () => {
+    if (selectedClearSections.length === 0) return;
+    setIsClearingData(true);
+    try {
+      const result = await clearDataSections(selectedClearSections);
+      if (result.success) {
+        setClearSuccessReport({
+          message: result.message,
+          count: result.recordsCleared,
+          sections: result.clearedSections
+        });
+        setSelectedClearSections([]);
+        setConfirmClearText('');
+        setIsClearModalOpen(false);
+        const updatedCounts = await getLiveSectionCounts();
+        setLiveSectionCounts(updatedCounts);
+      } else {
+        alert('Clear failed: ' + (result.error || 'Unknown error occurred.'));
+      }
+    } catch (err: any) {
+      console.error('Clear error:', err);
+      alert('Error occurred during data purge.');
+    } finally {
+      setIsClearingData(false);
+    }
+  };
+
+  const SECTION_CLEAR_ICONS: Record<AppSectionKey, React.ComponentType<{ className?: string }>> = {
+    activities: Activity,
+    reports: FileText,
+    labour: Users,
+    materials: Package,
+    safety: ShieldAlert,
+    quality: CheckSquare,
+    equipment: Truck,
+    accommodation: Home,
+    surveys: Compass,
+    documents: FolderOpen,
+    settings: Settings2
+  };
 
   const handleSaveClientId = () => {
     if (customGoogleClientId.trim()) {
@@ -1396,6 +1521,191 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
               </div>
             </div>
           </Card>
+
+          {/* 4. WORKSPACE DATA PURGE & RESET HUB */}
+          <div className="flex items-center gap-4 py-1">
+            <div className="h-px bg-rose-200 dark:bg-rose-900/40 flex-1"></div>
+            <span className="text-xs font-bold text-rose-500 uppercase tracking-widest flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
+              Granular Data Purge & Workspace Reset
+            </span>
+            <div className="h-px bg-rose-200 dark:bg-rose-900/40 flex-1"></div>
+          </div>
+
+          <Card className="p-6 border-rose-200 dark:border-rose-900/60 bg-gradient-to-br from-white via-rose-50/20 to-red-50/30 dark:from-slate-900 dark:via-rose-950/20 dark:to-slate-900 shadow-xs space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-rose-100 dark:border-rose-900/40 pb-4">
+              <div className="flex items-start gap-3">
+                <div className="p-3 rounded-2xl bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 shrink-0">
+                  <Trash2 className="h-6 w-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      Granular Data Purge & Clear Engine
+                    </h3>
+                    <Badge variant="danger" className="text-[10px] font-bold">
+                      Admin Controlled
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                    Select specific modules to purge from LocalStorage, IndexedDB, and Cloud replication. An automatic rollback point is created before every purge.
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Presets Toolbar */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSelectAllClear}
+                  className="h-8 px-2.5 rounded-lg text-[11px] font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                >
+                  Select All
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSelectLogsClear}
+                  className="h-8 px-2.5 rounded-lg text-[11px] font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                >
+                  Field & Logs
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSelectQASafetyClear}
+                  className="h-8 px-2.5 rounded-lg text-[11px] font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                >
+                  QA & Safety
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSelectInventoryClear}
+                  className="h-8 px-2.5 rounded-lg text-[11px] font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                >
+                  Assets & Stock
+                </Button>
+                {selectedClearSections.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleClearSelection}
+                    className="h-8 px-2 rounded-lg text-[11px] text-slate-500 hover:text-slate-700"
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Success Report Notice */}
+            {clearSuccessReport && (
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 flex items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <span className="font-bold text-xs block">Data Purge Completed Successfully!</span>
+                    <span className="text-[11px] text-emerald-700 dark:text-emerald-300">{clearSuccessReport.message}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setClearSuccessReport(null)}
+                  className="p-1 text-emerald-600 hover:text-emerald-800 dark:text-emerald-400"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Section Selection Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {(Object.keys(APP_SECTIONS) as AppSectionKey[])
+                .filter(secKey => secKey !== 'settings')
+                .map(secKey => {
+                  const def = APP_SECTIONS[secKey];
+                  const Icon = SECTION_CLEAR_ICONS[secKey] || Database;
+                  const isSelected = selectedClearSections.includes(secKey);
+                  const count = liveSectionCounts[secKey] ?? 0;
+
+                  return (
+                    <div
+                      key={secKey}
+                      onClick={() => toggleClearSection(secKey)}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 select-none ${
+                        isSelected
+                          ? 'border-rose-400 dark:border-rose-700 bg-rose-50/80 dark:bg-rose-950/40 ring-1 ring-rose-400/30'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}} // Handled by container click
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className={`text-xs font-bold truncate flex items-center gap-1.5 ${
+                            isSelected ? 'text-rose-900 dark:text-rose-200' : 'text-slate-900 dark:text-white'
+                          }`}>
+                            <Icon className={`h-3.5 w-3.5 ${isSelected ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`} />
+                            {def.label}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            count > 0 
+                              ? isSelected ? 'bg-rose-200 dark:bg-rose-900 text-rose-800 dark:text-rose-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                              : 'bg-slate-50 dark:bg-slate-900 text-slate-400'
+                          }`}>
+                            {count} {count === 1 ? 'item' : 'items'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-tight">
+                          {def.description}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Action Bar & Recommendation */}
+            <div className="pt-4 border-t border-rose-100 dark:border-rose-900/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>
+                  {selectedClearSections.length > 0 ? (
+                    <strong className="text-rose-600 dark:text-rose-400">
+                      {selectedClearSections.length} module(s) selected ({selectedClearSections.reduce((sum, k) => sum + (liveSectionCounts[k] || 0), 0)} records to purge)
+                    </strong>
+                  ) : (
+                    'Select one or more modules above to clear records.'
+                  )}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                <Button
+                  onClick={handleQuickDownloadBackup}
+                  disabled={isCreatingSafetyBackup}
+                  variant="outline"
+                  className="h-10 px-4 rounded-xl text-xs font-bold gap-2 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  {isCreatingSafetyBackup ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  {isCreatingSafetyBackup ? 'Saving Backup...' : 'Download Safety Backup First'}
+                </Button>
+
+                <Button
+                  onClick={() => setIsClearModalOpen(true)}
+                  disabled={selectedClearSections.length === 0 || !isAdmin}
+                  className="h-10 px-5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold gap-2 shadow-sm disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" /> Purge Selected Sections ({selectedClearSections.length})
+                </Button>
+              </div>
+            </div>
+          </Card>
         </div>
       )}
 
@@ -1820,6 +2130,113 @@ export function SettingsModule({ onBack }: SettingsModuleProps) {
         initialTab={migrationModalTab}
         currentUserProfile={currentUserProfile}
       />
+
+      {/* Safety Data Purge Confirmation Modal */}
+      {isClearModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-rose-200 dark:border-rose-900/60 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-6 bg-gradient-to-br from-rose-50 to-red-50/40 dark:from-rose-950/40 dark:to-slate-900 border-b border-rose-100 dark:border-rose-900/40 flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-rose-600 text-white shadow-md shadow-rose-500/20 shrink-0">
+                  <AlertTriangle className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Confirm Workspace Data Purge
+                  </h3>
+                  <p className="text-xs text-rose-700 dark:text-rose-400 mt-0.5">
+                    Permanent deletion of selected project data
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!isClearingData) {
+                    setIsClearModalOpen(false);
+                    setConfirmClearText('');
+                  }
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4">
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-900 dark:text-amber-200 text-xs space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <ShieldAlert className="h-4 w-4 text-amber-600" />
+                  <span>Important Safety Warning:</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  This action will permanently delete all records in the <strong>{selectedClearSections.length} selected module(s)</strong> from your local device storage, IndexedDB, and Cloud replication. An automatic rollback snapshot will be saved in your session storage.
+                </p>
+              </div>
+
+              {/* Summary of Sections to be Cleared */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Modules to be Purged ({selectedClearSections.reduce((sum, k) => sum + (liveSectionCounts[k] || 0), 0)} total records)
+                </span>
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                  {selectedClearSections.map(secKey => {
+                    const def = APP_SECTIONS[secKey];
+                    const count = liveSectionCounts[secKey] || 0;
+                    return (
+                      <div key={secKey} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">{def.label}</span>
+                        <Badge variant="danger" className="text-[10px]">{count} records</Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Confirmation Input Verification */}
+              <div className="space-y-1.5 pt-2">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
+                  To confirm, type <strong className="text-rose-600 font-mono">CLEAR</strong> below:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Type CLEAR to unlock"
+                  value={confirmClearText}
+                  onChange={e => setConfirmClearText(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono text-sm tracking-wider uppercase focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isClearingData}
+                onClick={() => {
+                  setIsClearModalOpen(false);
+                  setConfirmClearText('');
+                }}
+                className="h-10 px-4 rounded-xl text-xs font-semibold"
+              >
+                Cancel
+              </Button>
+
+              <Button
+                type="button"
+                disabled={confirmClearText.trim().toUpperCase() !== 'CLEAR' || isClearingData}
+                onClick={handleExecuteClear}
+                className="h-10 px-5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold gap-2 shadow-sm disabled:opacity-50"
+              >
+                {isClearingData ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {isClearingData ? 'Purging Records...' : `Permanently Purge ${selectedClearSections.length} Module(s)`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

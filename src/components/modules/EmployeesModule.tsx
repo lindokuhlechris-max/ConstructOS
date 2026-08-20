@@ -139,6 +139,19 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
   // HR Hours Log Modal State
   const [isLoggingHoursModal, setIsLoggingHoursModal] = useState(false);
   const [isDailySummaryModalOpen, setIsDailySummaryModalOpen] = useState(false);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [isEmployeePickerOpen, setIsEmployeePickerOpen] = useState(false);
+  const [pickerSearchQuery, setPickerSearchQuery] = useState('');
+  const [pickerDepartmentFilter, setPickerDepartmentFilter] = useState('All');
+
+  const handleOpenLogHoursModal = () => {
+    if (selectedEmployeeIds.length === 0 && employees.length > 0) {
+      const activeIds = employees.filter(e => e.status === 'Active').map(e => e.id);
+      setSelectedEmployeeIds(activeIds.length > 0 ? activeIds : [employees[0].id]);
+    }
+    setIsLoggingHoursModal(true);
+  };
+
   const [hoursForm, setHoursForm] = useState({
     employeeId: '',
     projectId: projects[0]?.id || '',
@@ -452,35 +465,43 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
 
   const handleLogHoursSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const targetEmp = employees.find(e => e.id === hoursForm.employeeId) || employees[0];
-    if (!targetEmp) return;
+    if (selectedEmployeeIds.length === 0) {
+      alert('Please select at least one employee to log hours.');
+      return;
+    }
 
-    addLabourLog({
-      id: `LAB-${Math.floor(1000 + Math.random() * 9000)}`,
-      projectId: hoursForm.projectId,
-      activityId: hoursForm?.activityId,
-      date: hoursForm.date,
-      startTime: hoursForm.startTime,
-      endTime: hoursForm.endTime,
-      lunchBreak: hoursForm.lunchBreak,
-      workerType: 'Employee',
-      workerName: `${targetEmp.firstName} ${targetEmp.lastName}`,
-      hours: Number(hoursForm.hoursWorked),
-      workersCount: 1,
-      trade: targetEmp.position,
-      hoursWorked: Number(hoursForm.hoursWorked),
-      supervisorName: 'HR Activity System',
-      notes: `${targetEmp.firstName} ${targetEmp.lastName}: ${hoursForm.notes || hoursForm.shiftType}`
-    });
+    const selectedEmps = employees.filter(e => selectedEmployeeIds.includes(e.id));
+    if (selectedEmps.length === 0) return;
 
-    addWorkerCheckIn({
-      id: `CHK-${Math.floor(1000 + Math.random() * 9000)}`,
-      projectId: hoursForm.projectId,
-      workerName: `${targetEmp.firstName} ${targetEmp.lastName}`,
-      workerId: targetEmp.id,
-      timestamp: `${hoursForm.date} 07:30`,
-      action: 'Check-In',
-      location: { lat: -26.2041, lng: 28.0473 }
+    selectedEmps.forEach((targetEmp, idx) => {
+      const uniqueSuffix = `${Date.now().toString().slice(-4)}${idx}${Math.floor(10 + Math.random() * 90)}`;
+      addLabourLog({
+        id: `LAB-${uniqueSuffix}`,
+        projectId: hoursForm.projectId,
+        activityId: hoursForm?.activityId,
+        date: hoursForm.date,
+        startTime: hoursForm.startTime,
+        endTime: hoursForm.endTime,
+        lunchBreak: hoursForm.lunchBreak,
+        workerType: 'Employee',
+        workerName: `${targetEmp.firstName} ${targetEmp.lastName}`,
+        hours: Number(hoursForm.hoursWorked),
+        workersCount: 1,
+        trade: targetEmp.position,
+        hoursWorked: Number(hoursForm.hoursWorked),
+        supervisorName: 'HR Activity System',
+        notes: hoursForm.notes || hoursForm.shiftType
+      });
+
+      addWorkerCheckIn({
+        id: `CHK-${uniqueSuffix}`,
+        projectId: hoursForm.projectId,
+        workerName: `${targetEmp.firstName} ${targetEmp.lastName}`,
+        workerId: targetEmp.id,
+        timestamp: `${hoursForm.date} ${hoursForm.startTime || '07:30'}`,
+        action: 'Check-In',
+        location: { lat: -26.2041, lng: 28.0473 }
+      });
     });
 
     setIsLoggingHoursModal(false);
@@ -535,7 +556,7 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
           </button>
 
           <button
-            onClick={() => setIsLoggingHoursModal(true)}
+            onClick={handleOpenLogHoursModal}
             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl transition-colors text-xs font-semibold shadow-sm"
           >
             <Clock className="h-4 w-4" /> Log Hours
@@ -1921,14 +1942,88 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Manage and track logged hours for site personnel</p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Purge Duplicate Logs Button (Active when duplicates exist) */}
+              {(() => {
+                const seenKeys = new Set<string>();
+                let dupCount = 0;
+                labourLogs.forEach(l => {
+                  const rawName = (l.workerName || '').trim();
+                  if (rawName.includes(',') && rawName.split(',').length > 1) {
+                    dupCount++;
+                    return;
+                  }
+                  const key = `${(l.workerName || l.trade || '').trim().toLowerCase()}_${l.date}_${(l.notes || '').toLowerCase().includes('night shift') ? 'night' : (l.notes || '').toLowerCase().includes('overtime') ? 'ot' : 'normal'}`;
+                  if (seenKeys.has(key)) {
+                    dupCount++;
+                  } else {
+                    seenKeys.add(key);
+                  }
+                });
+
+                if (dupCount === 0) return null;
+
+                return (
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Found ${dupCount} duplicate and/or combined multi-person logs. Consolidate into single daily worker records (up to 12h limit) and remove duplicates?`)) {
+                        const seenMap = new Map<string, LabourLog>();
+                        const logsToKeep: LabourLog[] = [];
+                        const idsToDelete: string[] = [];
+
+                        labourLogs.forEach(l => {
+                          const rawName = (l.workerName || '').trim();
+                          if (rawName.includes(',') && rawName.split(',').length > 1) {
+                            idsToDelete.push(l.id);
+                            return;
+                          }
+                          const isNight = (l.notes || '').toLowerCase().includes('night shift');
+                          const isOt = (l.notes || '').toLowerCase().includes('overtime');
+                          const shiftType = isNight ? 'night' : isOt ? 'ot' : 'normal';
+                          const key = `${(l.workerName || l.trade || 'Worker').trim().toLowerCase()}_${l.date}_${shiftType}`;
+
+                          if (seenMap.has(key)) {
+                            const existing = seenMap.get(key)!;
+                            const totalH = Math.min(shiftType === 'normal' ? 12 : 16, Math.max(existing.hoursWorked || existing.hours || 0, l.hoursWorked || l.hours || 0));
+                            existing.hoursWorked = totalH;
+                            existing.hours = totalH;
+                            idsToDelete.push(l.id);
+                          } else {
+                            const cleanCopy = { ...l, hours: Math.min(12, l.hours || 8), hoursWorked: Math.min(12, l.hoursWorked || l.hours || 8) };
+                            seenMap.set(key, cleanCopy);
+                            logsToKeep.push(cleanCopy);
+                          }
+                        });
+
+                        logsToKeep.forEach(l => updateLabourLog(l));
+                        idsToDelete.forEach(id => deleteLabourLog(id));
+                      }
+                    }}
+                    className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 px-3.5 py-2 rounded-xl transition-colors text-xs font-bold shadow-sm animate-pulse"
+                    title="Clean duplicate entries and combined group logs"
+                  >
+                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" /> Clean Duplicates ({dupCount})
+                  </button>
+                );
+              })()}
+
               <button
                 onClick={() => {
+                  const getEmpName = (l: LabourLog) => l.workerName || (l.notes && l.notes.includes(':') && !l.notes.toLowerCase().startsWith('assigned') && !l.notes.toLowerCase().startsWith('allocated') ? l.notes.split(':')[0] : '') || l.trade || l.workerType || 'Site Worker';
+                  const getNote = (l: LabourLog) => {
+                    if (!l.notes) return '';
+                    if (l.workerName && l.notes.startsWith(`${l.workerName}:`)) return l.notes.slice(l.workerName.length + 1).trim();
+                    return l.notes;
+                  };
+                  const filtered = labourLogs.filter(l => {
+                    const rName = (l.workerName || '').trim();
+                    return !(rName.includes(',') && rName.split(',').length > 1);
+                  });
                   const csvContent = ["ID,Date,Employee Name,Project,Task,Start Time,End Time,Lunch Break (hrs),Hours Worked,Notes"]
-                    .concat(labourLogs.map(log => {
-                      const empName = log.workerName || (log.notes ? log.notes.split(':')[0] : log.trade) || '';
+                    .concat(filtered.map(log => {
+                      const empName = getEmpName(log);
                       const projName = projects.find(p => p.id === log.projectId)?.name || log.projectId;
                       const taskName = activities.find(a => a.id === log?.activityId)?.name || log?.activityId || 'General Labor / Maintenance';
-                      const notes = (log.notes || '').replace(/"/g, '""');
+                      const notes = getNote(log).replace(/"/g, '""');
                       return `"${log.id}","${log.date}","${empName}","${projName}","${taskName}","${log.startTime || ''}","${log.endTime || ''}","${log.lunchBreak || 0}","${log.hoursWorked || log.hours}","${notes}"`;
                     }))
                     .join("\n");
@@ -1953,7 +2048,7 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                 <FileText className="h-4 w-4" /> Daily Summary
               </button>
               <button
-                onClick={() => setIsLoggingHoursModal(true)}
+                onClick={handleOpenLogHoursModal}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl transition-colors text-xs font-bold shadow-sm"
               >
                 <Clock className="h-4 w-4" /> Log New Hours
@@ -2008,7 +2103,7 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                       <th className="px-6 py-4">Date</th>
                       <th className="px-6 py-4">Employee</th>
                       <th className="px-6 py-4">Task / Project</th>
-                      <th className="px-6 py-4">Time Logged</th>
+                      <th className="px-6 py-4">Shift & Hours</th>
                       <th className="px-6 py-4">Notes</th>
                       <th className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
@@ -2027,30 +2122,87 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-900">
-                    {labourLogs.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-8 text-center text-slate-500 text-sm">
-                          No logged hours found. Click "Log New Hours" to add one.
-                        </td>
-                      </tr>
-                    ) : (
-                      labourLogs.map(log => {
-                        const employeeName = log.notes ? log.notes.split(':')[0] : log.trade;
+                    {(() => {
+                      const displayLogs = labourLogs.filter(l => {
+                        const rawName = (l.workerName || '').trim();
+                        return !(rawName.includes(',') && rawName.split(',').length > 1);
+                      });
+
+                      if (displayLogs.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="px-6 py-8 text-center text-slate-500 text-sm">
+                              No logged hours found. Click "Log New Hours" to add one.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return displayLogs.map(log => {
+                        const employeeName = log.workerName 
+                          || (log.notes && log.notes.includes(':') && !log.notes.toLowerCase().startsWith('assigned') && !log.notes.toLowerCase().startsWith('allocated') ? log.notes.split(':')[0] : '') 
+                          || log.trade 
+                          || log.workerType 
+                          || 'Site Worker';
                         const project = projects.find(p => p.id === log.projectId);
+                        const activity = activities.find(a => a.id === log?.activityId);
+                        const noteDisplay = log.workerName && log.notes?.startsWith(`${log.workerName}:`)
+                          ? log.notes.slice(log.workerName.length + 1).trim()
+                          : (log.notes || '—');
+
+                        const isNight = (log.notes || '').toLowerCase().includes('night shift');
+                        const isOt = (log.notes || '').toLowerCase().includes('overtime');
+                        const hoursNum = Number(log.hoursWorked || log.hours || 0);
+
                         return (
                           <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                             <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300">
                               {log.date}
                             </td>
                             <td className="px-6 py-4 text-xs font-bold text-slate-900 dark:text-white">
-                              {employeeName}
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                  {employeeName[0] || 'W'}
+                                </div>
+                                <span>{employeeName}</span>
+                              </div>
                             </td>
                             <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-400">
-                              {project ? project.name : log.projectId}
-                            </td>
-                            <td className="px-6 py-4 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                               <div className="flex flex-col">
-                                <span>{log.hoursWorked || log.hours} hrs</span>
+                                <span className="font-bold text-slate-800 dark:text-slate-200">
+                                  {activity ? activity.name : (log.activityId ? log.activityId : 'General Task')}
+                                </span>
+                                <span className="text-[11px] text-slate-500">
+                                  {project ? project.name : (log.projectId || 'General Site')}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-xs">
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-extrabold text-slate-900 dark:text-white">{hoursNum} hrs</span>
+                                  {isNight ? (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
+                                      🌙 Night
+                                    </span>
+                                  ) : isOt ? (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300">
+                                      ⏱️ OT
+                                    </span>
+                                  ) : hoursNum > 12 ? (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                                      ⚠️ {hoursNum}h (&gt;12h)
+                                    </span>
+                                  ) : hoursNum > 8 ? (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                                      Extended
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                      Standard
+                                    </span>
+                                  )}
+                                </div>
                                 {log.startTime && log.endTime && (
                                   <span className="text-[10px] font-normal text-slate-500">
                                     {log.startTime} - {log.endTime}
@@ -2058,8 +2210,8 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                                 )}
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-xs text-slate-500 max-w-[200px] truncate">
-                              {log.notes ? log.notes.split(':').slice(1).join(':') : ''}
+                            <td className="px-6 py-4 text-xs text-slate-500 max-w-[280px] truncate" title={noteDisplay}>
+                              {noteDisplay}
                             </td>
                             <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-1.5">
@@ -2067,8 +2219,14 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                                   <>
                                     <button
                                       onClick={() => {
-                                        const empName = log.workerName || (log.notes ? log.notes.split(':')[0] : log.trade) || '';
-                                        const noteText = log.notes ? log.notes.split(':').slice(1).join(':') : '';
+                                        const empName = log.workerName 
+                                          || (log.notes && log.notes.includes(':') && !log.notes.toLowerCase().startsWith('assigned') && !log.notes.toLowerCase().startsWith('allocated') ? log.notes.split(':')[0] : '') 
+                                          || log.trade 
+                                          || log.workerType 
+                                          || 'Site Worker';
+                                        const noteText = log.workerName && log.notes?.startsWith(`${log.workerName}:`)
+                                          ? log.notes.slice(log.workerName.length + 1).trim()
+                                          : (log.notes || '');
                                         setEditingLabourLog(log);
                                         setEditingHoursForm({
                                           date: log.date,
@@ -2108,8 +2266,8 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                             </td>
                           </tr>
                         );
-                      })
-                    )}
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -2170,9 +2328,7 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                 endTime: editingHoursForm.endTime,
                 hoursWorked: calculatedHours,
                 hours: calculatedHours,
-                notes: editingHoursForm.workerName 
-                  ? `${editingHoursForm.workerName}:${editingHoursForm.notes}`
-                  : editingHoursForm.notes
+                notes: editingHoursForm.notes || ''
               };
 
               updateLabourLog(updated);
@@ -2573,7 +2729,7 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
       {/* HR LOG HOURS MODAL */}
       {isLoggingHoursModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg shadow-2xl border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
+          <Card className="w-full max-w-2xl shadow-2xl border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
             <div className="bg-emerald-50 dark:bg-emerald-950/30 p-6 border-b border-emerald-100 dark:border-emerald-900/40 flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-2">
@@ -2587,19 +2743,89 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
             </div>
             <form onSubmit={handleLogHoursSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Select Employee *</label>
-                <select
-                  required
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-sm bg-white dark:bg-slate-900"
-                  value={hoursForm.employeeId || employees[0]?.id || ''}
-                  onChange={e => setHoursForm({ ...hoursForm, employeeId: e.target.value })}
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    Select Employees * ({selectedEmployeeIds.length} of {employees.length} Selected)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEmployeeIds(employees.map(e => e.id))}
+                      className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                    >
+                      Select All ({employees.length})
+                    </button>
+                    <span className="text-slate-300 dark:text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEmployeeIds(employees.filter(e => e.status === 'Active').map(e => e.id))}
+                      className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                    >
+                      Active Only
+                    </button>
+                    <span className="text-slate-300 dark:text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEmployeeIds([])}
+                      className="text-[11px] font-bold text-slate-500 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsEmployeePickerOpen(true)}
+                  className="w-full text-left p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-emerald-500 dark:hover:border-emerald-500 transition-all flex items-center justify-between group shadow-xs"
                 >
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName} ({emp.position} - {emp.department})
-                    </option>
-                  ))}
-                </select>
+                  <div className="flex items-center gap-2.5 overflow-hidden">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                      <Users className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                        {selectedEmployeeIds.length === 0 
+                          ? 'No employees selected — Click to choose' 
+                          : selectedEmployeeIds.length === employees.length 
+                            ? `All Employees Selected (${employees.length} personnel)` 
+                            : `${selectedEmployeeIds.length} Employee${selectedEmployeeIds.length === 1 ? '' : 's'} Selected`}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {selectedEmployeeIds.length === 0 
+                          ? 'Click to open employee selection pop-up panel' 
+                          : employees.filter(e => selectedEmployeeIds.includes(e.id)).map(e => `${e.firstName} ${e.lastName}`).join(', ')}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 shrink-0 ml-2 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/60">
+                    Browse & Select →
+                  </span>
+                </button>
+
+                {/* Quick Selected Chips with Remove button */}
+                {selectedEmployeeIds.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60">
+                    {employees.filter(e => selectedEmployeeIds.includes(e.id)).map(emp => (
+                      <span
+                        key={emp.id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 shadow-2xs"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        <span>{emp.firstName} {emp.lastName}</span>
+                        <span className="text-[10px] text-slate-400 font-normal">({emp.position})</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEmployeeIds(prev => prev.filter(id => id !== emp.id))}
+                          className="text-slate-400 hover:text-rose-500 ml-0.5"
+                          title={`Remove ${emp.firstName}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -2711,6 +2937,53 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                 </div>
               </div>
 
+              {/* Smart Shift Consolidation / Overlap Notice */}
+              {(() => {
+                if (!hoursForm.date || selectedEmployeeIds.length === 0) return null;
+                const selectedEmps = employees.filter(e => selectedEmployeeIds.includes(e.id));
+                const overlappingEmps = selectedEmps.filter(emp => {
+                  const empName = `${emp.firstName} ${emp.lastName}`.toLowerCase();
+                  return labourLogs.some(l => {
+                    const lName = (l.workerName || '').trim().toLowerCase();
+                    const lIsSpecial = (l.notes || '').toLowerCase().includes('night shift') || (l.notes || '').toLowerCase().includes('overtime');
+                    return lName === empName && l.date === hoursForm.date && (hoursForm.shiftType === 'Normal Shift' ? !lIsSpecial : true);
+                  });
+                });
+
+                if (overlappingEmps.length === 0) return null;
+
+                const isSpecial = hoursForm.shiftType === 'Overtime' || hoursForm.shiftType === 'Night Shift';
+
+                return (
+                  <div className={`p-3.5 rounded-xl border flex items-start gap-3 text-xs shadow-2xs ${
+                    isSpecial 
+                      ? 'bg-purple-50/80 border-purple-200 dark:bg-purple-950/40 dark:border-purple-800 text-purple-900 dark:text-purple-200'
+                      : 'bg-blue-50/80 border-blue-200 dark:bg-blue-950/40 dark:border-blue-800 text-blue-900 dark:text-blue-200'
+                  }`}>
+                    <AlertCircle className={`h-4 w-4 shrink-0 mt-0.5 ${isSpecial ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400'}`} />
+                    <div>
+                      <p className="font-bold">
+                        {isSpecial 
+                          ? `🌙 ${hoursForm.shiftType} Mode Active`
+                          : `ℹ️ Smart Daily Shift Consolidation (${overlappingEmps.length} Worker${overlappingEmps.length > 1 ? 's' : ''} Already Logged)`
+                        }
+                      </p>
+                      <p className="text-[11px] mt-0.5 leading-relaxed opacity-90">
+                        {isSpecial ? (
+                          <span>
+                            Logging additional {hoursForm.shiftType.toLowerCase()} hours for {overlappingEmps.length} worker{overlappingEmps.length > 1 ? 's' : ''} alongside their standard daily hours.
+                          </span>
+                        ) : (
+                          <span>
+                            <strong>{overlappingEmps.map(e => `${e.firstName} ${e.lastName}`).slice(0, 3).join(', ')}{overlappingEmps.length > 3 ? ` +${overlappingEmps.length - 3} more` : ''}</strong> already have a normal shift on {hoursForm.date}. To prevent duplicate rows, submitting will consolidate/update their single daily record (up to the 12h maximum limit).
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Work Notes / Tasks Completed</label>
                 <textarea
@@ -2722,22 +2995,231 @@ export function EmployeesModule({ onBack }: EmployeesModuleProps) {
                 />
               </div>
 
-              <div className="mt-6 flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <div className="mt-6 flex items-center justify-between gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
+                <span className="text-xs font-semibold text-slate-500">
+                  {selectedEmployeeIds.length} personnel selected
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsLoggingHoursModal(false)}
+                    className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={selectedEmployeeIds.length === 0}
+                    className="px-5 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-sm transition-all"
+                  >
+                    {selectedEmployeeIds.length > 1 
+                      ? `Log Hours (${selectedEmployeeIds.length} Employees)` 
+                      : 'Log Hours'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* EMPLOYEE PICKER POP-UP PANEL */}
+      {isEmployeePickerOpen && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-60 flex items-center justify-center p-4">
+          <Card className="w-full max-w-3xl max-h-[85vh] shadow-2xl border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 flex flex-col overflow-hidden bg-white dark:bg-slate-900">
+            {/* Header */}
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 p-5 border-b border-emerald-100 dark:border-emerald-900/40 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="text-lg font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-2">
+                  <Users className="h-5 w-5 text-emerald-600" /> Select Personnel for Hours Logging
+                </h3>
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
+                  Select one, multiple, or all employees to apply shift hours in one batch
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsEmployeePickerOpen(false)} 
+                className="text-emerald-600 hover:text-emerald-800 dark:text-emerald-300 p-1 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-3 bg-slate-50/60 dark:bg-slate-900/60 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, position, or department..."
+                    value={pickerSearchQuery}
+                    onChange={e => setPickerSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  {pickerSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setPickerSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                
+                <select
+                  value={pickerDepartmentFilter}
+                  onChange={e => setPickerDepartmentFilter(e.target.value)}
+                  className="px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-semibold"
+                >
+                  <option value="All">All Departments</option>
+                  {Array.from(new Set(employees.map(e => e.department).filter(Boolean))).map(dep => (
+                    <option key={dep} value={dep}>{dep}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quick Selection Actions */}
+              <div className="flex flex-wrap items-center justify-between text-xs pt-1 gap-2">
+                <span className="font-bold text-slate-700 dark:text-slate-300">
+                  Selected: <span className="text-emerald-600 dark:text-emerald-400 font-black">{selectedEmployeeIds.length}</span> of {employees.length} personnel
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const visibleIds = employees
+                        .filter(e => {
+                          const matchesSearch = `${e.firstName} ${e.lastName} ${e.position} ${e.department}`.toLowerCase().includes(pickerSearchQuery.toLowerCase());
+                          const matchesDept = pickerDepartmentFilter === 'All' || e.department === pickerDepartmentFilter;
+                          return matchesSearch && matchesDept;
+                        })
+                        .map(e => e.id);
+                      setSelectedEmployeeIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950/80 dark:hover:bg-emerald-900 dark:text-emerald-300 font-bold transition-colors"
+                  >
+                    Select Filtered
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allIds = employees.map(e => e.id);
+                      setSelectedEmployeeIds(allIds);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-colors"
+                  >
+                    Select All ({employees.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const activeIds = employees.filter(e => e.status === 'Active').map(e => e.id);
+                      setSelectedEmployeeIds(activeIds);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold transition-colors"
+                  >
+                    Active Only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedEmployeeIds([])}
+                    className="px-2.5 py-1 rounded-lg text-slate-500 hover:text-rose-600 font-bold transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Employee Checklist */}
+            <div className="p-4 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 flex-1 max-h-96">
+              {employees
+                .filter(e => {
+                  const matchesSearch = `${e.firstName} ${e.lastName} ${e.position} ${e.department}`.toLowerCase().includes(pickerSearchQuery.toLowerCase());
+                  const matchesDept = pickerDepartmentFilter === 'All' || e.department === pickerDepartmentFilter;
+                  return matchesSearch && matchesDept;
+                })
+                .map(emp => {
+                  const isSelected = selectedEmployeeIds.includes(emp.id);
+                  return (
+                    <div
+                      key={emp.id}
+                      onClick={() => {
+                        setSelectedEmployeeIds(prev => 
+                          prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id]
+                        );
+                      }}
+                      className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all my-1 ${
+                        isSelected 
+                          ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300/80 dark:border-emerald-800/60' 
+                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/60 border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}}
+                          className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 dark:border-slate-700 pointer-events-none"
+                        />
+                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-black flex items-center justify-center">
+                          {emp.firstName[0]}{emp.lastName[0]}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            {emp.firstName} {emp.lastName}
+                            {emp.status === 'Active' ? (
+                              <span className="w-2 h-2 rounded-full bg-emerald-500" title="Active"></span>
+                            ) : (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                {emp.status}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {emp.position} • <span className="font-semibold">{emp.department}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-2xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                        }`}>
+                          {isSelected ? '✓ Selected' : 'Select'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center shrink-0">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                {selectedEmployeeIds.length} of {employees.length} personnel selected
+              </span>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsLoggingHoursModal(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                  onClick={() => setIsEmployeePickerOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+                  type="button"
+                  onClick={() => setIsEmployeePickerOpen(false)}
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all flex items-center gap-1.5"
                 >
-                  Log Hours
+                  <Check className="h-4 w-4" /> Done ({selectedEmployeeIds.length} Selected)
                 </button>
               </div>
-            </form>
+            </div>
           </Card>
         </div>
       )}

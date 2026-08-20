@@ -222,7 +222,7 @@ export default function RemindersModule() {
       
       {/* Top Header Bar */}
       <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="w-full flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           
           {/* Title & Badge */}
           <div className="flex items-center gap-3 min-w-0">
@@ -298,8 +298,8 @@ export default function RemindersModule() {
       </div>
 
       {/* Main Content Area */}
-      <div className="p-4 sm:p-6 flex-1">
-        <div className="max-w-6xl mx-auto space-y-6">
+      <div className="p-4 sm:p-6 flex-1 w-full">
+        <div className="w-full space-y-6">
 
           {/* ================================================================ */}
           {/* TAB 1: REMINDERS SUB-SCREEN                                      */}

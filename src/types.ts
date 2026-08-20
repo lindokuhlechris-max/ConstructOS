@@ -304,21 +304,24 @@ export interface Activity {
 
   // Multi-Discipline Workstream Metadata
   workstream?: WorkstreamType;
+  customWorkstream?: string;
   linkedPTSActivityId?: string;
   linkedPTSActivityName?: string;
-  sectionSpan?: string; // e.g. "PTS 19 - PTS 20", "PTS 1 - PTS 2"
+  sectionSpan?: string; // e.g. "Section A - Section B", "PTS 19 - PTS 20"
   chainageStart?: string;
   chainageEnd?: string;
   prerequisiteWorkstreamIds?: string[];
 }
 
 export type WorkstreamType = 
-  | 'PTS_CONSTRUCTION'  // Civil & Physical Construction Execution
+  | 'CONSTRUCTION'      // Civil & Physical Construction Execution
+  | 'PTS_CONSTRUCTION'  // Legacy compatibility for Civil / Construction
   | 'SURVEYING'         // Topography, Setting-Out, Pegging, Benchmark, Elevation, As-Builts
   | 'QA_QC'             // Hold Points, Compaction Tests, Non-Conformance, Sign-Offs
   | 'MATERIALS'         // Batch Procurement, Delivery Tracking, Mill Certs, Material Allocation
-  | 'SAFETY'            // Daily Risk Assessments, Trench Permits, Tool Box Talks
-  | 'COMMISSIONING'     // Cable Splicing, Jointing, Pressure Testing, Energization
+  | 'SAFETY'            // Daily Risk Assessments, Permits, Tool Box Talks
+  | 'COMMISSIONING'     // Testing, Hydrotesting, Energization, Handover
+  | 'CUSTOM'            // User-defined Custom Workstream
   | string;
 
 export interface CustomDisciplineConfig {
@@ -350,12 +353,23 @@ export interface WorkstreamConfig {
   badgeClass: string;
 }
 
-export const WORKSTREAMS: Record<WorkstreamType, WorkstreamConfig> = {
+export const WORKSTREAMS: Record<string, WorkstreamConfig> = {
+  CONSTRUCTION: {
+    id: 'CONSTRUCTION',
+    name: 'Civil & Physical Execution',
+    shortName: 'Construction',
+    description: 'Physical site civil works, earthworks, structural execution, piping & installation',
+    icon: 'Building2',
+    color: '#0B5FFF',
+    bgLight: 'bg-blue-50 dark:bg-blue-950/40',
+    borderLight: 'border-blue-200 dark:border-blue-800',
+    badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300'
+  },
   PTS_CONSTRUCTION: {
-    id: 'PTS_CONSTRUCTION',
-    name: 'PTS & Civil Execution',
-    shortName: 'PTS Works',
-    description: 'Physical site civil works, trenching, cable installation & structures',
+    id: 'CONSTRUCTION',
+    name: 'Civil & Physical Execution',
+    shortName: 'Construction',
+    description: 'Physical site civil works, earthworks, structural execution, piping & installation',
     icon: 'Building2',
     color: '#0B5FFF',
     bgLight: 'bg-blue-50 dark:bg-blue-950/40',
@@ -366,7 +380,7 @@ export const WORKSTREAMS: Record<WorkstreamType, WorkstreamConfig> = {
     id: 'SURVEYING',
     name: 'Surveying & Setting-Out',
     shortName: 'Surveying',
-    description: 'Pegging, boundary verification, chainage coordinate logs & benchmarks',
+    description: 'Setting-out, boundary verification, chainage coordinate logs & benchmarks',
     icon: 'Compass',
     color: '#0284C7',
     bgLight: 'bg-sky-50 dark:bg-sky-950/40',
@@ -377,7 +391,7 @@ export const WORKSTREAMS: Record<WorkstreamType, WorkstreamConfig> = {
     id: 'QA_QC',
     name: 'QA/QC & Inspections',
     shortName: 'QA/QC',
-    description: 'Quality hold points, witness inspections, compaction tests & sign-offs',
+    description: 'Quality hold points, witness inspections, test plans, compaction & sign-offs',
     icon: 'ShieldCheck',
     color: '#E11D48',
     bgLight: 'bg-rose-50 dark:bg-rose-950/40',
@@ -399,7 +413,7 @@ export const WORKSTREAMS: Record<WorkstreamType, WorkstreamConfig> = {
     id: 'SAFETY',
     name: 'Safety & HSE Compliance',
     shortName: 'Safety / HSE',
-    description: 'Work permits, trench box checks, risk assessments & toolbox talks',
+    description: 'Work permits, safety audits, risk assessments & toolbox talks',
     icon: 'ShieldAlert',
     color: '#059669',
     bgLight: 'bg-emerald-50 dark:bg-emerald-950/40',
@@ -408,14 +422,25 @@ export const WORKSTREAMS: Record<WorkstreamType, WorkstreamConfig> = {
   },
   COMMISSIONING: {
     id: 'COMMISSIONING',
-    name: 'Electrical & Commissioning',
+    name: 'Testing & Commissioning',
     shortName: 'Commissioning',
-    description: 'Cable jointing, termination, pressure tests, energization & handover',
+    description: 'Pressure testing, hydrotests, electrical testing, energization & handover',
     icon: 'Zap',
     color: '#7C3AED',
     bgLight: 'bg-purple-50 dark:bg-purple-950/40',
     borderLight: 'border-purple-200 dark:border-purple-800',
     badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300'
+  },
+  CUSTOM: {
+    id: 'CUSTOM',
+    name: 'Custom Discipline / Workstream',
+    shortName: 'Custom',
+    description: 'User-defined specialized discipline or customized scope of work',
+    icon: 'Tag',
+    color: '#64748B',
+    bgLight: 'bg-slate-50 dark:bg-slate-800/60',
+    borderLight: 'border-slate-300 dark:border-slate-700',
+    badgeClass: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
   }
 };
 

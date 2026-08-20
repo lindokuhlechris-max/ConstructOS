@@ -77,9 +77,11 @@ interface AppContextType {
   pendingChangesCount: number;
   setSyncConflict: (conflict: SyncConflict | null) => void;
   resolveSyncConflict: (resolution: 'local' | 'server') => void;
-  triggerSyncToast: (message?: string, type?: 'syncing' | 'warning' | 'success' | 'offline') => void;
+  triggerSyncToast: (message?: string, type?: 'syncing' | 'warning' | 'success' | 'offline' | 'info' | 'error', autoDismissMs?: number) => void;
   hideSyncToast: () => void;
   forceSyncAll: () => Promise<void>;
+  restoreFromArchivePackage: (plainPackage: any, sectionsToRestore: any[], strategy?: 'merge' | 'replace') => Promise<any>;
+  clearDataSections: (sectionsToClear: string[], resetToDefaults?: boolean) => Promise<any>;
 
   setUserRole: (role: UserRole) => void;
   setTheme: (theme: 'light' | 'dark') => void;
@@ -559,15 +561,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSyncConflict(null);
   };
 
-  const triggerSyncToast = (message?: string, type?: 'syncing' | 'warning' | 'success' | 'offline' | 'info' | 'error') => {
+  const syncToastTimerRef = React.useRef<any>(null);
+
+  const triggerSyncToast = (
+    message?: string, 
+    type?: 'syncing' | 'warning' | 'success' | 'offline' | 'info' | 'error',
+    autoDismissMs: number = 3500
+  ) => {
+    if (syncToastTimerRef.current) {
+      clearTimeout(syncToastTimerRef.current);
+      syncToastTimerRef.current = null;
+    }
+
+    const resolvedType = type || (isSyncing ? 'syncing' : isOffline ? 'offline' : 'warning');
     setSyncToast({
       visible: true,
       message,
-      type: type || (isSyncing ? 'syncing' : isOffline ? 'offline' : 'warning')
+      type: resolvedType
     });
+
+    if (resolvedType !== 'syncing' && autoDismissMs > 0) {
+      syncToastTimerRef.current = setTimeout(() => {
+        setSyncToast(prev => ({ ...prev, visible: false }));
+        syncToastTimerRef.current = null;
+      }, autoDismissMs);
+    }
   };
 
   const hideSyncToast = () => {
+    if (syncToastTimerRef.current) {
+      clearTimeout(syncToastTimerRef.current);
+      syncToastTimerRef.current = null;
+    }
     setSyncToast(prev => ({ ...prev, visible: false }));
   };
 
@@ -776,6 +801,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('Error restoring cached state:', e);
     }
+
+    // 1.5. Hydrate from IndexedDB offline database in case IDB has restored data not yet in localStorage
+    import('../lib/idbService').then(({ getAllIDBData }) => {
+      return getAllIDBData();
+    }).then(idbData => {
+      if (!idbData) return;
+      const hydrateFromIDB = (key: string, setter: React.Dispatch<React.SetStateAction<any[]>>) => {
+        const arr = idbData[key];
+        if (Array.isArray(arr) && arr.length > 0) {
+          setter(prev => {
+            if (!prev || prev.length === 0) {
+              try { localStorage.setItem(key, JSON.stringify(arr)); } catch {}
+              return arr;
+            }
+            return prev;
+          });
+        }
+      };
+      hydrateFromIDB('projects', setProjects);
+      hydrateFromIDB('activities', setActivities);
+      hydrateFromIDB('reports', setReports);
+      hydrateFromIDB('weatherLogs', setWeatherLogs);
+      hydrateFromIDB('labourLogs', setLabourLogs);
+      hydrateFromIDB('labourAllocations', setLabourAllocations);
+      hydrateFromIDB('workerCheckIns', setWorkerCheckIns);
+      hydrateFromIDB('auditLogs', setAuditLogs);
+      hydrateFromIDB('safetyIncidents', setSafetyIncidents);
+      hydrateFromIDB('allocations', setAllocations);
+      hydrateFromIDB('materials', setMaterials);
+      hydrateFromIDB('materialReceipts', setMaterialReceipts);
+      hydrateFromIDB('materialUsages', setMaterialUsages);
+      hydrateFromIDB('customFieldDefinitions', setCustomFieldDefinitions);
+      hydrateFromIDB('employees', setEmployees);
+      hydrateFromIDB('teams', setTeams);
+      hydrateFromIDB('equipment', setEquipment);
+      hydrateFromIDB('equipmentLogs', setEquipmentLogs);
+      hydrateFromIDB('safetyRequirements', setSafetyRequirements);
+      hydrateFromIDB('safetyPolicies', setSafetyPolicies);
+      hydrateFromIDB('activityInspections', setActivityInspections);
+      hydrateFromIDB('siteInspectionPhotos', setSiteInspectionPhotos);
+      hydrateFromIDB('ppeItems', setPPEItems);
+      hydrateFromIDB('qaInspections', setQAInspections);
+      hydrateFromIDB('documents', setDocuments);
+      hydrateFromIDB('accommodations', setAccommodations);
+      hydrateFromIDB('accommodationUtilities', setAccommodationUtilities);
+      hydrateFromIDB('accommodationPayments', setAccommodationPayments);
+      hydrateFromIDB('surveyRecords', setSurveyRecords);
+      hydrateFromIDB('reminders', setReminders);
+      hydrateFromIDB('constructos_notes', setNotes);
+    }).catch(err => console.warn('Could not hydrate from IDB on mount:', err));
 
     // 2. Fetch server Express database state as additional backup
     fetch('/api/state')
@@ -1245,8 +1320,84 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addLabourLog = (newLog: LabourLog) => {
     isRemoteUpdateRef.current = false;
+    
+    // Reject multi-name comma-separated combined group strings
+    const rawName = (newLog.workerName || '').trim();
+    if (rawName.includes(',') && rawName.split(',').length > 1) {
+      console.warn("Skipping combined multi-worker string log:", rawName);
+      return;
+    }
+
+    const normName = (newLog.workerName || newLog.trade || 'Worker').trim().toLowerCase();
+    const logDate = newLog.date || new Date().toISOString().split('T')[0];
+    const isSpecialShift = (newLog.notes || '').toLowerCase().includes('night shift') || (newLog.notes || '').toLowerCase().includes('overtime');
+
+    let processedLog: LabourLog = {
+      ...newLog,
+      date: logDate,
+      hours: Math.min(isSpecialShift ? 16 : 12, Math.max(0.5, Number(newLog.hoursWorked || newLog.hours || 8))),
+      hoursWorked: Math.min(isSpecialShift ? 16 : 12, Math.max(0.5, Number(newLog.hoursWorked || newLog.hours || 8)))
+    };
+
+    let didUpdateExisting = false;
+
     setLabourLogs(prev => {
-      const updated = [newLog, ...prev];
+      // If normal shift, check if worker already has a normal shift entry on that date
+      if (!isSpecialShift) {
+        const existingIndex = prev.findIndex(l => {
+          const lName = (l.workerName || l.trade || '').trim().toLowerCase();
+          const lDate = l.date;
+          const lIsSpecial = (l.notes || '').toLowerCase().includes('night shift') || (l.notes || '').toLowerCase().includes('overtime');
+          return lName === normName && lDate === logDate && !lIsSpecial;
+        });
+
+        if (existingIndex >= 0) {
+          didUpdateExisting = true;
+          const existing = prev[existingIndex];
+          // Consolidate/update hours capped at 12 max per day
+          const consolidatedHours = Math.min(12, Math.max(existing.hoursWorked || existing.hours || 0, processedLog.hoursWorked || processedLog.hours || 8));
+          const updatedRecord: LabourLog = {
+            ...existing,
+            projectId: processedLog.projectId || existing.projectId,
+            activityId: processedLog.activityId || existing.activityId,
+            startTime: processedLog.startTime || existing.startTime,
+            endTime: processedLog.endTime || existing.endTime,
+            lunchBreak: processedLog.lunchBreak !== undefined ? processedLog.lunchBreak : existing.lunchBreak,
+            hours: consolidatedHours,
+            hoursWorked: consolidatedHours,
+            trade: processedLog.trade || existing.trade,
+            workerType: processedLog.workerType || existing.workerType,
+            notes: processedLog.notes || existing.notes
+          };
+          const updated = [...prev];
+          updated[existingIndex] = updatedRecord;
+          localStorage.setItem('labourLogs', JSON.stringify(updated));
+          if (isManualSyncMode) {
+            setHasPendingChanges(true);
+            localStorage.setItem('hasPendingChanges', 'true');
+            setPendingChangesCount(c => c + 1);
+          } else {
+            saveFirestoreKey('labourLogs', updated);
+          }
+          syncToServer('update_labour_log', updatedRecord);
+          return updated;
+        }
+      }
+
+      // If special shift (overtime/night shift), limit cumulative day hours
+      if (isSpecialShift) {
+        const existingForDay = prev.filter(l => {
+          const lName = (l.workerName || l.trade || '').trim().toLowerCase();
+          return lName === normName && l.date === logDate;
+        });
+        const currentTotal = existingForDay.reduce((sum, l) => sum + (l.hoursWorked || l.hours || 0), 0);
+        const maxAdditional = Math.max(1, 16 - currentTotal);
+        const allowedHours = Math.min(maxAdditional, processedLog.hoursWorked || 8);
+        processedLog.hours = allowedHours;
+        processedLog.hoursWorked = allowedHours;
+      }
+
+      const updated = [processedLog, ...prev];
       localStorage.setItem('labourLogs', JSON.stringify(updated));
       if (isManualSyncMode) {
         setHasPendingChanges(true);
@@ -1257,22 +1408,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       return updated;
     });
-    syncToServer('add_labour_log', newLog);
+
+    if (!didUpdateExisting) {
+      syncToServer('add_labour_log', processedLog);
+    }
 
     const userName = currentUserProfile?.name || 'Current User';
     const userRoleStr = currentUserProfile?.role || userRole || 'User';
     addAuditLog({
       id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
-      projectId: newLog.projectId,
+      projectId: processedLog.projectId,
       userId: `${userName} (${userRoleStr})`,
       userRole: userRoleStr,
-      action: 'Labour Log Created',
-      details: `${newLog.hours || newLog.hoursWorked || 0} hours logged for ${newLog.workerName || newLog.trade || 'Worker'} on Activity ${newLog?.activityId || 'N/A'}`,
+      action: didUpdateExisting ? 'Labour Log Updated (Consolidated)' : 'Labour Log Created',
+      details: `${processedLog.hoursWorked} hours logged for ${processedLog.workerName || processedLog.trade || 'Worker'} on Activity ${processedLog?.activityId || 'N/A'}`,
       timestamp: new Date().toISOString(),
       entityType: 'LabourLog',
-      entityId: newLog.id,
-      actionType: 'create',
-      newValue: `Worker: ${newLog.workerName || newLog.trade || 'N/A'} | Hours: ${newLog.hours || newLog.hoursWorked || 0}`
+      entityId: processedLog.id,
+      actionType: didUpdateExisting ? 'update' : 'create',
+      newValue: `Worker: ${processedLog.workerName || processedLog.trade || 'N/A'} | Hours: ${processedLog.hoursWorked}`
     });
   };
 
@@ -2870,6 +3024,269 @@ export function AppProvider({ children }: { children: ReactNode }) {
     triggerSyncToast(`Rejected admission request`, 'warning');
   };
 
+  const restoreFromArchivePackage = async (
+    plainPackage: any,
+    sectionsToRestore: string[],
+    strategy: 'merge' | 'replace' = 'merge'
+  ) => {
+    isRemoteUpdateRef.current = false;
+    const { executeRestore } = await import('../lib/dataArchiveService');
+    const { getAllIDBData } = await import('../lib/idbService');
+    const result = await executeRestore(plainPackage, sectionsToRestore as any, strategy);
+
+    if (result.success) {
+      try {
+        const updatedAllIDB = await getAllIDBData();
+        const incomingIDB = plainPackage.data?.idb || {};
+        const incomingStorage = plainPackage.data?.storage || {};
+
+        const getCollection = (k: string) => {
+          if (Array.isArray(updatedAllIDB[k]) && updatedAllIDB[k].length > 0) {
+            try { localStorage.setItem(k, JSON.stringify(updatedAllIDB[k])); } catch {}
+            return updatedAllIDB[k];
+          }
+          if (Array.isArray(incomingIDB[k]) && incomingIDB[k].length > 0) {
+            try { localStorage.setItem(k, JSON.stringify(incomingIDB[k])); } catch {}
+            return incomingIDB[k];
+          }
+          const val = localStorage.getItem(k) || incomingStorage[k];
+          if (!val) return null;
+          try {
+            const parsed = typeof val === 'string' ? JSON.parse(val) : val;
+            if (Array.isArray(parsed)) {
+              try { localStorage.setItem(k, JSON.stringify(parsed)); } catch {}
+              return parsed.filter(Boolean);
+            }
+            return parsed;
+          } catch {
+            return null;
+          }
+        };
+
+        const resProjects = getCollection('projects');
+        const resActivities = getCollection('activities');
+        const resReports = getCollection('reports');
+        const resWeatherLogs = getCollection('weatherLogs');
+        const resLabourLogs = getCollection('labourLogs');
+        const resLabourAllocations = getCollection('labourAllocations');
+        const resWorkerCheckIns = getCollection('workerCheckIns');
+        const resAuditLogs = getCollection('auditLogs');
+        const resSafetyIncidents = getCollection('safetyIncidents');
+        const resAllocations = getCollection('allocations');
+        const resMaterials = getCollection('materials');
+        const resMaterialReceipts = getCollection('materialReceipts');
+        const resMaterialUsages = getCollection('materialUsages');
+        const resCustomFields = getCollection('customFieldDefinitions');
+        const resEmployees = getCollection('employees');
+        const resTeams = getCollection('teams');
+        const resEquipment = getCollection('equipment');
+        const resEquipmentLogs = getCollection('equipmentLogs');
+        const resSafetyReqs = getCollection('safetyRequirements');
+        const resSafetyPolicies = getCollection('safetyPolicies');
+        const resActivityInspections = getCollection('activityInspections');
+        const resInspectionPhotos = getCollection('siteInspectionPhotos');
+        const resPPEItems = getCollection('ppeItems');
+        const resQAInspections = getCollection('qaInspections');
+        const resDocuments = getCollection('documents');
+        const resAccommodations = getCollection('accommodations');
+        const resAccUtils = getCollection('accommodationUtilities');
+        const resAccPays = getCollection('accommodationPayments');
+        const resSurveys = getCollection('surveyRecords');
+        const resNotes = getCollection('constructos_notes');
+        const resProfiles = getCollection('userProfiles');
+        const resReminders = getCollection('reminders');
+
+        if (resProjects) setProjects(resProjects);
+        if (resActivities) setActivities(resActivities);
+        if (resReports) setReports(resReports);
+        if (resWeatherLogs) setWeatherLogs(resWeatherLogs);
+        if (resLabourLogs) setLabourLogs(resLabourLogs);
+        if (resLabourAllocations) setLabourAllocations(resLabourAllocations);
+        if (resWorkerCheckIns) setWorkerCheckIns(resWorkerCheckIns);
+        if (resAuditLogs) setAuditLogs(resAuditLogs);
+        if (resSafetyIncidents) setSafetyIncidents(resSafetyIncidents);
+        if (resAllocations) setAllocations(resAllocations);
+        if (resMaterials) setMaterials(resMaterials);
+        if (resMaterialReceipts) setMaterialReceipts(resMaterialReceipts);
+        if (resMaterialUsages) setMaterialUsages(resMaterialUsages);
+        if (resCustomFields) setCustomFieldDefinitions(resCustomFields);
+        if (resEmployees) setEmployees(resEmployees);
+        if (resTeams) setTeams(resTeams);
+        if (resEquipment) setEquipment(resEquipment);
+        if (resEquipmentLogs) setEquipmentLogs(resEquipmentLogs);
+        if (resSafetyReqs) setSafetyRequirements(resSafetyReqs);
+        if (resSafetyPolicies) setSafetyPolicies(resSafetyPolicies);
+        if (resActivityInspections) setActivityInspections(resActivityInspections);
+        if (resInspectionPhotos) setSiteInspectionPhotos(resInspectionPhotos);
+        if (resPPEItems) setPPEItems(resPPEItems);
+        if (resQAInspections) setQAInspections(resQAInspections);
+        if (resDocuments) setDocuments(resDocuments);
+        if (resAccommodations) setAccommodations(resAccommodations);
+        if (resAccUtils) setAccommodationUtilities(resAccUtils);
+        if (resAccPays) setAccommodationPayments(resAccPays);
+        if (resSurveys) setSurveyRecords(resSurveys);
+        if (resNotes) setNotes(resNotes);
+        if (resProfiles) setUserProfiles(resProfiles);
+        if (resReminders) setReminders(resReminders);
+
+        const fullState = {
+          projects: resProjects || projects,
+          activities: resActivities || activities,
+          reports: resReports || reports,
+          weatherLogs: resWeatherLogs || weatherLogs,
+          labourLogs: resLabourLogs || labourLogs,
+          labourAllocations: resLabourAllocations || labourAllocations,
+          workerCheckIns: resWorkerCheckIns || workerCheckIns,
+          auditLogs: resAuditLogs || auditLogs,
+          safetyIncidents: resSafetyIncidents || safetyIncidents,
+          allocations: resAllocations || allocations,
+          materials: resMaterials || materials,
+          materialReceipts: resMaterialReceipts || materialReceipts,
+          materialUsages: resMaterialUsages || materialUsages,
+          customFieldDefinitions: resCustomFields || customFieldDefinitions,
+          employees: resEmployees || employees,
+          teams: resTeams || teams,
+          equipment: resEquipment || equipment,
+          equipmentLogs: resEquipmentLogs || equipmentLogs,
+          safetyRequirements: resSafetyReqs || safetyRequirements,
+          safetyPolicies: resSafetyPolicies || safetyPolicies,
+          activityInspections: resActivityInspections || activityInspections,
+          siteInspectionPhotos: resInspectionPhotos || siteInspectionPhotos,
+          ppeItems: resPPEItems || ppeItems,
+          qaInspections: resQAInspections || qaInspections,
+          documents: resDocuments || documents,
+          userProfiles: resProfiles || userProfiles,
+          reminders: resReminders || reminders,
+          surveyRecords: resSurveys || surveyRecords
+        };
+
+        saveFullFirestoreState(fullState).catch(console.warn);
+        syncToServer('sync_full_state', fullState);
+        setHasPendingChanges(false);
+        localStorage.setItem('hasPendingChanges', 'false');
+        setPendingChangesCount(0);
+        localStorage.setItem('pendingChangesCount', '0');
+        setLastSyncedAt(new Date());
+
+        triggerSyncToast(`Restoration successful: ${result.recordsProcessed} records imported & synced`, 'success', 4000);
+      } catch (reloadErr) {
+        console.error('State re-hydration error:', reloadErr);
+      }
+    }
+    return result;
+  };
+
+  const clearDataSections = async (
+    sectionsToClear: string[],
+    resetToDefaults = false
+  ) => {
+    isRemoteUpdateRef.current = false;
+    const { clearSectionData } = await import('../lib/dataArchiveService');
+    const result = await clearSectionData(sectionsToClear as any, resetToDefaults);
+
+    if (result.success) {
+      try {
+        if (sectionsToClear.includes('activities')) {
+          setActivities([]);
+          setProjects([]);
+          setAllocations([]);
+          setAuditLogs([]);
+          setReminders([]);
+          setNotes([]);
+        }
+        if (sectionsToClear.includes('reports')) {
+          setReports([]);
+          setWeatherLogs([]);
+        }
+        if (sectionsToClear.includes('labour')) {
+          setLabourLogs([]);
+          setLabourAllocations([]);
+          setWorkerCheckIns([]);
+          setEmployees([]);
+          setTeams([]);
+        }
+        if (sectionsToClear.includes('materials')) {
+          setMaterials([]);
+          setMaterialReceipts([]);
+          setMaterialUsages([]);
+          setPPEItems([]);
+        }
+        if (sectionsToClear.includes('safety')) {
+          setSafetyIncidents([]);
+          setSafetyRequirements([]);
+          setSafetyPolicies([]);
+        }
+        if (sectionsToClear.includes('quality')) {
+          setQAInspections([]);
+          setActivityInspections([]);
+          setSiteInspectionPhotos([]);
+        }
+        if (sectionsToClear.includes('equipment')) {
+          setEquipment([]);
+          setEquipmentLogs([]);
+        }
+        if (sectionsToClear.includes('accommodation')) {
+          setAccommodations([]);
+          setAccommodationUtilities([]);
+          setAccommodationPayments([]);
+        }
+        if (sectionsToClear.includes('surveys')) {
+          setSurveyRecords([]);
+        }
+        if (sectionsToClear.includes('documents')) {
+          setDocuments([]);
+        }
+        if (sectionsToClear.includes('settings') && resetToDefaults) {
+          setCustomFieldDefinitions([]);
+        }
+
+        const fullState = {
+          projects: sectionsToClear.includes('activities') ? [] : projects,
+          activities: sectionsToClear.includes('activities') ? [] : activities,
+          reports: sectionsToClear.includes('reports') ? [] : reports,
+          weatherLogs: sectionsToClear.includes('reports') ? [] : weatherLogs,
+          labourLogs: sectionsToClear.includes('labour') ? [] : labourLogs,
+          labourAllocations: sectionsToClear.includes('labour') ? [] : labourAllocations,
+          workerCheckIns: sectionsToClear.includes('labour') ? [] : workerCheckIns,
+          auditLogs: sectionsToClear.includes('activities') ? [] : auditLogs,
+          safetyIncidents: sectionsToClear.includes('safety') ? [] : safetyIncidents,
+          allocations: sectionsToClear.includes('activities') ? [] : allocations,
+          materials: sectionsToClear.includes('materials') ? [] : materials,
+          materialReceipts: sectionsToClear.includes('materials') ? [] : materialReceipts,
+          materialUsages: sectionsToClear.includes('materials') ? [] : materialUsages,
+          customFieldDefinitions: (sectionsToClear.includes('settings') && resetToDefaults) ? [] : customFieldDefinitions,
+          employees: sectionsToClear.includes('labour') ? [] : employees,
+          teams: sectionsToClear.includes('labour') ? [] : teams,
+          equipment: sectionsToClear.includes('equipment') ? [] : equipment,
+          equipmentLogs: sectionsToClear.includes('equipment') ? [] : equipmentLogs,
+          safetyRequirements: sectionsToClear.includes('safety') ? [] : safetyRequirements,
+          safetyPolicies: sectionsToClear.includes('safety') ? [] : safetyPolicies,
+          activityInspections: sectionsToClear.includes('quality') ? [] : activityInspections,
+          siteInspectionPhotos: sectionsToClear.includes('quality') ? [] : siteInspectionPhotos,
+          ppeItems: sectionsToClear.includes('materials') ? [] : ppeItems,
+          qaInspections: sectionsToClear.includes('quality') ? [] : qaInspections,
+          documents: sectionsToClear.includes('documents') ? [] : documents,
+          userProfiles: userProfiles,
+          reminders: sectionsToClear.includes('activities') ? [] : reminders,
+          surveyRecords: sectionsToClear.includes('surveys') ? [] : surveyRecords
+        };
+
+        saveFullFirestoreState(fullState).catch(console.warn);
+        syncToServer('sync_full_state', fullState);
+        setHasPendingChanges(false);
+        localStorage.setItem('hasPendingChanges', 'false');
+        setPendingChangesCount(0);
+        localStorage.setItem('pendingChangesCount', '0');
+        setLastSyncedAt(new Date());
+
+        triggerSyncToast(`Purged ${result.recordsCleared} records across ${sectionsToClear.length} section(s)`, 'success', 3500);
+      } catch (err) {
+        console.error('State purge synchronization error:', err);
+      }
+    }
+    return result;
+  };
+
   React.useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -2913,7 +3330,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addAccommodationPayment, updateAccommodationPayment, deleteAccommodationPayment,
       surveyRecords, addSurveyRecord, updateSurveyRecord, deleteSurveyRecord,
       batchGenerateSurveySections, linkSurveyRecordToActivity, unlinkSurveyRecordFromActivity,
-      notes, addNote, updateNote, deleteNote, togglePinNote, toggleArchiveNote, convertNoteToReminder
+      notes, addNote, updateNote, deleteNote, togglePinNote, toggleArchiveNote, convertNoteToReminder,
+      restoreFromArchivePackage, clearDataSections
     }}>
       {children}
       <SyncNotificationToast />

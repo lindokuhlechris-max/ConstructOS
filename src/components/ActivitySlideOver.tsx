@@ -340,8 +340,10 @@ export function ActivitySlideOver({
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Scope & Metrics</h4>
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div className="p-3 rounded-xl bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Discipline</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{activity.discipline || 'General Civil'}</span>
+                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Workstream</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        {activity.workstream && WORKSTREAMS[activity.workstream] ? WORKSTREAMS[activity.workstream].name : 'PTS Works / Construction'}
+                      </span>
                     </div>
                     <div className="p-3 rounded-xl bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
                       <span className="text-slate-400 block text-[10px] font-bold uppercase">Work Package</span>

@@ -50,6 +50,7 @@ import {
   RestoreStrategy
 } from '../lib/dataArchiveService';
 import { saveOrShareFile } from '../lib/fileExportService';
+import { useAppContext } from '../context/AppContext';
 
 export interface DataMigrationEngineModalProps {
   isOpen: boolean;
@@ -78,6 +79,7 @@ export function DataMigrationEngineModal({
   initialTab = 'export',
   currentUserProfile
 }: DataMigrationEngineModalProps) {
+  const { restoreFromArchivePackage } = useAppContext();
   const [activeTab, setActiveTab] = useState<'export' | 'restore'>(initialTab);
   const [liveCounts, setLiveCounts] = useState<Record<AppSectionKey, number>>({} as any);
 
@@ -326,7 +328,7 @@ export function DataMigrationEngineModal({
     setIsRestoring(true);
 
     try {
-      const result = await executeRestore(unlockedArchive, selectedRestoreSections, restoreStrategy);
+      const result = await restoreFromArchivePackage(unlockedArchive, selectedRestoreSections, restoreStrategy);
 
       if (result.success) {
         setRestoreSuccessReport({
@@ -1027,14 +1029,21 @@ export function DataMigrationEngineModal({
                         <span>Restoration Completed Successfully!</span>
                       </div>
                       <p className="text-xs text-emerald-800 dark:text-emerald-300">
-                        {restoreSuccessReport.message}
+                        {restoreSuccessReport.message} All records have been live-applied to your workspace.
                       </p>
-                      <div className="pt-2">
+                      <div className="pt-2 flex items-center gap-2">
                         <Button
-                          onClick={() => window.location.reload()}
-                          className="h-8 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold gap-1.5"
+                          onClick={onClose}
+                          className="h-8 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold gap-1.5 shadow-xs"
                         >
-                          <RotateCcw className="h-3.5 w-3.5" /> Reload Application to View Updates
+                          <Check className="h-3.5 w-3.5" /> Done & View Workspace
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => window.location.reload()}
+                          className="h-8 px-3 rounded-xl text-xs border-emerald-300 text-emerald-800 dark:text-emerald-300"
+                        >
+                          <RotateCcw className="h-3 w-3" /> Reload Page
                         </Button>
                       </div>
                     </div>

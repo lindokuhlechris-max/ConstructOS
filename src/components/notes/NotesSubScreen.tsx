@@ -355,7 +355,7 @@ export function NotesSubScreen() {
             <span>Pinned Notes ({pinnedNotes.length})</span>
           </div>
 
-          <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-2.5'}>
+          <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4' : 'space-y-2.5'}>
             {pinnedNotes.map(note => (
               <NoteCard
                 key={note.id}
@@ -405,7 +405,7 @@ export function NotesSubScreen() {
             )}
           </div>
         ) : (
-          <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-2.5'}>
+          <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4' : 'space-y-2.5'}>
             {(pinnedNotes.length > 0 && !showArchived ? regularNotes : filteredNotes).map(note => (
               <NoteCard
                 key={note.id}

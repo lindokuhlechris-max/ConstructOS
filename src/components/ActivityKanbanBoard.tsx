@@ -121,7 +121,7 @@ export function ActivityKanbanBoard({
                   const subtasks = activity.subtasks || [];
                   const subtasksCount = subtasks.length;
                   const completedSubtasksCount = subtasks.filter(s => s.status === 'Completed').length;
-                  const wsConfig = WORKSTREAMS[activity.workstream || 'PTS_CONSTRUCTION'] || WORKSTREAMS.PTS_CONSTRUCTION;
+                  const wsConfig = WORKSTREAMS[activity.workstream || 'CONSTRUCTION'] || WORKSTREAMS.CONSTRUCTION;
                   const holdPointsCount = subtasks.filter(s => s.isHoldPoint).length;
 
                   return (
@@ -135,7 +135,7 @@ export function ActivityKanbanBoard({
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${wsConfig.badgeClass}`}>
                             {getWorkstreamIcon(activity.workstream)}
-                            {wsConfig.shortName}
+                            {activity.workstream === 'CUSTOM' && activity.customWorkstream ? activity.customWorkstream : wsConfig.shortName}
                           </span>
                           <span className="text-[10px] font-mono text-slate-400 font-bold">
                             {activity.id}
@@ -159,7 +159,7 @@ export function ActivityKanbanBoard({
                         {activity.name}
                       </h4>
 
-                      {/* Linked PTS Activity Handshake Pill */}
+                      {/* Linked Activity Handshake Pill */}
                       {(activity.linkedPTSActivityName || activity.linkedPTSActivityId || activity.sectionSpan) && (
                         <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[10px] text-indigo-700 dark:text-indigo-300 font-semibold truncate">
                           <Link2 className="h-3 w-3 text-indigo-600 shrink-0" />

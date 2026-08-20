@@ -174,9 +174,15 @@ export function ActivityForm({ onClose, onSubmit, initialValues, isDuplicate }: 
       let assignedEquipment = [...(formData.assignedEquipment || [])];
 
       (formData.subtasks || []).forEach(s => {
-        const workers = [...(s.assignedWorkers || []), ...(s.assignedPerson ? [s.assignedPerson] : [])];
+        const workersSet = new Set<string>();
+        (s.assignedWorkers || []).forEach(w => { if (w && w.trim()) workersSet.add(w.trim()); });
+        if (s.assignedPerson) {
+          s.assignedPerson.split(',').map(p => p.trim()).filter(Boolean).forEach(p => workersSet.add(p));
+        }
+        const workers = Array.from(workersSet);
+
         workers.forEach(wName => {
-          if (!wName || wName.trim() === '') return;
+          if (!wName || wName.trim() === '' || wName.includes(',')) return;
           if (!assignedLabour.some(l => l.name.toLowerCase() === wName.toLowerCase())) {
             assignedLabour.push({
               id: `TLA-SUB-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -292,48 +298,67 @@ export function ActivityForm({ onClose, onSubmit, initialValues, isDuplicate }: 
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-              {(Object.keys(WORKSTREAMS) as WorkstreamType[]).map(wsKey => {
-                const ws = WORKSTREAMS[wsKey];
-                const isSelected = (formData.workstream || 'PTS_CONSTRUCTION') === wsKey;
-                return (
-                  <button
-                    key={wsKey}
-                    type="button"
-                    onClick={() => {
-                      handleChange('workstream', wsKey);
-                      if (wsKey === 'SURVEYING' && !formData.discipline) handleChange('discipline', 'Surveying');
-                      if (wsKey === 'QA_QC' && !formData.discipline) handleChange('discipline', 'Quality');
-                      if (wsKey === 'SAFETY' && !formData.discipline) handleChange('discipline', 'Safety');
-                    }}
-                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                      isSelected 
-                        ? 'border-[#0B5FFF] bg-blue-50/80 dark:bg-blue-950/60 ring-2 ring-[#0B5FFF]/30 shadow-xs' 
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
-                    }`}
-                  >
-                    <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                      {ws.shortName}
-                    </span>
-                    <span className="text-[9px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-tight">
-                      {ws.description}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+              {(Object.keys(WORKSTREAMS) as string[])
+                .filter(key => key !== 'PTS_CONSTRUCTION')
+                .map(wsKey => {
+                  const ws = WORKSTREAMS[wsKey];
+                  const currentWs = formData.workstream === 'PTS_CONSTRUCTION' ? 'CONSTRUCTION' : (formData.workstream || 'CONSTRUCTION');
+                  const isSelected = currentWs === wsKey;
+                  return (
+                    <button
+                      key={wsKey}
+                      type="button"
+                      onClick={() => {
+                        handleChange('workstream', wsKey);
+                        if (wsKey === 'SURVEYING' && !formData.discipline) handleChange('discipline', 'Surveying');
+                        if (wsKey === 'QA_QC' && !formData.discipline) handleChange('discipline', 'Quality');
+                        if (wsKey === 'SAFETY' && !formData.discipline) handleChange('discipline', 'Safety');
+                      }}
+                      className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
+                        isSelected 
+                          ? 'border-[#0B5FFF] bg-blue-50/80 dark:bg-blue-950/60 ring-2 ring-[#0B5FFF]/30 shadow-xs' 
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
+                      }`}
+                    >
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {ws.shortName}
+                      </span>
+                      <span className="text-[9px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-tight">
+                        {ws.description}
+                      </span>
+                    </button>
+                  );
+                })}
             </div>
 
-            {/* Optional Target PTS Activity Linking (for non-PTS workstreams) */}
-            {formData.workstream && formData.workstream !== 'PTS_CONSTRUCTION' && (
+            {/* Custom Workstream input if Custom is selected */}
+            {(formData.workstream === 'CUSTOM' || (!WORKSTREAMS[formData.workstream || ''] && formData.workstream)) && (
+              <div className="p-3 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Custom Workstream Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter custom workstream (e.g. Mechanical Piping, Process Engineering, Water Treatment...)"
+                  value={formData.customWorkstream || ''}
+                  onChange={(e) => handleChange('customWorkstream', e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm font-medium focus:outline-none focus:border-[#0B5FFF]"
+                />
+              </div>
+            )}
+
+            {/* Optional Target Activity Linking (for non-construction workstreams) */}
+            {formData.workstream && formData.workstream !== 'CONSTRUCTION' && formData.workstream !== 'PTS_CONSTRUCTION' && (
               <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2">
                   <Link2 className="h-4 w-4 text-indigo-600 shrink-0" />
                   <div>
                     <div className="font-bold text-indigo-900 dark:text-indigo-200">
-                      Link Work Item to Target PTS Construction Activity
+                      Link Work Item to Target Construction / Main Execution Activity
                     </div>
                     <div className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80">
-                      Progress and sign-offs in this {WORKSTREAMS[formData.workstream]?.shortName} item will automatically unlock and update the target PTS activity.
+                      Progress and sign-offs in this {WORKSTREAMS[formData.workstream]?.shortName || formData.customWorkstream || 'item'} will automatically correlate with the target main activity.
                     </div>
                   </div>
                 </div>
@@ -349,9 +374,9 @@ export function ActivityForm({ onClose, onSubmit, initialValues, isDuplicate }: 
                   }}
                   className="h-9 px-3 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white font-medium outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-72 shrink-0"
                 >
-                  <option value="">None (Independent / Multi-span)</option>
+                  <option value="">None (Independent Scope)</option>
                   {activities
-                    .filter(a => a.workstream === 'PTS_CONSTRUCTION' || !a.workstream)
+                    .filter(a => a.workstream === 'CONSTRUCTION' || a.workstream === 'PTS_CONSTRUCTION' || !a.workstream)
                     .map(act => (
                       <option key={act.id} value={act.id}>
                         {act.name} {act.sectionSpan ? `[${act.sectionSpan}]` : ''}

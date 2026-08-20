@@ -90,7 +90,9 @@ export function Activities() {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'grid' | 'list' | 'table' | 'timeline'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'grid' | 'list' | 'table' | 'timeline'>(() => {
+    return (localStorage.getItem('activityViewMode') as any) || 'table';
+  });
   const [timeframe, setTimeframe] = useState<'all' | 'day' | 'week' | 'month'>('all');
   const [isTimeframeOpen, setIsTimeframeOpen] = useState(false);
   const timeframeDropdownRef = useRef<HTMLDivElement>(null);
@@ -130,6 +132,10 @@ export function Activities() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isTimeframeOpen]);
+
+  useEffect(() => {
+    localStorage.setItem('activityViewMode', viewMode);
+  }, [viewMode]);
 
   // Quick Log Progress Modal State
   const [loggingProgressActivity, setLoggingProgressActivity] = useState<Activity | null>(null);
@@ -1311,238 +1317,359 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
 
       {/* Quick Log Progress & Daily Report Modal (from List View) */}
       {loggingProgressActivity && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-4xl max-h-[92vh] shadow-2xl flex flex-col overflow-hidden">
             {/* Modal Header */}
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-blue-50/50 to-indigo-50/30 dark:from-slate-800/40 dark:to-slate-800/20">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
-                  <TrendingUp className="h-5 w-5" />
+            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-blue-50/80 via-indigo-50/40 to-white dark:from-slate-800/80 dark:via-slate-800/40 dark:to-slate-900 flex-shrink-0">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-sm">
+                  <TrendingUp className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    Log Progress & Daily Report
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {loggingProgressActivity.name} ({loggingProgressActivity.id}) • {loggingProgressActivity.workPackage}
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                      Log Progress & Daily Report
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                      {loggingProgressActivity.id}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">{loggingProgressActivity.name}</span>
+                    {loggingProgressActivity.workPackage && (
+                      <>
+                        <span>•</span>
+                        <span>{loggingProgressActivity.workPackage}</span>
+                      </>
+                    )}
+                    {loggingProgressActivity.discipline && (
+                      <>
+                        <span>•</span>
+                        <span className="text-indigo-600 dark:text-indigo-400 font-medium">{loggingProgressActivity.discipline}</span>
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
               <button 
                 onClick={() => setLoggingProgressActivity(null)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="p-2.5 rounded-2xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Close"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleQuickLogProgressSubmit} className="p-6 space-y-6 flex-1">
-              {/* Target & Measured Output Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-slate-500">Progress Completion</label>
-                  <div className="relative">
-                    <input 
-                      type="number"
-                      min="0"
-                      max="100"
-                      required
-                      value={logProgressPercent}
-                      onChange={(e) => setLogProgressPercent(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
-                      className="w-full h-10 px-3 pr-8 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-sm focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-slate-500">
-                    Actual Output ({loggingProgressActivity.unit || 'units'})
-                  </label>
-                  <input 
-                    type="number"
-                    min="0"
-                    value={logProgressActualQty}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value) || 0;
-                      setLogProgressActualQty(val);
-                      if (loggingProgressActivity.targetQuantity && loggingProgressActivity.targetQuantity > 0) {
-                        const calculatedPct = Math.min(100, Math.round((val / loggingProgressActivity.targetQuantity) * 100));
-                        setLogProgressPercent(calculatedPct);
-                      }
-                    }}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-sm focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-                    placeholder={`Target: ${loggingProgressActivity.targetQuantity || 0}`}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-slate-500">Activity Status</label>
-                  <select 
-                    value={logProgressStatus}
-                    onChange={(e) => setLogProgressStatus(e.target.value as ActivityStatus)}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-semibold text-sm focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-                  >
-                    <option value="Not Started">Not Started</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Blocked">Blocked</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Progress Slider */}
-              <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-600 dark:text-slate-300">Quick Adjust Progress</span>
-                  <span className="font-mono font-bold text-[#0B5FFF]">{logProgressPercent}%</span>
-                </div>
-                <input 
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={logProgressPercent}
-                  onChange={(e) => {
-                    const pct = parseInt(e.target.value);
-                    setLogProgressPercent(pct);
-                    if (loggingProgressActivity.targetQuantity && loggingProgressActivity.targetQuantity > 0) {
-                      setLogProgressActualQty(Math.round((pct / 100) * loggingProgressActivity.targetQuantity));
-                    }
-                    if (pct === 100) setLogProgressStatus('Completed');
-                    else if (pct > 0) setLogProgressStatus('In Progress');
-                  }}
-                  className="w-full accent-[#0B5FFF] cursor-pointer"
-                />
-              </div>
-
-              {/* Subtasks Checklist Gating */}
-              {logProgressSubtasks.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold uppercase text-slate-500 flex items-center gap-1.5">
-                      <CheckSquare className="h-4 w-4 text-[#0B5FFF]" />
-                      Update Active Subtasks ({logProgressSubtasks.filter(s => s.status === 'Completed').length}/{logProgressSubtasks.length} Completed)
-                    </label>
-                  </div>
-                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800">
-                    {logProgressSubtasks.map((st) => {
-                      const isCompleted = st.status === 'Completed';
-                      return (
-                        <div 
-                          key={st.id}
-                          onClick={() => handleToggleLogSubtask(st.id)}
-                          className={`p-3 flex items-center justify-between gap-3 text-xs cursor-pointer transition-colors ${
-                            isCompleted ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                              isCompleted ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600'
-                            }`}>
-                              {isCompleted && <Check className="h-3 w-3 stroke-[3]" />}
-                            </div>
-                            <div>
-                              <span className={`font-semibold ${isCompleted ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white'}`}>
-                                {st.title}
-                              </span>
-                              <span className="text-[10px] text-slate-400 ml-2">({st.category || 'General'})</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {st.isMilestone && (
-                              <span className="text-[10px] font-bold text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
-                                🎯 Milestone
-                              </span>
-                            )}
-                            {st.isHoldPoint && (
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                                st.holdPointSignOff?.approved 
-                                  ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
-                                  : 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800'
-                              }`}>
-                                🔒 {st.holdPointSignOff?.approved ? 'QA Approved' : 'Hold Point'}
-                              </span>
-                            )}
+            <form onSubmit={handleQuickLogProgressSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
+                
+                {/* 2-Column Responsive Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  
+                  {/* Left Column: Progress Metrics, Sliders & Site Data (7 Cols) */}
+                  <div className="lg:col-span-7 space-y-5">
+                    
+                    {/* Primary Progress Metrics Card */}
+                    <div className="p-4 sm:p-5 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        
+                        {/* Completion Percentage */}
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Progress Completion
+                          </label>
+                          <div className="relative">
+                            <input 
+                              type="number"
+                              min="0"
+                              max="100"
+                              required
+                              value={logProgressPercent}
+                              onChange={(e) => setLogProgressPercent(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                              className="w-full h-11 px-3.5 pr-8 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-black text-base text-[#0B5FFF] focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none transition-shadow"
+                            />
+                            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
                           </div>
                         </div>
-                      );
-                    })}
+
+                        {/* Actual Output */}
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Actual Output ({loggingProgressActivity.unit || 'units'})
+                          </label>
+                          <input 
+                            type="number"
+                            min="0"
+                            value={logProgressActualQty}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setLogProgressActualQty(val);
+                              if (loggingProgressActivity.targetQuantity && loggingProgressActivity.targetQuantity > 0) {
+                                const calculatedPct = Math.min(100, Math.round((val / loggingProgressActivity.targetQuantity) * 100));
+                                setLogProgressPercent(calculatedPct);
+                              }
+                            }}
+                            className="w-full h-11 px-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none transition-shadow"
+                            placeholder={`Target: ${loggingProgressActivity.targetQuantity || 0}`}
+                          />
+                        </div>
+
+                        {/* Activity Status */}
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Activity Status
+                          </label>
+                          <select 
+                            value={logProgressStatus}
+                            onChange={(e) => setLogProgressStatus(e.target.value as ActivityStatus)}
+                            className="w-full h-11 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none transition-shadow"
+                          >
+                            <option value="Not Started">⚪ Not Started</option>
+                            <option value="In Progress">🔵 In Progress</option>
+                            <option value="Completed">🟢 Completed</option>
+                            <option value="Blocked">🔴 Blocked</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Progress Slider & Quick Jump Markers */}
+                      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/50 space-y-2.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-slate-600 dark:text-slate-300">Quick Adjust Slider</span>
+                          <span className="font-mono font-black text-sm text-[#0B5FFF]">{logProgressPercent}%</span>
+                        </div>
+                        <input 
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={logProgressPercent}
+                          onChange={(e) => {
+                            const pct = parseInt(e.target.value);
+                            setLogProgressPercent(pct);
+                            if (loggingProgressActivity.targetQuantity && loggingProgressActivity.targetQuantity > 0) {
+                              setLogProgressActualQty(Math.round((pct / 100) * loggingProgressActivity.targetQuantity));
+                            }
+                            if (pct === 100) setLogProgressStatus('Completed');
+                            else if (pct > 0) setLogProgressStatus('In Progress');
+                          }}
+                          className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#0B5FFF]"
+                        />
+                        {/* Quick Presets */}
+                        <div className="flex items-center justify-between gap-1.5 pt-1">
+                          {[0, 25, 50, 75, 100].map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => {
+                                setLogProgressPercent(preset);
+                                if (loggingProgressActivity.targetQuantity && loggingProgressActivity.targetQuantity > 0) {
+                                  setLogProgressActualQty(Math.round((preset / 100) * loggingProgressActivity.targetQuantity));
+                                }
+                                if (preset === 100) setLogProgressStatus('Completed');
+                                else if (preset > 0) setLogProgressStatus('In Progress');
+                                else if (preset === 0) setLogProgressStatus('Not Started');
+                              }}
+                              className={`flex-1 py-1 text-[11px] font-bold rounded-lg transition-all border ${
+                                logProgressPercent === preset
+                                  ? 'bg-[#0B5FFF] text-white border-[#0B5FFF] shadow-sm'
+                                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              {preset}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Weather, Date & Conditions */}
+                    <div className="p-4 sm:p-5 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-3.5">
+                      <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Shift & Site Conditions
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Report Date</label>
+                          <input 
+                            type="date"
+                            required
+                            value={logProgressDate}
+                            onChange={(e) => setLogProgressDate(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Weather</label>
+                          <select 
+                            value={logProgressWeather}
+                            onChange={(e) => setLogProgressWeather(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+                          >
+                            <option value="Sunny">☀️ Sunny / Clear</option>
+                            <option value="Partly Cloudy">⛅ Partly Cloudy</option>
+                            <option value="Overcast">☁️ Overcast</option>
+                            <option value="Rain">🌧️ Rain / Wet</option>
+                            <option value="Stormy">⛈️ Stormy / Suspended</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Temperature</label>
+                          <input 
+                            type="text"
+                            value={logProgressTemp}
+                            onChange={(e) => setLogProgressTemp(e.target.value)}
+                            placeholder="e.g. 24°C"
+                            className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Supervisor Remarks */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Supervisor Field Remarks
+                      </label>
+                      <textarea 
+                        rows={3}
+                        value={logProgressNotes}
+                        onChange={(e) => setLogProgressNotes(e.target.value)}
+                        placeholder="Record shift production summary, weather impacts, inspection approvals, or contractor handover notes..."
+                        className="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none transition-shadow"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right Column: Active Subtasks & Quality Hold Points (5 Cols) */}
+                  <div className="lg:col-span-5 flex flex-col space-y-4">
+                    {logProgressSubtasks.length > 0 ? (
+                      <div className="p-4 sm:p-5 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl flex flex-col flex-1">
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-200/70 dark:border-slate-700/60 flex-shrink-0">
+                          <div>
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                              <CheckSquare className="h-4 w-4 text-[#0B5FFF]" />
+                              Active Subtasks
+                            </label>
+                            <span className="text-[11px] font-semibold text-[#0B5FFF]">
+                              {logProgressSubtasks.filter(s => s.status === 'Completed').length} of {logProgressSubtasks.length} Completed
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLogProgressSubtasks(prev => prev.map(st => ({
+                                  ...st,
+                                  status: 'Completed',
+                                  completed: true,
+                                  completedQuantity: st.targetQuantity || 1
+                                })));
+                              }}
+                              className="text-[10px] font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-950/60 text-[#0B5FFF] hover:bg-blue-200 transition-colors"
+                            >
+                              All
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLogProgressSubtasks(prev => prev.map(st => ({
+                                  ...st,
+                                  status: 'Not Started',
+                                  completed: false,
+                                  completedQuantity: 0
+                                })));
+                              }}
+                              className="text-[10px] font-bold px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 transition-colors"
+                            >
+                              Reset
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Scrollable Subtasks Container */}
+                        <div className="mt-3 overflow-y-auto max-h-[380px] pr-1 space-y-2 flex-1 custom-scrollbar">
+                          {logProgressSubtasks.map((st) => {
+                            const isCompleted = st.status === 'Completed';
+                            return (
+                              <div 
+                                key={st.id}
+                                onClick={() => handleToggleLogSubtask(st.id)}
+                                className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-3 text-xs ${
+                                  isCompleted 
+                                    ? 'bg-emerald-50/70 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900/50' 
+                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 shadow-sm'
+                                }`}
+                              >
+                                <div className="flex items-start gap-2.5 min-w-0">
+                                  <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                                    isCompleted ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'
+                                  }`}>
+                                    {isCompleted && <Check className="h-3 w-3 stroke-[3]" />}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <span className={`font-semibold block truncate ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white'}`}>
+                                      {st.title}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                      {st.category || 'General'} • {st.completedQuantity || 0}/{st.targetQuantity || 1} {st.unit || 'units'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                                  {st.isMilestone && (
+                                    <span className="text-[9px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 rounded">
+                                      🎯 Milestone
+                                    </span>
+                                  )}
+                                  {st.isHoldPoint && (
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                      st.holdPointSignOff?.approved 
+                                        ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-950/60'
+                                        : 'text-rose-700 bg-rose-100 dark:bg-rose-950/60'
+                                    }`}>
+                                      🔒 {st.holdPointSignOff?.approved ? 'QA Approved' : 'Hold Point'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-6 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-2 flex-1">
+                        <CheckSquare className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+                        <p className="text-xs font-bold text-slate-500">No subtasks configured</p>
+                        <p className="text-[11px] text-slate-400 max-w-[200px]">Use the activity detail view to configure step-by-step method subtasks and hold points.</p>
+                      </div>
+                    )}
+
+                    {/* Automatic Report Notice */}
+                    <div className="p-3.5 bg-blue-50/80 dark:bg-blue-950/40 rounded-2xl border border-blue-100 dark:border-blue-900/60 flex items-start gap-2.5 text-xs text-blue-900 dark:text-blue-200">
+                      <FileText className="h-4 w-4 text-[#0B5FFF] shrink-0 mt-0.5" />
+                      <p className="text-[11px] leading-relaxed">
+                        Saving this progress log will automatically generate and publish a verified <strong>Executive Daily Site Report</strong> with complete subtask status, workforce hours, and plant allocations.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              )}
 
-              {/* Weather & Site Environment */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-slate-500">Report Date</label>
-                  <input 
-                    type="date"
-                    required
-                    value={logProgressDate}
-                    onChange={(e) => setLogProgressDate(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-slate-500">Weather</label>
-                  <select 
-                    value={logProgressWeather}
-                    onChange={(e) => setLogProgressWeather(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-                  >
-                    <option value="Sunny">☀️ Sunny / Clear</option>
-                    <option value="Partly Cloudy">⛅ Partly Cloudy</option>
-                    <option value="Overcast">☁️ Overcast</option>
-                    <option value="Rain">🌧️ Rain / Wet</option>
-                    <option value="Stormy">⛈️ Stormy / Suspended</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-slate-500">Temperature</label>
-                  <input 
-                    type="text"
-                    value={logProgressTemp}
-                    onChange={(e) => setLogProgressTemp(e.target.value)}
-                    placeholder="e.g. 24°C"
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-                  />
-                </div>
               </div>
 
-              {/* Field Notes & Remarks */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase text-slate-500">Supervisor Field Remarks</label>
-                <textarea 
-                  rows={3}
-                  value={logProgressNotes}
-                  onChange={(e) => setLogProgressNotes(e.target.value)}
-                  placeholder="Record shift production summary, weather impacts, inspection approvals, or contractor handover notes..."
-                  className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-                />
-              </div>
-
-              {/* Automatic Report Notice */}
-              <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/50 flex items-start gap-2.5 text-xs text-blue-900 dark:text-blue-200">
-                <FileText className="h-4 w-4 text-[#0B5FFF] shrink-0 mt-0.5" />
-                <p>
-                  Saving this progress log will automatically generate and publish a verified <strong>Executive Daily Site Report</strong> with complete subtask status, workforce hours, and plant allocations.
-                </p>
-              </div>
-
-              {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              {/* Modal Actions Footer */}
+              <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 bg-slate-50/50 dark:bg-slate-900/60 flex-shrink-0">
                 <Button 
                   type="button" 
                   variant="outline" 
                   onClick={() => setLoggingProgressActivity(null)}
-                  className="rounded-xl px-4 text-xs font-semibold"
+                  className="rounded-xl px-5 text-xs font-semibold"
                 >
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
-                  className="rounded-xl px-5 text-xs font-semibold bg-[#0B5FFF] hover:bg-blue-700 text-white gap-2 shadow-sm"
+                  className="rounded-xl px-6 text-xs font-bold bg-[#0B5FFF] hover:bg-blue-700 text-white gap-2 shadow-sm"
                 >
                   <Save className="h-4 w-4" /> Save Progress & Post Report
                 </Button>

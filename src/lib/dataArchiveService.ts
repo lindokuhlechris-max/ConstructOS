@@ -36,7 +36,7 @@ export const APP_SECTIONS: Record<AppSectionKey, SectionDefinition> = {
     category: 'Field Operations',
     description: 'Scheduled activities, subtasks, task progress logs, notes, hold point signoffs',
     iconName: 'Activity',
-    storageKeys: ['constructos_notes', 'projects'],
+    storageKeys: ['activities', 'projects', 'allocations', 'auditLogs', 'reminders', 'constructos_notes'],
     idbKeys: ['activities', 'projects', 'allocations', 'auditLogs', 'reminders']
   },
   reports: {
@@ -45,7 +45,7 @@ export const APP_SECTIONS: Record<AppSectionKey, SectionDefinition> = {
     category: 'Field Operations',
     description: 'Daily supervisor reports, shift logs, weather observations, delays, blockers',
     iconName: 'FileText',
-    storageKeys: [],
+    storageKeys: ['reports', 'weatherLogs'],
     idbKeys: ['reports', 'weatherLogs']
   },
   labour: {
@@ -54,7 +54,7 @@ export const APP_SECTIONS: Record<AppSectionKey, SectionDefinition> = {
     category: 'Workforce & Assets',
     description: 'Employee roster, labour shifts, timesheets, contractor teams, check-ins',
     iconName: 'Users',
-    storageKeys: ['labourLogs', 'workerCheckIns'],
+    storageKeys: ['employees', 'teams', 'labourLogs', 'labourAllocations', 'workerCheckIns'],
     idbKeys: ['employees', 'teams', 'labourLogs', 'labourAllocations', 'workerCheckIns']
   },
   materials: {
@@ -63,7 +63,7 @@ export const APP_SECTIONS: Record<AppSectionKey, SectionDefinition> = {
     category: 'Workforce & Assets',
     description: 'Material stock catalogue, deliveries, warehouse receipts, PPE assignments',
     iconName: 'Package',
-    storageKeys: [],
+    storageKeys: ['materials', 'materialReceipts', 'materialUsages', 'ppeItems'],
     idbKeys: ['materials', 'materialReceipts', 'materialUsages', 'ppeItems']
   },
   safety: {
@@ -72,7 +72,7 @@ export const APP_SECTIONS: Record<AppSectionKey, SectionDefinition> = {
     category: 'Quality & Safety',
     description: 'Incident logs, hazard observations, toolbox talks, PPE requirements, safety policies',
     iconName: 'ShieldCheck',
-    storageKeys: [],
+    storageKeys: ['safetyIncidents', 'safetyRequirements', 'safetyPolicies'],
     idbKeys: ['safetyIncidents', 'safetyRequirements', 'safetyPolicies']
   },
   quality: {
@@ -81,7 +81,7 @@ export const APP_SECTIONS: Record<AppSectionKey, SectionDefinition> = {
     category: 'Quality & Safety',
     description: 'Inspection Test Plans (ITPs), hold points, non-conformance reports (NCR), inspection photos',
     iconName: 'CheckSquare',
-    storageKeys: ['siteInspectionPhotos'],
+    storageKeys: ['qaInspections', 'activityInspections', 'siteInspectionPhotos'],
     idbKeys: ['qaInspections', 'activityInspections', 'siteInspectionPhotos']
   },
   equipment: {
@@ -90,7 +90,7 @@ export const APP_SECTIONS: Record<AppSectionKey, SectionDefinition> = {
     category: 'Workforce & Assets',
     description: 'Machinery registry, pre-start checks, fuel logs, service and maintenance logs',
     iconName: 'Truck',
-    storageKeys: [],
+    storageKeys: ['equipment', 'equipmentLogs'],
     idbKeys: ['equipment', 'equipmentLogs']
   },
   accommodation: {
@@ -117,7 +117,7 @@ export const APP_SECTIONS: Record<AppSectionKey, SectionDefinition> = {
     category: 'Field Operations',
     description: 'Project documents, drawings metadata, certificates, revision registers',
     iconName: 'FolderOpen',
-    storageKeys: [],
+    storageKeys: ['documents'],
     idbKeys: ['documents']
   },
   settings: {
@@ -126,7 +126,7 @@ export const APP_SECTIONS: Record<AppSectionKey, SectionDefinition> = {
     category: 'System & Config',
     description: 'User profiles, access whitelist permissions, custom field definitions, units, theme',
     iconName: 'Settings',
-    storageKeys: ['theme', 'units', 'currency', 'userProfiles', 'currentUserProfile', 'accessRequests'],
+    storageKeys: ['theme', 'units', 'currency', 'userProfiles', 'currentUserProfile', 'accessRequests', 'customFieldDefinitions'],
     idbKeys: ['userProfiles', 'customFieldDefinitions']
   }
 };
@@ -643,19 +643,19 @@ export async function inspectArchiveFile(
 // ----------------------------------------------------------------------------
 
 export async function createSafetyRollbackSnapshot(): Promise<string> {
-  const currentCounts = await getLiveSectionCounts();
-  const allSections = Object.keys(APP_SECTIONS) as AppSectionKey[];
-  const { packageString } = await createExportArchive({
-    selectedSections: allSections,
-    label: `Pre-Restore Auto Snapshot (${new Date().toLocaleTimeString()})`,
-    notes: 'Automatically generated safety restore point before applying archive import.'
-  });
-
   try {
-    sessionStorage.setItem('constructfield_last_rollback_snapshot', packageString);
-  } catch (_) {}
-
-  return packageString;
+    const keys = Object.keys(localStorage);
+    const snap: Record<string, string> = {};
+    keys.forEach(k => {
+      const v = localStorage.getItem(k);
+      if (v) snap[k] = v;
+    });
+    const str = JSON.stringify(snap);
+    sessionStorage.setItem('constructfield_last_rollback_snapshot', str);
+    return str;
+  } catch (_) {
+    return '';
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -691,10 +691,21 @@ export async function executeRestore(
 
         if (strategy === 'replace') {
           await setIDBItem(idbKey, incomingCollection);
+          try {
+            localStorage.setItem(idbKey, JSON.stringify(incomingCollection));
+          } catch (_) {}
           recordsProcessed += incomingCollection.length;
         } else {
           // Smart Merge & Upsert strategy
-          const existingCollection: any[] = Array.isArray(currentIDB[idbKey]) ? currentIDB[idbKey] : [];
+          const existingCollection: any[] = Array.isArray(currentIDB[idbKey]) 
+            ? currentIDB[idbKey] 
+            : (() => {
+                try {
+                  const l = localStorage.getItem(idbKey);
+                  return l ? JSON.parse(l) : [];
+                } catch { return []; }
+              })();
+
           const existingMap = new Map<string, any>();
 
           existingCollection.forEach((item, idx) => {
@@ -712,6 +723,9 @@ export async function executeRestore(
 
           const merged = Array.from(existingMap.values());
           await setIDBItem(idbKey, merged);
+          try {
+            localStorage.setItem(idbKey, JSON.stringify(merged));
+          } catch (_) {}
           recordsProcessed += incomingCollection.length;
         }
       }
@@ -790,3 +804,79 @@ export async function executeRestore(
     };
   }
 }
+
+// ----------------------------------------------------------------------------
+// Section Data Purge & Clear Executor
+// ----------------------------------------------------------------------------
+
+export interface ClearDataResult {
+  success: boolean;
+  clearedSections: AppSectionKey[];
+  recordsCleared: number;
+  message: string;
+  error?: string;
+}
+
+export async function clearSectionData(
+  sectionsToClear: AppSectionKey[],
+  resetToDefaults = false
+): Promise<ClearDataResult> {
+  try {
+    if (sectionsToClear.length === 0) {
+      throw new Error('Please select at least one section to clear.');
+    }
+
+    // 1. Automatically create safety snapshot first
+    await createSafetyRollbackSnapshot();
+
+    const counts = await getLiveSectionCounts();
+    let recordsCleared = 0;
+
+    for (const secKey of sectionsToClear) {
+      const def = APP_SECTIONS[secKey];
+      recordsCleared += counts[secKey] || 0;
+
+      // Clear IDB stores
+      for (const idbKey of def.idbKeys) {
+        await setIDBItem(idbKey, []);
+      }
+
+      // Clear LocalStorage keys
+      for (const storageKey of def.storageKeys) {
+        if (secKey === 'settings' && !resetToDefaults) {
+          // Keep current active session settings if clearing settings without hard reset
+          if (storageKey === 'theme' || storageKey === 'units' || storageKey === 'currency' || storageKey === 'currentUserProfile') {
+            continue;
+          }
+        }
+        localStorage.removeItem(storageKey);
+      }
+    }
+
+    // Try cloud sync if online
+    try {
+      const { saveFullFirestoreState } = await import('./firestoreService');
+      const updatedAllIDB = await getAllIDBData();
+      await saveFullFirestoreState(updatedAllIDB);
+    } catch (err) {
+      console.warn('Post-clear cloud sync skipped:', err);
+    }
+
+    return {
+      success: true,
+      clearedSections: sectionsToClear,
+      recordsCleared,
+      message: `Successfully cleared ${sectionsToClear.length} section(s) (${recordsCleared} records purged).`
+    };
+  } catch (err: any) {
+    console.error('Clear section data error:', err);
+    return {
+      success: false,
+      clearedSections: [],
+      recordsCleared: 0,
+      message: 'Failed to clear data.',
+      error: err.message || 'Unknown error'
+    };
+  }
+}
+

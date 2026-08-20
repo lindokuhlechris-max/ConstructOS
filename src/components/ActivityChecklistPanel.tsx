@@ -81,6 +81,7 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingItemText, setEditingItemText] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const totalCount = checklists.length;
   const completedCount = checklists.filter(c => c.completed).length;
@@ -228,12 +229,10 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                 variant="outline"
                 size="sm"
                 onClick={openBrowseTemplates}
-                className="h-8 px-2 sm:px-2.5 text-xs rounded-xl gap-1 border-indigo-200 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/30 hover:bg-indigo-100"
+                className="h-8 w-8 p-0 flex items-center justify-center rounded-xl border-indigo-200 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/30 hover:bg-indigo-100"
                 title="Browse standard and custom saved checklist templates"
               >
-                <Sparkles className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
-                <span className="hidden md:inline">Quick Templates</span>
-                <span className="inline md:hidden text-[11px]">Templates</span>
+                <Sparkles className="h-4 w-4 text-indigo-600 shrink-0" />
               </Button>
 
               {checklists.length > 0 && (
@@ -242,12 +241,10 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                   variant="outline"
                   size="sm"
                   onClick={openSaveCurrentTemplate}
-                  className="h-8 px-2 sm:px-2.5 text-xs rounded-xl gap-1 border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/30 hover:bg-emerald-100"
+                  className="h-8 w-8 p-0 flex items-center justify-center rounded-xl border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/30 hover:bg-emerald-100"
                   title="Save current checklist items as a reusable template"
                 >
-                  <BookmarkPlus className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                  <span className="hidden md:inline">Save Template</span>
-                  <span className="inline md:hidden text-[11px]">Save</span>
+                  <BookmarkPlus className="h-4 w-4 text-emerald-600 shrink-0" />
                 </Button>
               )}
 
@@ -255,12 +252,19 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                 type="button"
                 size="sm"
                 onClick={() => setIsAddingInline(!isAddingInline)}
-                className="h-8 px-2.5 sm:px-3 text-xs font-bold rounded-xl gap-1 bg-[#0B5FFF] hover:bg-blue-600 text-white shadow-2xs shrink-0"
+                className="h-8 w-8 p-0 flex items-center justify-center rounded-xl bg-[#0B5FFF] hover:bg-blue-600 text-white shadow-2xs shrink-0"
+                title="Add Item"
               >
-                <Plus className="h-3.5 w-3.5 shrink-0" />
-                <span className="hidden sm:inline">Add Item</span>
-                <span className="inline sm:hidden">Add</span>
+                <Plus className="h-4 w-4 shrink-0" />
               </Button>
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="p-1.5 ml-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                title={isCollapsed ? "Expand panel" : "Collapse panel"}
+              >
+                {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+              </button>
             </div>
           )}
         </div>
@@ -297,8 +301,9 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
         )}
       </CardHeader>
 
-      <CardContent className="p-4 sm:p-5 space-y-4">
-        {/* 2. Inline Add Item Form */}
+      {!isCollapsed && (
+        <CardContent className="p-4 sm:p-5 space-y-4">
+          {/* 2. Inline Add Item Form */}
         {isAddingInline && !readOnly && (
           <form onSubmit={handleAddItem} className="p-3 rounded-2xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2.5 animate-in fade-in">
             <div className="flex items-center justify-between">
@@ -416,7 +421,7 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
             )}
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[550px] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {filteredChecklists.map((item) => {
               const categoryKey = item.category || 'General';
               const style = CATEGORY_STYLES[categoryKey] || CATEGORY_STYLES['General'];
@@ -575,7 +580,8 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
             </button>
           </div>
         )}
-      </CardContent>
+        </CardContent>
+      )}
     </Card>
   );
 }

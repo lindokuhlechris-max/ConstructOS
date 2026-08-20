@@ -23,6 +23,7 @@ import {
   ShieldAlert, 
   ShieldCheck, 
   Zap, 
+  Tag,
   Image as ImageIcon 
 } from 'lucide-react';
 
@@ -48,8 +49,13 @@ export function ActivityDataTable({
   onExportSelected
 }: ActivityDataTableProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [sortField, setSortField] = useState<SortField>('id');
-  const [sortAsc, setSortAsc] = useState(true);
+  const [sortField, setSortField] = useState<SortField>(() => {
+    return (localStorage.getItem('activitySortField') as SortField) || 'id';
+  });
+  const [sortAsc, setSortAsc] = useState(() => {
+    const saved = localStorage.getItem('activitySortAsc');
+    return saved !== null ? saved === 'true' : true;
+  });
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -67,10 +73,14 @@ export function ActivityDataTable({
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
-      setSortAsc(!sortAsc);
+      const newAsc = !sortAsc;
+      setSortAsc(newAsc);
+      localStorage.setItem('activitySortAsc', String(newAsc));
     } else {
       setSortField(field);
       setSortAsc(true);
+      localStorage.setItem('activitySortField', field);
+      localStorage.setItem('activitySortAsc', 'true');
     }
   };
 
@@ -93,6 +103,7 @@ export function ActivityDataTable({
       case 'MATERIALS': return <Package className="h-3 w-3 text-amber-600 dark:text-amber-400" />;
       case 'SAFETY': return <ShieldAlert className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />;
       case 'COMMISSIONING': return <Zap className="h-3 w-3 text-purple-600 dark:text-purple-400" />;
+      case 'CUSTOM': return <Tag className="h-3 w-3 text-slate-600 dark:text-slate-400" />;
       default: return <Building2 className="h-3 w-3 text-blue-600 dark:text-blue-400" />;
     }
   };
@@ -191,8 +202,8 @@ export function ActivityDataTable({
                   <ArrowUpDown className="h-3 w-3" />
                 </div>
               </th>
-              <th className="p-3">Section / Span</th>
-              <th className="p-3">Linked PTS</th>
+              <th className="p-3">Section / Area</th>
+              <th className="p-3">Linked Activity</th>
               <th className="p-3 cursor-pointer hover:text-slate-800 dark:hover:text-slate-200" onClick={() => handleSort('status')}>
                 <div className="flex items-center gap-1">
                   Status
@@ -223,7 +234,11 @@ export function ActivityDataTable({
                 const subtasksCount = subtasks.length;
                 const completedSubtasksCount = subtasks.filter(s => s.status === 'Completed').length;
                 const holdPointsCount = subtasks.filter(s => s.isHoldPoint).length;
-                const wsConfig = WORKSTREAMS[activity.workstream || 'PTS_CONSTRUCTION'] || WORKSTREAMS.PTS_CONSTRUCTION;
+                const wsKey = activity.workstream === 'PTS_CONSTRUCTION' ? 'CONSTRUCTION' : (activity.workstream || 'CONSTRUCTION');
+                const wsConfig = WORKSTREAMS[wsKey] || WORKSTREAMS.CONSTRUCTION;
+                const workstreamLabel = (activity.workstream === 'CUSTOM' && activity.customWorkstream) 
+                  ? activity.customWorkstream 
+                  : (activity.customWorkstream || wsConfig?.shortName || activity.workstream || 'Construction');
                 const isSelected = selectedIds.includes(activity.id);
 
                 return (
@@ -274,9 +289,9 @@ export function ActivityDataTable({
 
                     {/* Workstream */}
                     <td className="p-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${wsConfig.badgeClass}`}>
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold ${wsConfig.badgeClass}`}>
                         {getWorkstreamIcon(activity.workstream)}
-                        {wsConfig.shortName}
+                        {workstreamLabel}
                       </span>
                     </td>
 
@@ -293,7 +308,7 @@ export function ActivityDataTable({
                       )}
                     </td>
 
-                    {/* Linked PTS Activity */}
+                    {/* Linked Activity / Parent */}
                     <td className="p-3">
                       {activity.linkedPTSActivityName || activity.linkedPTSActivityId ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold text-[10px] max-w-[150px] truncate" title={`Linked to: ${activity.linkedPTSActivityName || activity.linkedPTSActivityId}`}>

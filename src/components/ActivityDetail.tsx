@@ -91,7 +91,7 @@ interface ActivityDetailProps {
 export function ActivityDetail({ activity: initialActivity, onSave, onClose, onDelete, onDuplicate, isEditable = true }: ActivityDetailProps) {
   const navigate = useNavigate();
   const { 
-    activities, projects, materials, employees, equipment, documents, updateActivity, addReport, addAuditLog, addAllocation, 
+    activities, projects, materials, employees, equipment, documents, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, addAllocation, 
     userRole, currentUserProfile, labourLogs, addLabourLog, deleteLabourLog, equipmentLogs, addEquipmentLog, deleteEquipmentLog 
   } = useAppContext();
   const canEditActivities = canUserEditSection(currentUserProfile, 'activities');
@@ -991,9 +991,15 @@ ${subtaskSummaryLines}
     let updatedAssignedEquipment = [...(activity.assignedEquipment || [])];
 
     updatedSubtasks.forEach(s => {
-      const workers = [...(s.assignedWorkers || []), ...(s.assignedPerson ? [s.assignedPerson] : [])];
+      const workersSet = new Set<string>();
+      (s.assignedWorkers || []).forEach(w => { if (w && w.trim()) workersSet.add(w.trim()); });
+      if (s.assignedPerson) {
+        s.assignedPerson.split(',').map(p => p.trim()).filter(Boolean).forEach(p => workersSet.add(p));
+      }
+      const workers = Array.from(workersSet);
+
       workers.forEach(wName => {
-        if (!wName || wName.trim() === '') return;
+        if (!wName || wName.trim() === '' || wName.includes(',')) return;
         const exists = updatedAssignedLabour.some(l => l.name.toLowerCase() === wName.toLowerCase());
         if (!exists) {
           const emp = employees.find(e => `${e.firstName} ${e.lastName}`.toLowerCase() === wName.toLowerCase());
@@ -1089,12 +1095,20 @@ ${subtaskSummaryLines}
     const today = new Date().toISOString().split('T')[0];
     const updated = {
       ...activity,
+      id: activity.id.trim() || initialActivity.id,
       updatedAt: today,
       createdAt: activity.createdAt || activity.startDate || today
     };
     setActivity(updated);
     if (onSave) {
       onSave(updated);
+    } else {
+      if (initialActivity.id && initialActivity.id !== updated.id) {
+        deleteActivity(initialActivity.id);
+        addActivity(updated);
+      } else {
+        updateActivity(updated);
+      }
     }
     setIsEditing(false);
   };
@@ -1283,6 +1297,82 @@ ${subtaskSummaryLines}
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Activity Code & ID */}
+              <div>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
+                  Activity Code / ID
+                </label>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={activity.id}
+                    onChange={(e) => handleInputChange('id', e.target.value)}
+                    placeholder="e.g. ACT-1179"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent font-mono text-sm font-bold focus:outline-none focus:border-[#0B5FFF]"
+                  />
+                ) : (
+                  <span className="inline-block font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[#0B5FFF] dark:text-blue-400 border border-slate-200 dark:border-slate-700">
+                    {activity.id}
+                  </span>
+                )}
+              </div>
+
+              {/* Workstream Selector */}
+              <div>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
+                  Workstream
+                </label>
+                {isEditing ? (
+                  <div className="flex flex-col gap-2">
+                    <select
+                      value={activity.workstream === 'PTS_CONSTRUCTION' ? 'CONSTRUCTION' : (activity.workstream || 'CONSTRUCTION')}
+                      onChange={(e) => {
+                        const val = e.target.value as WorkstreamType;
+                        handleInputChange('workstream', val);
+                      }}
+                      className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold focus:outline-none focus:border-[#0B5FFF]"
+                    >
+                      {Object.entries(WORKSTREAMS)
+                        .filter(([key]) => key !== 'PTS_CONSTRUCTION')
+                        .map(([key, config]) => (
+                          <option key={key} value={key}>
+                            {config.name} ({config.shortName})
+                          </option>
+                        ))}
+                    </select>
+
+                    {/* Custom Workstream input when CUSTOM is selected */}
+                    {(activity.workstream === 'CUSTOM' || (!WORKSTREAMS[activity.workstream || ''] && activity.workstream)) && (
+                      <input
+                        type="text"
+                        placeholder="Enter custom workstream (e.g. Mechanical Piping, Instrumentation, Water Plant...)"
+                        value={activity.customWorkstream || (activity.workstream !== 'CUSTOM' ? activity.workstream : '') || ''}
+                        onChange={(e) => {
+                          handleInputChange('customWorkstream', e.target.value);
+                        }}
+                        className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent text-sm focus:outline-none focus:border-[#0B5FFF]"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const wsKey = activity.workstream === 'PTS_CONSTRUCTION' ? 'CONSTRUCTION' : (activity.workstream || 'CONSTRUCTION');
+                      const wsCfg = WORKSTREAMS[wsKey] || WORKSTREAMS.CONSTRUCTION;
+                      const label = (activity.workstream === 'CUSTOM' && activity.customWorkstream) 
+                        ? activity.customWorkstream 
+                        : (activity.customWorkstream || wsCfg?.shortName || activity.workstream || 'Construction');
+
+                      return (
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${wsCfg?.badgeClass || 'bg-slate-100 text-slate-800'}`}>
+                          {label}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+
               <div className="sm:col-span-2">
                 <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">Activity Name</label>
                 {isEditing ? (
@@ -3303,7 +3393,7 @@ ${subtaskSummaryLines}
       {/* Log Progress Modal */}
       {isLogProgressModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+          <div className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
             {/* Header */}
             <div className="flex justify-between items-center p-5 sm:p-6 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30">
               <div>
