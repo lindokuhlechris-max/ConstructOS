@@ -87,6 +87,7 @@ export function ActivitiesPdfModal({
   pinnedSubtaskMap: externalPinnedMap
 }: ActivitiesPdfModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
+  const previewScrollRef = useRef<HTMLDivElement>(null);
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const [shiftDate, setShiftDate] = useState<string>(initialDate || todayStr);
@@ -99,6 +100,13 @@ export function ActivitiesPdfModal({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [disciplineFilter, setDisciplineFilter] = useState<string>('all');
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('portrait');
+
+  // Auto-scroll preview to top on open or template change
+  useEffect(() => {
+    if (isOpen) {
+      previewScrollRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [isOpen, selectedTemplate, shiftDate]);
   
   const [reportTitle, setReportTitle] = useState<string>('Construction Activities Progress & Execution Master Report');
   const [reportSubtitle, setReportSubtitle] = useState<string>(defaultFilterLabel);
@@ -1218,7 +1226,7 @@ export function ActivitiesPdfModal({
           </div>
 
           {/* Right Main Area: Ultra-Clean Executive Live Preview */}
-          <div className="flex-1 bg-slate-200/70 dark:bg-slate-950 p-4 sm:p-6 overflow-y-auto flex justify-center">
+          <div ref={previewScrollRef} className="flex-1 bg-slate-200/70 dark:bg-slate-950 p-4 sm:p-6 overflow-y-auto flex justify-center">
             <div 
               ref={printRef}
               className={`bg-white dark:bg-slate-900 shadow-2xl border border-slate-300 dark:border-slate-800 rounded-2xl p-6 sm:p-8 transition-all ${
@@ -1373,165 +1381,126 @@ export function ActivitiesPdfModal({
                   </span>
                 </div>
 
-                {/* Structured Activity Cards for Daily Shift */}
-                {selectedTemplate === 'daily_shift' ? (
-                  <div className="space-y-3.5">
-                    {filteredActivities.map(act => {
-                      const subtasks = getSubtasksForActivity(act);
-                      const holdPoints = subtasks.filter(s => s.isHoldPoint);
-                      const holdPointsCleared = holdPoints.filter(h => h.holdPointSignOff?.approved || h.status === 'Completed').length;
+                {/* Unified Continuous Deliverables Ledger Table */}
+                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xs">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 text-[10px] uppercase tracking-wider">
+                        <th className="py-2.5 px-3 w-14">Seq</th>
+                        <th className="py-2.5 px-3">Scope & Subtask Deliverable</th>
+                        <th className="py-2.5 px-3 w-32">Method / Category</th>
+                        <th className="py-2.5 px-3 w-32 text-center">QA Quality Gate</th>
+                        <th className="py-2.5 px-3 w-24 text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {filteredActivities.map(act => {
+                        const subtasks = getSubtasksForActivity(act);
+                        const holdPoints = subtasks.filter(s => s.isHoldPoint);
+                        const holdPointsCleared = holdPoints.filter(h => h.holdPointSignOff?.approved || h.status === 'Completed').length;
 
-                      return (
-                        <div key={act.id} className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/40 dark:bg-slate-800/30 overflow-hidden">
-                          {/* Activity Header Row */}
-                          <div className="p-3 bg-slate-100/80 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 rounded-md font-mono text-[11px] font-bold bg-[#0B5FFF] text-white">
-                                {act.id}
-                              </span>
-                              <span className="text-xs font-bold text-slate-900 dark:text-white">
-                                {act.name}
-                              </span>
-                              {act.workPackage && (
-                                <span className="text-[11px] text-slate-500 font-medium">
-                                  • Package: {act.workPackage}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                                {act.discipline || 'General'}
-                              </span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                act.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
-                                act.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                                act.status === 'Blocked' ? 'bg-rose-100 text-rose-800' :
-                                'bg-slate-200 text-slate-700'
-                              }`}>
-                                {act.status}
-                              </span>
-                              <span className="text-xs font-bold font-mono text-slate-900 dark:text-white pl-1">
-                                {act.progress || 0}%
-                              </span>
-                            </div>
-                          </div>
+                        return (
+                          <React.Fragment key={act.id}>
+                            {/* Activity Header Row */}
+                            <tr className="bg-slate-50/90 dark:bg-slate-800/60 font-bold border-t-2 border-slate-200 dark:border-slate-700">
+                              <td colSpan={5} className="py-2 px-3">
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-[#0B5FFF] text-white">
+                                      {act.id}
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                      {act.name}
+                                    </span>
+                                    {act.workPackage && (
+                                      <span className="text-[11px] text-slate-500 font-normal">
+                                        • Package: {act.workPackage}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                      {act.discipline || 'General'}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      act.status === 'Completed' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300' :
+                                      act.status === 'In Progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300' :
+                                      act.status === 'Blocked' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300' :
+                                      'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                    }`}>
+                                      {act.status}
+                                    </span>
+                                    <span className="text-xs font-bold font-mono text-slate-900 dark:text-white pl-1">
+                                      {act.progress || 0}%
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
 
-                          {/* Subtasks Progression Ledger */}
-                          {includeSubtasks && subtasks.length > 0 ? (
-                            <div className="p-3 bg-white dark:bg-slate-900">
-                              <table className="w-full text-left text-xs border-collapse">
-                                <thead>
-                                  <tr className="text-[10px] font-bold text-slate-400 uppercase border-b border-slate-100 dark:border-slate-800 pb-1">
-                                    <th className="pb-1.5 w-12">Seq</th>
-                                    <th className="pb-1.5">Deliverable / Task</th>
-                                    <th className="pb-1.5 w-28">Method / Cat</th>
-                                    <th className="pb-1.5 w-28">QA Quality Gate</th>
-                                    <th className="pb-1.5 w-24 text-right">Status</th>
+                            {/* Subtask Rows */}
+                            {includeSubtasks && subtasks.length > 0 ? (
+                              subtasks.map((st, stIdx) => {
+                                const seq = getSubtaskProgressionNumber(act.subtasks || [], stIdx) || `${stIdx + 1}.0`;
+                                const isDone = st.status === 'Completed';
+                                const isInProgress = st.status === 'In Progress';
+
+                                return (
+                                  <tr key={st.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
+                                    <td className="py-2 px-3 font-mono text-[11px] font-bold text-[#0B5FFF]">
+                                      {seq}
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className={`text-xs ${isDone ? 'text-emerald-600 font-bold' : isInProgress ? 'text-blue-500 font-bold' : 'text-slate-400'}`}>
+                                          {isDone ? '✓' : isInProgress ? '▶' : '○'}
+                                        </span>
+                                        <span className={`font-medium ${isDone ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+                                          {st.title}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="py-2 px-3 text-[11px] text-slate-500">
+                                      {st.category || act.discipline || 'General'}
+                                    </td>
+                                    <td className="py-2 px-3 text-center">
+                                      {st.isHoldPoint ? (
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold ${
+                                          st.holdPointSignOff?.approved || isDone
+                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+                                            : 'bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+                                        }`}>
+                                          {st.holdPointSignOff?.approved || isDone ? 'QA CLEARED ✓' : 'HOLD POINT ⚠️'}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-400">Standard</span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-3 text-right">
+                                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                        isDone ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300' :
+                                        isInProgress ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300' :
+                                        'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                      }`}>
+                                        {st.status || 'Not Started'}
+                                      </span>
+                                    </td>
                                   </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                                  {subtasks.map((st, stIdx) => {
-                                    const seq = getSubtaskProgressionNumber(act.subtasks || [], stIdx) || `${stIdx + 1}.0`;
-                                    const isDone = st.status === 'Completed';
-                                    const isInProgress = st.status === 'In Progress';
-
-                                    return (
-                                      <tr key={st.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
-                                        <td className="py-2 font-mono text-[11px] font-bold text-[#0B5FFF]">
-                                          {seq}
-                                        </td>
-                                        <td className="py-2">
-                                          <div className="flex items-center gap-1.5">
-                                            <span className={`text-xs ${isDone ? 'text-emerald-600 font-bold' : isInProgress ? 'text-blue-500 font-bold' : 'text-slate-400'}`}>
-                                              {isDone ? '✓' : isInProgress ? '▶' : '○'}
-                                            </span>
-                                            <span className={`font-medium ${isDone ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
-                                              {st.title}
-                                            </span>
-                                          </div>
-                                        </td>
-                                        <td className="py-2 text-[11px] text-slate-500">
-                                          {st.category || act.discipline || 'General'}
-                                        </td>
-                                        <td className="py-2">
-                                          {st.isHoldPoint ? (
-                                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                                              st.holdPointSignOff?.approved || isDone
-                                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                                                : 'bg-amber-50 text-amber-800 border border-amber-300'
-                                            }`}>
-                                              {st.holdPointSignOff?.approved || isDone ? 'QA CLEARED ✓' : 'HOLD POINT ⚠️'}
-                                            </span>
-                                          ) : (
-                                            <span className="text-[10px] text-slate-400">Standard</span>
-                                          )}
-                                        </td>
-                                        <td className="py-2 text-right">
-                                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                            isDone ? 'bg-emerald-100 text-emerald-800' :
-                                            isInProgress ? 'bg-blue-100 text-blue-800' :
-                                            'bg-slate-100 text-slate-600'
-                                          }`}>
-                                            {st.status || 'Not Started'}
-                                          </span>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <div className="p-3 bg-white dark:bg-slate-900 text-xs text-slate-500">
-                              Direct execution on scope milestone ({act.actualQuantity ?? 0} / {act.targetQuantity ?? 0} {act.unit || 'units'}).
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  /* Standard Matrix Table */
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
-                          <th className="p-2.5">ID</th>
-                          <th className="p-2.5">Scope & Deliverables</th>
-                          <th className="p-2.5">Discipline</th>
-                          <th className="p-2.5">Target Qty</th>
-                          <th className="p-2.5">Status</th>
-                          <th className="p-2.5 text-right">Progress</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {filteredActivities.slice(0, 20).map(act => (
-                          <tr key={act.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                            <td className="p-2.5 font-bold font-mono text-[#0B5FFF] align-top">{act.id}</td>
-                            <td className="p-2.5 align-top">
-                              <div className="font-bold text-slate-900 dark:text-white">{act.name}</div>
-                              {act.workPackage && <div className="text-[10px] text-slate-500">Package: {act.workPackage}</div>}
-                            </td>
-                            <td className="p-2.5 align-top text-slate-600 dark:text-slate-300">{act.discipline || 'General'}</td>
-                            <td className="p-2.5 align-top font-mono text-[11px]">{act.actualQuantity ?? 0} / {act.targetQuantity ?? 0} {act.unit}</td>
-                            <td className="p-2.5 align-top">
-                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                act.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
-                                act.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                                'bg-slate-100 text-slate-700'
-                              }`}>
-                                {act.status}
-                              </span>
-                            </td>
-                            <td className="p-2.5 align-top text-right font-bold text-slate-900 dark:text-white">
-                              {act.progress || 0}%
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan={5} className="py-2 px-3 text-xs text-slate-400 italic">
+                                  Direct execution on scope milestone ({act.actualQuantity ?? 0} / {act.targetQuantity ?? 0} {act.unit || 'units'}).
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {/* 6. Formal Engineering Sign-Off Stamp */}
