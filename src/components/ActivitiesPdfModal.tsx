@@ -38,7 +38,12 @@ import {
   FileStack,
   SlidersHorizontal,
   ChevronRight,
-  Maximize2
+  Maximize2,
+  Shield,
+  CircleDot,
+  CheckCircle,
+  FileCheck2,
+  Clock4
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, ProgressBar } from './ui';
 import { Activity, Project, ActivityStatus, WorkstreamType, SubTask } from '../types';
@@ -49,8 +54,8 @@ import { saveOrShareFile } from '../lib/fileExportService';
 
 export type ReportTemplateType = 
   | 'executive'        // Executive Operations Summary
-  | 'daily_shift'      // Daily Shift Diary & Focused Subtasks (NEW)
-  | 'subtasks_matrix'  // Granular Subtask Execution & Deliverables Matrix (NEW)
+  | 'daily_shift'      // Daily Shift Diary & Focused Subtasks
+  | 'subtasks_matrix'  // Granular Subtask Execution & Deliverables Matrix
   | 'detailed'         // Detailed Engineering Task Dossier
   | 'workstream'       // Multi-Discipline Matrix
   | 'briefing';        // Daily Shift Briefing & Sign-Off
@@ -92,14 +97,14 @@ export function ActivitiesPdfModal({
   const [subtaskInclusion, setSubtaskInclusion] = useState<'all' | 'focused' | 'active_only' | 'hold_points_only'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [disciplineFilter, setDisciplineFilter] = useState<string>('all');
-  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
+  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('portrait');
   
   const [reportTitle, setReportTitle] = useState<string>('Construction Activities Progress & Execution Master Report');
   const [reportSubtitle, setReportSubtitle] = useState<string>(defaultFilterLabel);
   const [preparedBy, setPreparedBy] = useState<string>(
     currentUserProfile?.name 
       ? `${currentUserProfile.name} (${currentUserProfile.role || 'Site Supervisor'})`
-      : 'Site Supervisor / Operations Manager'
+      : 'Lindokuhle Chris (Admin)'
   );
   
   // Feature Section Toggles
@@ -170,10 +175,12 @@ export function ActivitiesPdfModal({
     }
     if (subtaskInclusion === 'focused' || scopeMode === 'focused_only') {
       const sel = activePinnedMap[act.id];
-      if (sel === 'all' || !sel) return all;
-      if (Array.isArray(sel)) {
+      if (sel === 'all') return all;
+      if (Array.isArray(sel) && sel.length > 0) {
         return all.filter(s => sel.includes(s.id));
       }
+      // If none pinned specifically for this activity, show active or all if shift diary
+      return all.filter(s => s.status === 'In Progress' || s.status === 'Completed' || s.isHoldPoint);
     }
     return all;
   };
@@ -207,15 +214,6 @@ export function ActivitiesPdfModal({
     });
   }, [activities, selectedProjectId, disciplineFilter, scopeMode, statusFilter, activePinnedMap]);
 
-  // Unique disciplines list
-  const uniqueDisciplines = useMemo(() => {
-    const set = new Set<string>();
-    activities.forEach(a => {
-      if (a.discipline) set.add(a.discipline);
-    });
-    return Array.from(set);
-  }, [activities]);
-
   // Current Project
   const currentProject = useMemo(() => {
     if (selectedProjectId === 'all') return projects[0];
@@ -227,36 +225,32 @@ export function ActivitiesPdfModal({
   const inProgressCount = filteredActivities.filter(a => a.status === 'In Progress').length;
   const completedCount = filteredActivities.filter(a => a.status === 'Completed').length;
   const blockedCount = filteredActivities.filter(a => a.status === 'Blocked' || a.status === 'Waiting' || a.status === 'Cancelled').length;
-  const notStartedCount = filteredActivities.filter(a => a.status === 'Not Started' || a.status === 'Ready').length;
   const avgProgress = totalCount > 0 
     ? Math.round(filteredActivities.reduce((acc, a) => acc + (a.progress || 0), 0) / totalCount) 
     : 0;
 
-  const totalPlannedHours = filteredActivities.reduce((acc, a) => acc + (Number(a.plannedHours) || 0), 0);
-  const totalActualHours = filteredActivities.reduce((acc, a) => acc + (Number(a.actualHours) || 0), 0);
-  
   // Total Subtasks & QA Gates across filtered dataset
   const totalSubtasksCount = useMemo(() => {
     return filteredActivities.reduce((sum, a) => sum + getSubtasksForActivity(a).length, 0);
-  }, [filteredActivities]);
+  }, [filteredActivities, subtaskInclusion, scopeMode, activePinnedMap]);
 
   const completedSubtasksCount = useMemo(() => {
     return filteredActivities.reduce((sum, a) => 
       sum + getSubtasksForActivity(a).filter(s => s.status === 'Completed').length, 0
     );
-  }, [filteredActivities]);
+  }, [filteredActivities, subtaskInclusion, scopeMode, activePinnedMap]);
 
   const totalQaHoldPoints = useMemo(() => {
     return filteredActivities.reduce((sum, a) => 
       sum + getSubtasksForActivity(a).filter(s => s.isHoldPoint).length, 0
     );
-  }, [filteredActivities]);
+  }, [filteredActivities, subtaskInclusion, scopeMode, activePinnedMap]);
 
   const clearedQaHoldPoints = useMemo(() => {
     return filteredActivities.reduce((sum, a) => 
       sum + getSubtasksForActivity(a).filter(s => s.isHoldPoint && (s.holdPointSignOff?.approved || s.status === 'Completed')).length, 0
     );
-  }, [filteredActivities]);
+  }, [filteredActivities, subtaskInclusion, scopeMode, activePinnedMap]);
 
   // Resource Aggregations (Manpower & Heavy Equipment)
   const totalWorkforceCrew = useMemo(() => {
@@ -274,16 +268,6 @@ export function ActivitiesPdfModal({
     };
   }, [filteredActivities]);
 
-  const totalEquipmentUnits = useMemo(() => {
-    const eqIds = new Set<string>();
-    filteredActivities.forEach(a => {
-      (a.assignedEquipment || []).forEach(e => {
-        if (e.equipmentId || e.name) eqIds.add(e.equipmentId || e.name || 'EQ');
-      });
-    });
-    return eqIds.size;
-  }, [filteredActivities]);
-
   const shiftDateFormatted = useMemo(() => {
     const dateObj = new Date(shiftDate + 'T00:00:00');
     return isNaN(dateObj.getTime()) ? shiftDate : dateObj.toLocaleDateString('en-GB', {
@@ -299,10 +283,10 @@ export function ActivitiesPdfModal({
   // Update Dynamic Title based on Template
   useEffect(() => {
     if (selectedTemplate === 'daily_shift') {
-      setReportTitle(`Daily Shift Site Diary & Progress Dossier — ${shiftDateFormatted}`);
+      setReportTitle(`Daily Shift Site Diary & Progress Dossier`);
       setReportSubtitle(`Shift Execution & QA Quality Gate Record`);
     } else if (selectedTemplate === 'subtasks_matrix') {
-      setReportTitle('Granular Subtask Execution & Deliverables Progress Matrix');
+      setReportTitle('Granular Subtask Execution & Deliverables Matrix');
       setReportSubtitle('Method Progression, Quantity Metrics & Inspection Quality Gates');
     } else if (selectedTemplate === 'detailed') {
       setReportTitle('Detailed Engineering Task Dossier & Quality Ledger');
@@ -311,16 +295,16 @@ export function ActivitiesPdfModal({
       setReportTitle('Multi-Discipline Workstream Progress Matrix');
       setReportSubtitle('Cross-Functional Engineering & Scope Tracking');
     } else if (selectedTemplate === 'briefing') {
-      setReportTitle(`Daily Shift Briefing & Task Authorization Sheet — ${shiftDateFormatted}`);
+      setReportTitle(`Daily Shift Briefing & Task Authorization Sheet`);
       setReportSubtitle('Morning Toolbox Safety & Task Assignment Sheet');
     } else {
       setReportTitle('Construction Activities Progress & Execution Master Report');
       setReportSubtitle(defaultFilterLabel);
     }
-  }, [selectedTemplate, shiftDateFormatted, defaultFilterLabel]);
+  }, [selectedTemplate, defaultFilterLabel]);
 
   // -------------------------------------------------------------
-  // Robust Multi-Page Vector jsPDF Report Engine
+  // Robust Multi-Page Vector jsPDF Report Engine (Clean Corporate Layout)
   // -------------------------------------------------------------
   const generatePdfBlob = async (): Promise<Blob> => {
     const doc = new jsPDF({
@@ -331,107 +315,130 @@ export function ActivitiesPdfModal({
 
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 36;
+    const margin = 32;
     const contentWidth = pageWidth - margin * 2;
 
     // Palette tokens
     const brandBlue = [11, 95, 255];     // #0B5FFF
     const darkNavy = [15, 23, 42];       // slate-900
     const slateMuted = [100, 116, 139];  // slate-500
-    const cardBg = [248, 250, 252];      // slate-50
+    const slateLight = [241, 245, 249];  // slate-100
     const borderColor = [226, 232, 240]; // slate-200
     const emeraldColor = [5, 150, 105];  // emerald-600
     const amberColor = [217, 119, 6];    // amber-600
     const roseColor = [220, 38, 38];     // rose-600
 
-    // 1. Top Accent Header Bar
+    // 1. Sleek Top Accent Line (Dual Tone)
     doc.setFillColor(brandBlue[0], brandBlue[1], brandBlue[2]);
-    doc.rect(0, 0, pageWidth, 50, 'F');
+    doc.rect(0, 0, pageWidth, 4, 'F');
 
-    // Title inside banner
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('CONSTRUCTFIELD ENTERPRISE', margin, 22);
-
-    doc.setFontSize(8.5);
-    doc.setFont('helvetica', 'normal');
-    doc.text(
-      selectedTemplate === 'daily_shift'
-        ? 'Daily Site Diary, Shift Execution & Progress Dossier'
-        : selectedTemplate === 'subtasks_matrix'
-        ? 'Granular Subtask Execution & Deliverables Matrix'
-        : selectedTemplate === 'detailed'
-        ? 'Detailed Engineering Task Dossier & Quality Ledger'
-        : selectedTemplate === 'workstream'
-        ? 'Cross-Discipline Workstream Progress Matrix'
-        : selectedTemplate === 'briefing'
-        ? 'Daily Shift Briefing & Task Authorization Sheet'
-        : 'Construction Activities Execution & Progress Master Report',
-      margin,
-      38
-    );
-
-    // Reference ID & Classification
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text('OFFICIAL PROJECT RECORD', pageWidth - margin - 150, 22);
-    doc.setFont('helvetica', 'normal');
-    doc.text(
-      `Ref: CF-${selectedTemplate === 'daily_shift' ? 'SHIFT' : 'ACT'}-${shiftDate}`,
-      pageWidth - margin - 150,
-      38
-    );
-
-    // 2. Sub-banner project metadata
-    let currentY = 70;
+    // 2. Executive Corporate Letterhead
+    let currentY = 28;
     doc.setTextColor(darkNavy[0], darkNavy[1], darkNavy[2]);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12.5);
-    doc.text(reportTitle, margin, currentY);
+    doc.setFontSize(14);
+    doc.text('CONSTRUCTFIELD ENTERPRISE', margin, currentY);
 
-    currentY += 15;
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
+    // Subtitle & Report Type
+    currentY += 13;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(brandBlue[0], brandBlue[1], brandBlue[2]);
     doc.text(
-      `Project: ${currentProject?.name || 'Main Site'} (${currentProject?.id || 'PROJ-01'})   |   Location: ${currentProject?.location || 'Jobsite'}   |   Shift Date: ${shiftDateFormatted}`,
+      selectedTemplate === 'daily_shift'
+        ? 'DAILY SITE DIARY & EXECUTION DOSSIER'
+        : selectedTemplate === 'subtasks_matrix'
+        ? 'GRANULAR SUBTASK & METHOD PROGRESSION MATRIX'
+        : selectedTemplate === 'detailed'
+        ? 'DETAILED ENGINEERING TASK LEDGER'
+        : selectedTemplate === 'workstream'
+        ? 'WORKSTREAM CROSS-FUNCTIONAL MATRIX'
+        : selectedTemplate === 'briefing'
+        ? 'DAILY SHIFT BRIEFING & TOOLBOX RECORD'
+        : 'EXECUTIVE PROGRESS & EXECUTION MASTER REPORT',
       margin,
       currentY
     );
+
+    // Right-aligned reference card
+    const refCardW = 160;
+    const refCardX = pageWidth - margin - refCardW;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
+    doc.roundedRect(refCardX, 16, refCardW, 36, 3, 3, 'FD');
+
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
+    doc.text('OFFICIAL PROJECT RECORD', refCardX + 8, 28);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(darkNavy[0], darkNavy[1], darkNavy[2]);
+    doc.text(`Ref: CF-${selectedTemplate === 'daily_shift' ? 'SHIFT' : 'ACT'}-${shiftDate}`, refCardX + 8, 42);
+
+    // 3. Project & Shift Metadata Grid
+    currentY += 12;
+    doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
+    doc.line(margin, currentY, pageWidth - margin, currentY);
+
+    currentY += 14;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(darkNavy[0], darkNavy[1], darkNavy[2]);
+    doc.text(`Project:`, margin, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${currentProject?.name || 'Main Site'} (${currentProject?.id || 'PROJ-01'})`, margin + 38, currentY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Location:`, margin + 220, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${currentProject?.location || 'Jobsite'}`, margin + 265, currentY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Shift Date:`, margin + 370, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${shiftDateFormatted}`, margin + 420, currentY);
 
     currentY += 12;
-    doc.text(
-      `Generated: ${shiftDateFormatted} at ${currentTimeFormatted}   |   Prepared By: ${preparedBy}   |   Scope: ${reportSubtitle} (${totalCount} Activities)`,
-      margin,
-      currentY
-    );
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Prepared By:`, margin, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${preparedBy}`, margin + 60, currentY);
 
-    // 3. Environmental & Weather Banner (if Daily Shift & toggled)
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Scope:`, margin + 220, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${reportSubtitle} (${totalCount} Activities)`, margin + 255, currentY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Generated:`, margin + 370, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${shiftDateFormatted} at ${currentTimeFormatted}`, margin + 420, currentY);
+
+    // 4. Site Environment & Weather Strip
     if (includeWeatherRecord && (selectedTemplate === 'daily_shift' || selectedTemplate === 'briefing')) {
       currentY += 14;
-      doc.setFillColor(241, 245, 249);
+      doc.setFillColor(248, 250, 252);
       doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
-      doc.roundedRect(margin, currentY, contentWidth, 24, 3, 3, 'FD');
+      doc.roundedRect(margin, currentY, contentWidth, 22, 3, 3, 'FD');
 
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(darkNavy[0], darkNavy[1], darkNavy[2]);
-      doc.text('SITE ENVIRONMENT & WEATHER:', margin + 8, currentY + 15);
+      doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
+      doc.text('SITE ENVIRONMENT & CONDITIONS:', margin + 8, currentY + 14);
 
       doc.setFont('helvetica', 'normal');
-      doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
-      doc.text('Weather: Clear / Sunny 24°C   |   Ground: Firm & Dry   |   Wind: 8 km/h NW   |   Site Safety Status: Operational / Zero Incidents', margin + 160, currentY + 15);
-
-      currentY += 28;
+      doc.setTextColor(darkNavy[0], darkNavy[1], darkNavy[2]);
+      doc.text('Weather: Clear / Sunny 24°C   |   Ground: Firm & Dry   |   Wind: 8 km/h NW   |   HSE Status: Operational / Zero Incidents', margin + 145, currentY + 14);
+      currentY += 26;
     } else {
-      currentY += 10;
+      currentY += 12;
     }
 
-    // 4. Executive KPI Summary Cards
+    // 5. Executive KPI Summary Cards
     if (includeKpiSummary) {
-      currentY += 4;
-      const cardHeight = 36;
+      currentY += 2;
+      const cardHeight = 34;
       const cardGap = 6;
       const numCards = selectedTemplate === 'daily_shift' ? 5 : 6;
       const cardW = (contentWidth - cardGap * (numCards - 1)) / numCards;
@@ -440,7 +447,7 @@ export function ActivitiesPdfModal({
         { label: 'ACTIVITIES ON SHIFT', val: `${totalCount}`, color: brandBlue },
         { label: 'DELIVERABLES DONE', val: `${completedSubtasksCount} / ${totalSubtasksCount}`, color: emeraldColor },
         { label: 'QA GATES CLEARED', val: `${clearedQaHoldPoints} / ${totalQaHoldPoints}`, color: amberColor },
-        { label: 'CREW WORKFORCE', val: `${totalWorkforceCrew.count} workers (${totalWorkforceCrew.hours}h)`, color: [79, 70, 229] },
+        { label: 'CREW WORKFORCE', val: `${totalWorkforceCrew.count} Workers (${totalWorkforceCrew.hours}h)`, color: [79, 70, 229] },
         { label: 'AVG SHIFT PROGRESS', val: `${avgProgress}%`, color: [14, 116, 144] },
       ] : [
         { label: 'TOTAL TASKS', val: `${totalCount}`, color: brandBlue },
@@ -453,18 +460,19 @@ export function ActivitiesPdfModal({
 
       kpis.forEach((kpi, idx) => {
         const x = margin + idx * (cardW + cardGap);
-        doc.setFillColor(cardBg[0], cardBg[1], cardBg[2]);
+        doc.setFillColor(248, 250, 252);
         doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
         doc.roundedRect(x, currentY, cardW, cardHeight, 3, 3, 'FD');
 
-        doc.setFontSize(6);
+        doc.setFontSize(5.5);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
-        doc.text(kpi.label, x + 6, currentY + 12);
+        doc.text(kpi.label, x + 6, currentY + 11);
 
-        doc.setFontSize(10.5);
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'bold');
         doc.setTextColor(kpi.color[0], kpi.color[1], kpi.color[2]);
-        doc.text(kpi.val, x + 6, currentY + 27);
+        doc.text(kpi.val, x + 6, currentY + 25);
       });
 
       currentY += cardHeight + 14;
@@ -473,32 +481,29 @@ export function ActivitiesPdfModal({
     }
 
     // -------------------------------------------------------------
-    // 5. Main Data Table Rendering Based on Selected Template
+    // 6. Main Data Table Rendering Based on Selected Template
     // -------------------------------------------------------------
     if (selectedTemplate === 'daily_shift') {
-      // DAILY SHIFT & SITE DIARY DOSSIER
       const tableHeaders = [
-        ['ID & Code', 'Activity Scope & Granular Subtasks Worked', 'Discipline', 'Target Qty', 'Subtasks Done', 'QA Quality Gates', 'Progress %']
+        ['WBS / Ref', 'Activity & Granular Shift Deliverables', 'Discipline', 'Target Qty', 'Hold Point / QA', 'Status', 'Progress']
       ];
 
       const tableData = filteredActivities.map(act => {
         const subtasks = getSubtasksForActivity(act);
         let scopeContent = act.name;
-        if (act.workPackage) scopeContent += `\nWork Package: ${act.workPackage}`;
+        if (act.workPackage) scopeContent += `\nPackage: ${act.workPackage}`;
         if (act.area) scopeContent += `  •  Area: ${act.area}`;
-        if (act.sectionSpan) scopeContent += `  •  Span: ${act.sectionSpan}`;
 
         if (includeSubtasks && subtasks.length > 0) {
-          scopeContent += `\n\nShift Deliverables & Progression (${subtasks.filter(s => s.status === 'Completed').length}/${subtasks.length} Completed):`;
+          scopeContent += `\n\nFocused Shift Subtasks (${subtasks.filter(s => s.status === 'Completed').length}/${subtasks.length} Completed):`;
           subtasks.forEach((s, sIdx) => {
             const mark = s.status === 'Completed' ? '[✓ DONE]' : s.status === 'In Progress' ? '[▶ ACTIVE]' : '[  TODO]';
             const seq = getSubtaskProgressionNumber(act.subtasks || [], sIdx) || `${sIdx + 1}.0`;
             const holdPoint = s.isHoldPoint ? (s.holdPointSignOff?.approved ? ' [QA CLEARED]' : ' [QA HOLD GATE]') : '';
-            scopeContent += `\n  ${mark} ${seq} ${s.title} (${s.completedQuantity || 0}/${s.targetQuantity || 1} ${s.unit || 'units'})${holdPoint}`;
+            scopeContent += `\n  ${mark} ${seq} ${s.title}${holdPoint}`;
           });
         }
 
-        const completedSub = subtasks.filter(s => s.status === 'Completed').length;
         const holdPointsTotal = subtasks.filter(s => s.isHoldPoint).length;
         const holdPointsCleared = subtasks.filter(s => s.isHoldPoint && (s.holdPointSignOff?.approved || s.status === 'Completed')).length;
 
@@ -507,8 +512,8 @@ export function ActivitiesPdfModal({
           scopeContent,
           act.discipline || 'General',
           `${act.actualQuantity ?? 0} / ${act.targetQuantity ?? 0} ${act.unit || 'units'}`,
-          `${completedSub} / ${subtasks.length}`,
-          holdPointsTotal > 0 ? `${holdPointsCleared} / ${holdPointsTotal} Approved` : 'N/A',
+          holdPointsTotal > 0 ? `${holdPointsCleared}/${holdPointsTotal} Approved` : 'N/A',
+          act.status,
           `${act.progress || 0}%`
         ];
       });
@@ -520,30 +525,32 @@ export function ActivitiesPdfModal({
         theme: 'grid',
         headStyles: {
           fillColor: [241, 245, 249],
-          textColor: [51, 65, 85],
-          fontSize: 8,
+          textColor: [30, 41, 59],
+          fontSize: 7.5,
           fontStyle: 'bold',
+          lineColor: [203, 213, 225],
+          lineWidth: 0.5
         },
         styles: {
-          fontSize: 7.5,
-          cellPadding: 5.5,
+          fontSize: 7,
+          cellPadding: 5,
           textColor: [15, 23, 42],
           lineColor: [226, 232, 240],
+          lineWidth: 0.5
         },
         columnStyles: {
-          0: { cellWidth: 70, fontStyle: 'bold' },
-          1: { cellWidth: orientation === 'landscape' ? 320 : 190 },
-          2: { cellWidth: 65 },
-          3: { cellWidth: 75 },
-          4: { cellWidth: 65, halign: 'center' },
-          5: { cellWidth: 75, halign: 'center' },
-          6: { cellWidth: 55, halign: 'right', fontStyle: 'bold' },
+          0: { cellWidth: 55, fontStyle: 'bold' },
+          1: { cellWidth: orientation === 'landscape' ? 320 : 200 },
+          2: { cellWidth: 60 },
+          3: { cellWidth: 70 },
+          4: { cellWidth: 70, halign: 'center' },
+          5: { cellWidth: 55, halign: 'center' },
+          6: { cellWidth: 45, halign: 'right', fontStyle: 'bold' },
         },
         margin: { left: margin, right: margin }
       });
 
     } else if (selectedTemplate === 'subtasks_matrix') {
-      // GRANULAR SUBTASK & METHOD PROGRESS MATRIX
       const tableHeaders = [
         ['Activity ID', 'Seq #', 'Subtask Deliverable & Method Item', 'Category', 'Target Qty', 'Completed', 'Unit', 'Status', 'QA Gate', 'Progress %']
       ];
@@ -554,8 +561,8 @@ export function ActivitiesPdfModal({
         if (subtasks.length === 0) {
           tableData.push([
             act.id,
-            '—',
-            `${act.name} (Direct Activity Scope)`,
+            '1.0',
+            `${act.name} (Direct Scope)`,
             act.discipline || 'General',
             act.targetQuantity || 0,
             act.actualQuantity || 0,
@@ -590,111 +597,50 @@ export function ActivitiesPdfModal({
         theme: 'grid',
         headStyles: {
           fillColor: [241, 245, 249],
-          textColor: [51, 65, 85],
-          fontSize: 7.5,
+          textColor: [30, 41, 59],
+          fontSize: 7,
           fontStyle: 'bold',
+          lineColor: [203, 213, 225],
+          lineWidth: 0.5
         },
         styles: {
-          fontSize: 7,
-          cellPadding: 4.5,
+          fontSize: 6.5,
+          cellPadding: 4,
           textColor: [15, 23, 42],
           lineColor: [226, 232, 240],
+          lineWidth: 0.5
         },
         columnStyles: {
-          0: { cellWidth: 55, fontStyle: 'bold' },
-          1: { cellWidth: 35, halign: 'center' },
+          0: { cellWidth: 50, fontStyle: 'bold' },
+          1: { cellWidth: 32, fontStyle: 'bold', halign: 'center' },
           2: { cellWidth: orientation === 'landscape' ? 240 : 140 },
-          3: { cellWidth: 65 },
+          3: { cellWidth: 55 },
           4: { cellWidth: 45, halign: 'right' },
           5: { cellWidth: 45, halign: 'right' },
           6: { cellWidth: 40 },
-          7: { cellWidth: 55 },
-          8: { cellWidth: 60, halign: 'center' },
-          9: { cellWidth: 50, halign: 'right', fontStyle: 'bold' },
-        },
-        margin: { left: margin, right: margin }
-      });
-
-    } else if (selectedTemplate === 'briefing') {
-      // DAILY SHIFT BRIEFING & TOOLBOX AUTHORIZATION SHEET
-      const tableHeaders = [
-        ['ID', 'Scope Deliverables / Shift Objectives', 'Lead / Discipline', 'Planned Hours', 'Hazards / QA Hold Check', 'Crew Authorization Sign-In']
-      ];
-
-      const tableData = filteredActivities.map(act => {
-        const subtasks = getSubtasksForActivity(act);
-        let scopeContent = act.name;
-        if (subtasks.length > 0) {
-          scopeContent += `\nTarget Deliverables: ` + subtasks.slice(0, 3).map(s => s.title).join('; ');
-        }
-        const leadWorker = (act.assignedLabour && act.assignedLabour[0]?.name) || 'Assigned Crew';
-        return [
-          act.id,
-          scopeContent,
-          `${leadWorker}\n(${act.discipline || 'General'})`,
-          `${act.plannedHours || 8} hrs`,
-          act.subtasks?.some(s => s.isHoldPoint) ? '⚠ MANDATORY QA HOLD GATE' : 'Standard PPE & Safe Work Procedure',
-          'Signature: ______________________'
-        ];
-      });
-
-      autoTable(doc, {
-        head: tableHeaders,
-        body: tableData,
-        startY: currentY,
-        theme: 'grid',
-        headStyles: {
-          fillColor: [241, 245, 249],
-          textColor: [51, 65, 85],
-          fontSize: 8,
-          fontStyle: 'bold',
-        },
-        styles: {
-          fontSize: 7.5,
-          cellPadding: 6,
-          textColor: [15, 23, 42],
-          lineColor: [226, 232, 240],
-        },
-        columnStyles: {
-          0: { cellWidth: 55, fontStyle: 'bold' },
-          1: { cellWidth: orientation === 'landscape' ? 260 : 160 },
-          2: { cellWidth: 80 },
-          3: { cellWidth: 55, halign: 'center' },
-          4: { cellWidth: 120 },
-          5: { cellWidth: 140 },
+          7: { cellWidth: 55, halign: 'center' },
+          8: { cellWidth: 55, halign: 'center' },
+          9: { cellWidth: 45, halign: 'right', fontStyle: 'bold' },
         },
         margin: { left: margin, right: margin }
       });
 
     } else {
-      // EXECUTIVE & DETAILED DOSSIER
+      // EXECUTIVE & GENERAL REPORT MATRIX
       const tableHeaders = [
-        ['ID', 'Activity Scope & Work Package', 'Discipline', 'Priority', 'Qty / Target', 'Status', 'Start Date', 'Progress %']
+        ['ID', 'Scope Title & Package', 'Discipline', 'Planned Date', 'Status', 'QA Hold', 'Progress %']
       ];
 
       const tableData = filteredActivities.map(act => {
         const subtasks = getSubtasksForActivity(act);
-        let scopeContent = act.name;
-        if (act.workPackage) scopeContent += `\nPackage: ${act.workPackage}`;
-        if (act.area) scopeContent += `  •  Area: ${act.area}`;
-        if (act.sectionSpan) scopeContent += `  •  Span: ${act.sectionSpan}`;
-
-        if (includeSubtasks && subtasks.length > 0 && selectedTemplate === 'detailed') {
-          scopeContent += `\n\nDeliverables (${subtasks.filter(s => s.status === 'Completed').length}/${subtasks.length}):`;
-          subtasks.slice(0, 4).forEach(s => {
-            const mark = s.status === 'Completed' ? '[✓ DONE]' : s.status === 'In Progress' ? '[▶ PROG]' : '[  TODO]';
-            scopeContent += `\n  ${mark} ${s.title}${s.isHoldPoint ? ' [QA HOLD]' : ''}`;
-          });
-        }
-
+        const holdPoints = subtasks.filter(s => s.isHoldPoint);
         return [
           act.id,
-          scopeContent,
-          act.discipline || 'General Civil',
-          act.priority || 'Medium',
-          `${act.actualQuantity ?? 0} / ${act.targetQuantity ?? 0} ${act.unit || 'units'}`,
-          act.status || 'Not Started',
-          act.startDate || '—',
+          `${act.name}\nPackage: ${act.workPackage || 'Standard'}`,
+          act.discipline || 'General',
+          `${act.startDate || '—'} → ${act.endDate || '—'}`,
+          act.status,
+          holdPoints.length > 0 ? `${holdPoints.filter(h => h.holdPointSignOff?.approved).length}/${holdPoints.length} Cleared` : 'None',
           `${act.progress || 0}%`
         ];
       });
@@ -706,81 +652,83 @@ export function ActivitiesPdfModal({
         theme: 'grid',
         headStyles: {
           fillColor: [241, 245, 249],
-          textColor: [51, 65, 85],
-          fontSize: 8,
+          textColor: [30, 41, 59],
+          fontSize: 7.5,
           fontStyle: 'bold',
+          lineColor: [203, 213, 225],
+          lineWidth: 0.5
         },
         styles: {
-          fontSize: 7.5,
-          cellPadding: 5.5,
+          fontSize: 7,
+          cellPadding: 5,
           textColor: [15, 23, 42],
           lineColor: [226, 232, 240],
+          lineWidth: 0.5
         },
         columnStyles: {
           0: { cellWidth: 55, fontStyle: 'bold' },
-          1: { cellWidth: orientation === 'landscape' ? 280 : 170 },
-          2: { cellWidth: 70 },
-          3: { cellWidth: 55 },
-          4: { cellWidth: 80 },
-          5: { cellWidth: 70 },
-          6: { cellWidth: 75 },
-          7: { cellWidth: 60, halign: 'right', fontStyle: 'bold' },
+          1: { cellWidth: orientation === 'landscape' ? 300 : 180 },
+          2: { cellWidth: 65 },
+          3: { cellWidth: 90 },
+          4: { cellWidth: 65, halign: 'center' },
+          5: { cellWidth: 65, halign: 'center' },
+          6: { cellWidth: 50, halign: 'right', fontStyle: 'bold' },
         },
         margin: { left: margin, right: margin }
       });
     }
 
-    // 6. Sign-Off & Verification Footer Block
+    // 7. Official Engineering Sign-Off Footer Block
     const lastTable = (doc as any).lastAutoTable;
-    let finalY = lastTable ? lastTable.finalY + 16 : currentY + 30;
+    let finalY = lastTable ? lastTable.finalY + 14 : currentY + 25;
 
     if (includeSignoff) {
-      if (finalY > pageHeight - 90) {
+      if (finalY > pageHeight - 75) {
         doc.addPage();
-        finalY = 40;
+        finalY = 35;
       }
 
       doc.setDrawColor(203, 213, 225);
       doc.setFillColor(248, 250, 252);
-      doc.roundedRect(margin, finalY, contentWidth, 48, 3, 3, 'FD');
-
-      doc.setFontSize(7.5);
-      doc.setTextColor(darkNavy[0], darkNavy[1], darkNavy[2]);
-      doc.setFont('helvetica', 'bold');
-      doc.text('SITE MANAGEMENT REVIEW & EXECUTION SIGN-OFF', margin + 10, finalY + 13);
+      doc.roundedRect(margin, finalY, contentWidth, 42, 3, 3, 'FD');
 
       doc.setFontSize(7);
+      doc.setTextColor(darkNavy[0], darkNavy[1], darkNavy[2]);
+      doc.setFont('helvetica', 'bold');
+      doc.text('OFFICIAL SITE VERIFICATION & SIGN-OFF LEDGER', margin + 8, finalY + 12);
+
+      doc.setFontSize(6.5);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
       doc.text(
-        'I confirm that the recorded activity states, physical deliverables, and progress milestones represented in this report reflect authentic site execution.',
-        margin + 10,
-        finalY + 23
+        'The recorded activity states, physical deliverables, and progress milestones represented in this report reflect verified site execution.',
+        margin + 8,
+        finalY + 22
       );
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(darkNavy[0], darkNavy[1], darkNavy[2]);
-      doc.text(`Authorized Supervisor: ___________________________ (${preparedBy})`, margin + 10, finalY + 39);
-      doc.text(`QA/QC Quality Inspector: ___________________________`, margin + (orientation === 'landscape' ? 320 : 220), finalY + 39);
-      doc.text(`Date: ${shiftDateFormatted}`, margin + (orientation === 'landscape' ? 560 : 400), finalY + 39);
+      doc.text(`Authorized Supervisor: ___________________________`, margin + 8, finalY + 34);
+      doc.text(`QA/QC Quality Inspector: ___________________________`, margin + (orientation === 'landscape' ? 300 : 200), finalY + 34);
+      doc.text(`Date: ${shiftDateFormatted}`, margin + (orientation === 'landscape' ? 560 : 380), finalY + 34);
     }
 
-    // 7. Running Page Footers
+    // 8. Running Page Footers
     const totalPages = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
-      doc.setFontSize(7);
+      doc.setFontSize(6.5);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
       doc.text(
-        `Constructfield Enterprise Field Management System  •  Official Project Record  •  Shift: ${shiftDateFormatted}`,
+        `Constructfield Enterprise Field Management  •  Project: ${currentProject?.name || 'Main Site'}  •  Shift: ${shiftDateFormatted}`,
         margin,
-        pageHeight - 14
+        pageHeight - 12
       );
       doc.text(
         `Page ${i} of ${totalPages}`,
-        pageWidth - margin - 45,
-        pageHeight - 14
+        pageWidth - margin - 40,
+        pageHeight - 12
       );
     }
 
@@ -950,43 +898,37 @@ export function ActivitiesPdfModal({
                     id: 'daily_shift', 
                     name: 'Daily Shift Diary & Focused Subtasks', 
                     desc: 'Weather, crew on site, pinned subtasks & QA gates',
-                    badge: 'NEW: Shift Diary',
-                    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                    badge: 'Shift Diary'
                   },
                   { 
                     id: 'subtasks_matrix', 
                     name: 'Granular Subtask Deliverables Matrix', 
                     desc: 'Sequences, method deliverables, quantities & inspection',
-                    badge: 'NEW: Subtask Matrix',
-                    badgeColor: 'bg-blue-50 text-blue-700 border-blue-300'
+                    badge: 'Subtask Matrix'
                   },
                   { 
                     id: 'executive', 
                     name: 'Executive Master Summary', 
                     desc: 'KPI cards, schedule dates & master overview',
-                    badge: 'Executive',
-                    badgeColor: 'bg-slate-100 text-slate-700 border-slate-300'
+                    badge: 'Executive'
                   },
                   { 
                     id: 'detailed', 
                     name: 'Detailed Engineering Task Dossier', 
                     desc: 'Subtasks, hold points, packages & methods',
-                    badge: 'Engineering',
-                    badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-300'
+                    badge: 'Engineering'
                   },
                   { 
                     id: 'briefing', 
                     name: 'Daily Shift Briefing & Sign-Off', 
                     desc: 'Toolbox talk safety objectives & crew sign-in',
-                    badge: 'Toolbox Talk',
-                    badgeColor: 'bg-amber-50 text-amber-800 border-amber-300'
+                    badge: 'Toolbox Talk'
                   },
                   { 
                     id: 'workstream', 
                     name: 'Workstream Progress Matrix', 
                     desc: 'Multi-discipline cross-functional scope tracking',
-                    badge: 'Workstreams',
-                    badgeColor: 'bg-purple-50 text-purple-700 border-purple-300'
+                    badge: 'Workstreams'
                   }
                 ].map(t => (
                   <button
@@ -999,47 +941,47 @@ export function ActivitiesPdfModal({
                         setOrientation('landscape');
                       }
                     }}
-                    className={`p-3 rounded-2xl border text-left transition-all relative ${
+                    className={`w-full text-left p-3 rounded-2xl border transition-all ${
                       selectedTemplate === t.id
-                        ? 'border-[#0B5FFF] bg-blue-50/60 dark:bg-blue-950/40 text-blue-950 dark:text-blue-100 shadow-2xs'
-                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300'
+                        ? 'border-[#0B5FFF] bg-blue-50/50 dark:bg-blue-950/30 ring-2 ring-[#0B5FFF]/20'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="font-bold text-xs">{t.name}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">{t.name}</span>
                       {selectedTemplate === t.id && <Check className="h-3.5 w-3.5 text-[#0B5FFF]" />}
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400">{t.desc}</div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{t.desc}</p>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* 2. Shift Date & Scope Selection */}
+            {/* 2. Shift Date & Scope Filters */}
             <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5 text-emerald-600" /> Shift Date & Scope Filtering
+                <Calendar className="h-3.5 w-3.5 text-[#0B5FFF]" /> Shift Date & Scope Filtering
               </label>
 
               <div>
-                <label className="text-[11px] font-semibold text-slate-500 block mb-1">Shift / Record Date</label>
+                <label className="text-[11px] font-semibold text-slate-500">Shift / Record Date</label>
                 <input
                   type="date"
                   value={shiftDate}
                   onChange={e => setShiftDate(e.target.value)}
-                  className="w-full p-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold"
+                  className="w-full mt-1 p-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-slate-500 block mb-1">Progress Scope</label>
+                <label className="text-[11px] font-semibold text-slate-500">Progress Scope</label>
                 <select
                   value={scopeMode}
                   onChange={e => setScopeMode(e.target.value as any)}
-                  className="w-full p-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-medium"
+                  className="w-full mt-1 p-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                 >
-                  <option value="all">All Project Activities ({activities.length})</option>
-                  <option value="focused_only">Shift Focused / Pinned Items Only ({Object.keys(activePinnedMap).length > 0 ? Object.keys(activePinnedMap).length : 'Auto'})</option>
+                  <option value="all">All Project Activities</option>
+                  <option value="focused_only">Shift Focused / Pinned Items Only (Auto)</option>
                   <option value="in_progress">In Progress Activities Only</option>
                   <option value="blocked">Blocked / QA Hold Only</option>
                   <option value="completed">Completed Activities Only</option>
@@ -1047,11 +989,11 @@ export function ActivitiesPdfModal({
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-slate-500 block mb-1">Subtask Level Granularity</label>
+                <label className="text-[11px] font-semibold text-slate-500">Subtask Level Granularity</label>
                 <select
                   value={subtaskInclusion}
                   onChange={e => setSubtaskInclusion(e.target.value as any)}
-                  className="w-full p-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-medium"
+                  className="w-full mt-1 p-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                 >
                   <option value="all">All Configured Subtasks</option>
                   <option value="focused">Only Shift-Pinned & Active Subtasks</option>
@@ -1060,10 +1002,9 @@ export function ActivitiesPdfModal({
                 </select>
               </div>
 
-              {/* Orientation Selector */}
               <div>
-                <label className="text-[11px] font-semibold text-slate-500 block mb-1">Page Orientation</label>
-                <div className="grid grid-cols-2 gap-2">
+                <label className="text-[11px] font-semibold text-slate-500">Page Orientation</label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
                   <button
                     type="button"
                     onClick={() => setOrientation('landscape')}
@@ -1161,165 +1102,349 @@ export function ActivitiesPdfModal({
             </div>
           </div>
 
-          {/* Right Main Area: Interactive Live Vector Preview */}
-          <div className="flex-1 bg-slate-200/60 dark:bg-slate-950 p-4 sm:p-6 overflow-y-auto flex justify-center">
+          {/* Right Main Area: Ultra-Clean Executive Live Preview */}
+          <div className="flex-1 bg-slate-200/70 dark:bg-slate-950 p-4 sm:p-6 overflow-y-auto flex justify-center">
             <div 
               ref={printRef}
-              className={`bg-white dark:bg-slate-900 shadow-xl border border-slate-200 dark:border-slate-800 rounded-xl p-8 transition-all ${
+              className={`bg-white dark:bg-slate-900 shadow-2xl border border-slate-300 dark:border-slate-800 rounded-2xl p-6 sm:p-8 transition-all ${
                 orientation === 'landscape' ? 'w-full max-w-5xl min-h-[600px]' : 'w-full max-w-3xl min-h-[750px]'
               }`}
             >
-              {/* Document Header Accent */}
-              <div className="bg-[#0B5FFF] text-white -m-8 mb-6 p-5 rounded-t-xl flex justify-between items-center flex-wrap gap-4">
+              {/* Top Sleek Accent Border */}
+              <div className="w-full h-1 bg-[#0B5FFF] -mt-6 sm:-mt-8 -mx-6 sm:-mx-8 mb-6 rounded-t-2xl" />
+
+              {/* 1. Executive Corporate Letterhead */}
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
                 <div>
-                  <h1 className="text-lg font-black tracking-tight">CONSTRUCTFIELD ENTERPRISE</h1>
-                  <p className="text-xs text-blue-100 font-medium">{reportTitle}</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] font-bold tracking-widest uppercase bg-white/20 px-2.5 py-0.5 rounded-full inline-block">
-                    OFFICIAL PROJECT RECORD
+                  <div className="flex items-center gap-2">
+                    <span className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white uppercase">
+                      CONSTRUCTFIELD ENTERPRISE
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-[#0B5FFF]/10 text-[#0B5FFF] dark:bg-blue-950 dark:text-blue-400">
+                      OFFICIAL
+                    </span>
                   </div>
-                  <div className="text-xs text-blue-100 font-mono mt-1">
-                    Ref: CF-{selectedTemplate === 'daily_shift' ? 'SHIFT' : 'ACT'}-{shiftDate}
+                  <p className="text-xs font-bold text-[#0B5FFF] mt-0.5">
+                    {selectedTemplate === 'daily_shift' 
+                      ? 'DAILY SITE DIARY & EXECUTION DOSSIER'
+                      : selectedTemplate === 'subtasks_matrix'
+                      ? 'GRANULAR SUBTASK & METHOD PROGRESSION MATRIX'
+                      : 'EXECUTIVE PROGRESS & EXECUTION MASTER REPORT'}
+                  </p>
+                </div>
+
+                <div className="sm:text-right bg-slate-50 dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 min-w-[200px]">
+                  <div className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+                    DOCUMENT REFERENCE
+                  </div>
+                  <div className="text-xs font-mono font-bold text-slate-900 dark:text-white mt-0.5">
+                    CF-{selectedTemplate === 'daily_shift' ? 'SHIFT' : 'ACT'}-{shiftDate}
                   </div>
                 </div>
               </div>
 
-              {/* Sub-header Metadata */}
-              <div className="border-b border-slate-200 dark:border-slate-800 pb-4 mb-5 flex justify-between items-start flex-wrap gap-3">
+              {/* 2. Project Metadata Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-3.5 border-b border-slate-200 dark:border-slate-800 text-xs">
                 <div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    Project: <strong className="text-slate-800 dark:text-slate-200">{currentProject?.name || 'Main Jobsite'}</strong> ({currentProject?.id || 'PROJ-01'})
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Location: <strong className="text-slate-800 dark:text-slate-200">{currentProject?.location || 'Jobsite'}</strong>  •  Scope: <strong>{reportSubtitle}</strong>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PROJECT</div>
+                  <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 truncate">
+                    {currentProject?.name || 'Main Jobsite'}
                   </div>
                 </div>
-                <div className="text-right text-xs text-slate-500 dark:text-slate-400">
-                  <div>Shift Date: <strong className="text-slate-800 dark:text-slate-200">{shiftDateFormatted}</strong></div>
-                  <div className="mt-0.5">Prepared By: <strong className="text-slate-800 dark:text-slate-200">{preparedBy}</strong></div>
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">LOCATION</div>
+                  <div className="font-semibold text-slate-700 dark:text-slate-300 mt-0.5 truncate">
+                    {currentProject?.location || 'Jobsite'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SHIFT DATE</div>
+                  <div className="font-bold text-slate-900 dark:text-white mt-0.5">
+                    {shiftDateFormatted}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SUPERVISOR</div>
+                  <div className="font-semibold text-slate-700 dark:text-slate-300 mt-0.5 truncate">
+                    {preparedBy}
+                  </div>
                 </div>
               </div>
 
-              {/* Environmental & Weather Bar if Daily Shift */}
+              {/* 3. Site Condition & Environmental Strip */}
               {includeWeatherRecord && (selectedTemplate === 'daily_shift' || selectedTemplate === 'briefing') && (
-                <div className="mb-5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs flex-wrap gap-2">
-                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-medium">
-                    <CloudSun className="h-4 w-4 text-amber-500" />
-                    <span>Weather: <strong>Sunny / Clear 24°C</strong></span>
-                    <span>•</span>
-                    <span>Ground: <strong>Firm & Dry</strong></span>
+                <div className="my-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <CloudSun className="h-4 w-4 text-amber-500 shrink-0" />
+                    <div>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase">WEATHER</div>
+                      <div className="font-bold text-slate-800 dark:text-slate-200">24°C Sunny / Clear</div>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-300 font-bold">
-                      Zero HSE Incidents
-                    </Badge>
+                    <Compass className="h-4 w-4 text-blue-500 shrink-0" />
+                    <div>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase">GROUND / ACCESS</div>
+                      <div className="font-semibold text-slate-700 dark:text-slate-300">Firm & Dry</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <div>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase">HSE SAFETY</div>
+                      <div className="font-bold text-emerald-700 dark:text-emerald-400">Zero Incidents</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-indigo-500 shrink-0" />
+                    <div>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase">MANPOWER</div>
+                      <div className="font-semibold text-slate-700 dark:text-slate-300">{totalWorkforceCrew.count} Personnel ({totalWorkforceCrew.hours}h)</div>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Executive KPI Summary Cards */}
+              {/* 4. Executive KPI Dashboard Ribbon */}
               {includeKpiSummary && (
-                <div className={`grid gap-3 mb-6 ${selectedTemplate === 'daily_shift' ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-6'}`}>
+                <div className={`grid gap-2.5 my-4 ${selectedTemplate === 'daily_shift' ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-5'}`}>
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">Activities</div>
-                    <div className="text-lg font-black text-[#0B5FFF]">{totalCount}</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ACTIVITIES</div>
+                    <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{totalCount}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Logged on Shift</div>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">Deliverables Done</div>
-                    <div className="text-lg font-black text-emerald-600">{completedSubtasksCount} / {totalSubtasksCount}</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">DELIVERABLES</div>
+                    <div className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      {completedSubtasksCount} <span className="text-xs font-normal text-slate-400">/ {totalSubtasksCount}</span>
+                    </div>
+                    <div className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-0.5">
+                      {totalSubtasksCount > 0 ? `${Math.round((completedSubtasksCount / totalSubtasksCount) * 100)}% Completed` : '100%'}
+                    </div>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">QA Quality Gates</div>
-                    <div className="text-lg font-black text-amber-600">{clearedQaHoldPoints} / {totalQaHoldPoints}</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">QA HOLD GATES</div>
+                    <div className="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5">
+                      {clearedQaHoldPoints} <span className="text-xs font-normal text-slate-400">/ {totalQaHoldPoints}</span>
+                    </div>
+                    <div className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">Inspections Cleared</div>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">Crew on Site</div>
-                    <div className="text-lg font-black text-indigo-600">{totalWorkforceCrew.count} workers</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">CREW WORKFORCE</div>
+                    <div className="text-xl font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
+                      {totalWorkforceCrew.count} <span className="text-xs font-normal text-slate-400">workers</span>
+                    </div>
+                    <div className="text-[10px] text-indigo-700 dark:text-indigo-400 mt-0.5">{totalWorkforceCrew.hours} Total Hours</div>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">Avg Progress</div>
-                    <div className="text-lg font-black text-cyan-600">{avgProgress}%</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">AVG PROGRESS</div>
+                    <div className="text-xl font-black text-[#0B5FFF] mt-0.5">{avgProgress}%</div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-1 overflow-hidden">
+                      <div className="bg-[#0B5FFF] h-full rounded-full" style={{ width: `${avgProgress}%` }} />
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Main Preview Table */}
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 mb-6">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
-                      <th className="p-2.5">ID</th>
-                      <th className="p-2.5">{selectedTemplate === 'subtasks_matrix' ? 'Subtask / Method Deliverable' : 'Scope & Deliverables'}</th>
-                      <th className="p-2.5">Discipline</th>
-                      <th className="p-2.5">{selectedTemplate === 'subtasks_matrix' ? 'Seq' : 'Qty / Target'}</th>
-                      <th className="p-2.5">{selectedTemplate === 'subtasks_matrix' ? 'Category' : 'Status'}</th>
-                      <th className="p-2.5 text-right">Progress</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {filteredActivities.slice(0, 15).map(act => {
+              {/* 5. Main Deliverables & Tasks Section */}
+              <div className="space-y-4 my-5">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <ListTodo className="h-4 w-4 text-[#0B5FFF]" />
+                    {selectedTemplate === 'daily_shift' ? 'Focused Activity Scope & Shift Subtask Progression' : 'Activity Deliverables Matrix'}
+                  </h3>
+                  <span className="text-[11px] font-bold text-slate-400">
+                    {filteredActivities.length} Activity Work Packages
+                  </span>
+                </div>
+
+                {/* Structured Activity Cards for Daily Shift */}
+                {selectedTemplate === 'daily_shift' ? (
+                  <div className="space-y-3.5">
+                    {filteredActivities.map(act => {
                       const subtasks = getSubtasksForActivity(act);
+                      const holdPoints = subtasks.filter(s => s.isHoldPoint);
+                      const holdPointsCleared = holdPoints.filter(h => h.holdPointSignOff?.approved || h.status === 'Completed').length;
+
                       return (
-                        <tr key={act.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                          <td className="p-2.5 font-bold font-mono text-[#0B5FFF] align-top">{act.id}</td>
-                          <td className="p-2.5 align-top">
-                            <div className="font-bold text-slate-900 dark:text-white">{act.name}</div>
-                            {act.workPackage && <div className="text-[10px] text-slate-500">Package: {act.workPackage}</div>}
-                            {includeSubtasks && subtasks.length > 0 && (
-                              <div className="mt-2 space-y-1 pl-2 border-l-2 border-slate-200 dark:border-slate-700">
-                                {subtasks.slice(0, 3).map(st => (
-                                  <div key={st.id} className="text-[11px] flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                                    <span className={st.status === 'Completed' ? 'text-emerald-600 font-bold' : 'text-slate-400'}>
-                                      {st.status === 'Completed' ? '✓' : '○'}
-                                    </span>
-                                    <span>{st.title}</span>
-                                    {st.isHoldPoint && (
-                                      <span className="text-[9px] px-1 rounded bg-amber-100 text-amber-800 font-bold">QA GATE</span>
-                                    )}
-                                  </div>
-                                ))}
-                                {subtasks.length > 3 && (
-                                  <div className="text-[10px] text-slate-400 italic">+ {subtasks.length - 3} more deliverables</div>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-2.5 align-top text-slate-600 dark:text-slate-300">{act.discipline || 'General'}</td>
-                          <td className="p-2.5 align-top font-mono text-[11px]">{act.actualQuantity ?? 0} / {act.targetQuantity ?? 0} {act.unit}</td>
-                          <td className="p-2.5 align-top">
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                              act.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
-                              act.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                              act.status === 'Blocked' ? 'bg-rose-100 text-rose-800' :
-                              'bg-slate-100 text-slate-700'
-                            }`}>
-                              {act.status}
-                            </span>
-                          </td>
-                          <td className="p-2.5 align-top text-right font-bold text-slate-900 dark:text-white">
-                            {act.progress || 0}%
-                          </td>
-                        </tr>
+                        <div key={act.id} className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/40 dark:bg-slate-800/30 overflow-hidden">
+                          {/* Activity Header Row */}
+                          <div className="p-3 bg-slate-100/80 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded-md font-mono text-[11px] font-bold bg-[#0B5FFF] text-white">
+                                {act.id}
+                              </span>
+                              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                {act.name}
+                              </span>
+                              {act.workPackage && (
+                                <span className="text-[11px] text-slate-500 font-medium">
+                                  • Package: {act.workPackage}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                {act.discipline || 'General'}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                act.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
+                                act.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+                                act.status === 'Blocked' ? 'bg-rose-100 text-rose-800' :
+                                'bg-slate-200 text-slate-700'
+                              }`}>
+                                {act.status}
+                              </span>
+                              <span className="text-xs font-bold font-mono text-slate-900 dark:text-white pl-1">
+                                {act.progress || 0}%
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Subtasks Progression Ledger */}
+                          {includeSubtasks && subtasks.length > 0 ? (
+                            <div className="p-3 bg-white dark:bg-slate-900">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                  <tr className="text-[10px] font-bold text-slate-400 uppercase border-b border-slate-100 dark:border-slate-800 pb-1">
+                                    <th className="pb-1.5 w-12">Seq</th>
+                                    <th className="pb-1.5">Deliverable / Task</th>
+                                    <th className="pb-1.5 w-28">Method / Cat</th>
+                                    <th className="pb-1.5 w-28">QA Quality Gate</th>
+                                    <th className="pb-1.5 w-24 text-right">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                                  {subtasks.map((st, stIdx) => {
+                                    const seq = getSubtaskProgressionNumber(act.subtasks || [], stIdx) || `${stIdx + 1}.0`;
+                                    const isDone = st.status === 'Completed';
+                                    const isInProgress = st.status === 'In Progress';
+
+                                    return (
+                                      <tr key={st.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
+                                        <td className="py-2 font-mono text-[11px] font-bold text-[#0B5FFF]">
+                                          {seq}
+                                        </td>
+                                        <td className="py-2">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className={`text-xs ${isDone ? 'text-emerald-600 font-bold' : isInProgress ? 'text-blue-500 font-bold' : 'text-slate-400'}`}>
+                                              {isDone ? '✓' : isInProgress ? '▶' : '○'}
+                                            </span>
+                                            <span className={`font-medium ${isDone ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+                                              {st.title}
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="py-2 text-[11px] text-slate-500">
+                                          {st.category || act.discipline || 'General'}
+                                        </td>
+                                        <td className="py-2">
+                                          {st.isHoldPoint ? (
+                                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                              st.holdPointSignOff?.approved || isDone
+                                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                                                : 'bg-amber-50 text-amber-800 border border-amber-300'
+                                            }`}>
+                                              {st.holdPointSignOff?.approved || isDone ? 'QA CLEARED ✓' : 'HOLD POINT ⚠️'}
+                                            </span>
+                                          ) : (
+                                            <span className="text-[10px] text-slate-400">Standard</span>
+                                          )}
+                                        </td>
+                                        <td className="py-2 text-right">
+                                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                            isDone ? 'bg-emerald-100 text-emerald-800' :
+                                            isInProgress ? 'bg-blue-100 text-blue-800' :
+                                            'bg-slate-100 text-slate-600'
+                                          }`}>
+                                            {st.status || 'Not Started'}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-white dark:bg-slate-900 text-xs text-slate-500">
+                              Direct execution on scope milestone ({act.actualQuantity ?? 0} / {act.targetQuantity ?? 0} {act.unit || 'units'}).
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+                ) : (
+                  /* Standard Matrix Table */
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                          <th className="p-2.5">ID</th>
+                          <th className="p-2.5">Scope & Deliverables</th>
+                          <th className="p-2.5">Discipline</th>
+                          <th className="p-2.5">Target Qty</th>
+                          <th className="p-2.5">Status</th>
+                          <th className="p-2.5 text-right">Progress</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {filteredActivities.slice(0, 20).map(act => (
+                          <tr key={act.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                            <td className="p-2.5 font-bold font-mono text-[#0B5FFF] align-top">{act.id}</td>
+                            <td className="p-2.5 align-top">
+                              <div className="font-bold text-slate-900 dark:text-white">{act.name}</div>
+                              {act.workPackage && <div className="text-[10px] text-slate-500">Package: {act.workPackage}</div>}
+                            </td>
+                            <td className="p-2.5 align-top text-slate-600 dark:text-slate-300">{act.discipline || 'General'}</td>
+                            <td className="p-2.5 align-top font-mono text-[11px]">{act.actualQuantity ?? 0} / {act.targetQuantity ?? 0} {act.unit}</td>
+                            <td className="p-2.5 align-top">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                act.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
+                                act.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+                                'bg-slate-100 text-slate-700'
+                              }`}>
+                                {act.status}
+                              </span>
+                            </td>
+                            <td className="p-2.5 align-top text-right font-bold text-slate-900 dark:text-white">
+                              {act.progress || 0}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
-              {/* Sign-Off Block */}
+              {/* 6. Formal Engineering Sign-Off Stamp */}
               {includeSignoff && (
-                <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50 dark:bg-slate-800/40 space-y-3">
-                  <div className="text-xs font-bold uppercase text-slate-700 dark:text-slate-300">
-                    SITE MANAGEMENT REVIEW & EXECUTION SIGN-OFF
+                <div className="mt-6 border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50 dark:bg-slate-800/40 space-y-3">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <BadgeCheck className="h-4 w-4 text-[#0B5FFF]" />
+                    OFFICIAL SITE MANAGEMENT VERIFICATION & QA SIGN-OFF
                   </div>
-                  <p className="text-[11px] text-slate-500">
-                    I confirm that the recorded activity states, physical deliverables, and progress milestones represented in this report reflect authentic site execution.
+                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                    I confirm that the recorded activity states, physical deliverables, and progress milestones represented in this report reflect verified site execution in accordance with approved project method statements.
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                    <div>Authorized: ____________________ ({preparedBy})</div>
-                    <div>QA/QC Verified: ____________________</div>
-                    <div>Date: {shiftDateFormatted}</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <div className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                      <div className="text-[9px] text-slate-400 uppercase">AUTHORIZED SUPERVISOR</div>
+                      <div className="mt-1 text-slate-900 dark:text-white truncate">{preparedBy}</div>
+                      <div className="mt-3 border-t border-dashed border-slate-300 dark:border-slate-700 pt-1 text-[10px] font-normal text-slate-400">Digital Signature / Auth</div>
+                    </div>
+                    <div className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                      <div className="text-[9px] text-slate-400 uppercase">QA/QC QUALITY INSPECTOR</div>
+                      <div className="mt-1 text-slate-900 dark:text-white">Quality Gate Cleared</div>
+                      <div className="mt-3 border-t border-dashed border-slate-300 dark:border-slate-700 pt-1 text-[10px] font-normal text-slate-400">Inspection Sign-Off Stamp</div>
+                    </div>
+                    <div className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                      <div className="text-[9px] text-slate-400 uppercase">SHIFT DATE & TIME</div>
+                      <div className="mt-1 text-slate-900 dark:text-white">{shiftDateFormatted}</div>
+                      <div className="mt-3 border-t border-dashed border-slate-300 dark:border-slate-700 pt-1 text-[10px] font-normal text-slate-400">{currentTimeFormatted} Official Ledger</div>
+                    </div>
                   </div>
                 </div>
               )}
