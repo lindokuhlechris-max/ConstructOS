@@ -13,6 +13,7 @@ import {
   CheckSquare,
   Sparkles,
   Maximize2,
+  Minimize2,
   ZoomIn,
   ZoomOut,
   Target,
@@ -36,12 +37,36 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('day');
   const [hoveredActivityId, setHoveredActivityId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   
   // Calendar month state
   const [calendarDate, setCalendarDate] = useState<Date>(() => new Date());
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLDivElement>(null);
+
+  // Keyboard shortcut (Escape to exit fullscreen)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
+
+  // Lock body scroll when fullscreen is active
+  useEffect(() => {
+    if (isFullscreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isFullscreen]);
 
   // Filter activities by status if selected
   const filteredActivities = useMemo(() => {
@@ -320,7 +345,11 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
   }
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm flex flex-col">
+    <div className={`transition-all duration-200 flex flex-col bg-white dark:bg-slate-900 ${
+      isFullscreen 
+        ? 'fixed inset-0 z-[100] w-screen h-screen rounded-none shadow-2xl overflow-hidden' 
+        : 'border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm'
+    }`}>
       
       {/* Top Toolbar */}
       <div className="p-3 sm:px-5 bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3">
@@ -401,7 +430,7 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
           )}
         </div>
 
-        {/* Right: Zoom Level (Gantt) & Status Filters */}
+        {/* Right: Zoom Level (Gantt), Status Filters & Fullscreen Toggle */}
         <div className="flex items-center gap-2 flex-wrap">
           {viewMode === 'gantt' && (
             <div className="flex items-center bg-slate-200/80 dark:bg-slate-700/80 p-0.5 rounded-xl text-[11px] font-bold">
@@ -465,6 +494,32 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
               Completed
             </button>
           </div>
+
+          {/* Fullscreen Expand / Collapse Button */}
+          <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-0.5 hidden sm:block" />
+
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className={`px-2.5 py-1 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold ${
+              isFullscreen
+                ? 'bg-[#0B5FFF] text-white border-[#0B5FFF] shadow-xs ring-2 ring-blue-300 dark:ring-blue-800'
+                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/80 hover:text-slate-900 shadow-2xs'
+            }`}
+            title={isFullscreen ? "Exit Fullscreen (Esc)" : "Expand to Fullscreen"}
+            aria-label={isFullscreen ? "Exit Fullscreen" : "Expand to Fullscreen"}
+          >
+            {isFullscreen ? (
+              <>
+                <Minimize2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Exit Fullscreen</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Fullscreen</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -472,7 +527,7 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
       {/* MODE 1: GANTT TIMELINE SCHEDULE VIEW                                      */}
       {/* ========================================================================= */}
       {viewMode === 'gantt' && (
-        <div className="flex flex-col h-[650px]">
+        <div className={`flex flex-col ${isFullscreen ? 'flex-1 h-[calc(100vh-120px)]' : 'h-[650px]'}`}>
           <div 
             ref={scrollContainerRef}
             className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar relative"
@@ -686,7 +741,7 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
       {/* MODE 2: MONTH CALENDAR GRID VIEW                                         */}
       {/* ========================================================================= */}
       {viewMode === 'calendar' && (
-        <div className="p-4 sm:p-6 overflow-y-auto">
+        <div className={`p-4 sm:p-6 overflow-y-auto ${isFullscreen ? 'flex-1 h-[calc(100vh-120px)]' : ''}`}>
           {/* Day of Week Headers */}
           <div className="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">
             <span>Mon</span>
