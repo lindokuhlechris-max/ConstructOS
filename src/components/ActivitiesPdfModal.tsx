@@ -50,6 +50,7 @@ import { Activity, Project, ActivityStatus, WorkstreamType, SubTask } from '../t
 import { getSubtaskProgressionNumber } from '../lib/labourUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import { saveOrShareFile } from '../lib/fileExportService';
 
 export type ReportTemplateType = 
@@ -381,39 +382,43 @@ export function ActivitiesPdfModal({
     doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
     doc.line(margin, currentY, pageWidth - margin, currentY);
 
+    const col1X = margin;
+    const col2X = orientation === 'landscape' ? margin + 260 : margin + 175;
+    const col3X = orientation === 'landscape' ? margin + 500 : margin + 350;
+
     currentY += 14;
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(darkNavy[0], darkNavy[1], darkNavy[2]);
-    doc.text(`Project:`, margin, currentY);
+    doc.text(`Project:`, col1X, currentY);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${currentProject?.name || 'Main Site'} (${currentProject?.id || 'PROJ-01'})`, margin + 38, currentY);
+    doc.text(`${currentProject?.name || 'Main Site'}`, col1X + 35, currentY);
 
     doc.setFont('helvetica', 'bold');
-    doc.text(`Location:`, margin + 220, currentY);
+    doc.text(`Location:`, col2X, currentY);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${currentProject?.location || 'Jobsite'}`, margin + 265, currentY);
+    doc.text(`${currentProject?.location || 'Jobsite'}`, col2X + 42, currentY);
 
     doc.setFont('helvetica', 'bold');
-    doc.text(`Shift Date:`, margin + 370, currentY);
+    doc.text(`Shift Date:`, col3X, currentY);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${shiftDateFormatted}`, margin + 420, currentY);
+    doc.text(`${shiftDateFormatted}`, col3X + 45, currentY);
 
     currentY += 12;
     doc.setFont('helvetica', 'bold');
-    doc.text(`Prepared By:`, margin, currentY);
+    doc.text(`Supervisor:`, col1X, currentY);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${preparedBy}`, margin + 60, currentY);
+    doc.text(`${preparedBy}`, col1X + 48, currentY);
 
     doc.setFont('helvetica', 'bold');
-    doc.text(`Scope:`, margin + 220, currentY);
+    doc.text(`Scope:`, col2X, currentY);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${reportSubtitle} (${totalCount} Activities)`, margin + 255, currentY);
+    doc.text(`${totalCount} Activities`, col2X + 32, currentY);
 
     doc.setFont('helvetica', 'bold');
-    doc.text(`Generated:`, margin + 370, currentY);
+    doc.text(`Generated:`, col3X, currentY);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${shiftDateFormatted} at ${currentTimeFormatted}`, margin + 420, currentY);
+    doc.text(`${currentTimeFormatted}`, col3X + 48, currentY);
 
     // 4. Site Environment & Weather Strip
     if (includeWeatherRecord && (selectedTemplate === 'daily_shift' || selectedTemplate === 'briefing')) {
@@ -735,11 +740,64 @@ export function ActivitiesPdfModal({
     return doc.output('blob');
   };
 
-  // Export PDF Handler
+  // High-Fidelity PDF Generator (Captures exact Live Preview with 1:1 visual styling)
+  const generateHighFidelityPdfBlob = async (): Promise<Blob> => {
+    if (!printRef.current) {
+      return await generatePdfBlob();
+    }
+
+    try {
+      const element = printRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const isLandscape = orientation === 'landscape';
+      
+      const pdf = new jsPDF({
+        orientation: isLandscape ? 'landscape' : 'portrait',
+        unit: 'pt',
+        format: 'a4'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pdfWidth;
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Add first page
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= pdfHeight;
+
+      // Add subsequent pages if document exceeds single page
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+        heightLeft -= pdfHeight;
+      }
+
+      return pdf.output('blob');
+    } catch (e) {
+      console.warn('html2canvas rendering fallback to vector jsPDF:', e);
+      return await generatePdfBlob();
+    }
+  };
+
+  // Export PDF Handler (Uses 1:1 high-fidelity render matching preview)
   const handleDownloadPdf = async () => {
     try {
       setIsGenerating(true);
-      const blob = await generatePdfBlob();
+      const blob = await generateHighFidelityPdfBlob();
       const filename = `constructfield_${selectedTemplate}_${shiftDate}.pdf`;
       await saveOrShareFile({
         filename,
@@ -754,12 +812,15 @@ export function ActivitiesPdfModal({
     }
   };
 
-  // Dedicated Vector Print Handler
-  const handlePrint = async () => {
+  // Direct HTML / CSS High-Fidelity Print Handler
+  const handlePrint = () => {
+    if (!printRef.current) {
+      window.print();
+      return;
+    }
+
     try {
-      setIsGenerating(true);
-      const blob = await generatePdfBlob();
-      const blobUrl = URL.createObjectURL(blob);
+      const printContent = printRef.current.innerHTML;
       const iframe = document.createElement('iframe');
       iframe.style.position = 'fixed';
       iframe.style.right = '0';
@@ -767,32 +828,86 @@ export function ActivitiesPdfModal({
       iframe.style.width = '0';
       iframe.style.height = '0';
       iframe.style.border = '0';
-      iframe.src = blobUrl;
       document.body.appendChild(iframe);
 
-      iframe.onload = () => {
-        setTimeout(() => {
-          try {
-            iframe.focus();
-            iframe.contentWindow?.print();
-          } catch (e) {
-            console.error('Direct print failed, falling back to window.print', e);
-            window.print();
-          } finally {
-            setTimeout(() => {
-              if (document.body.contains(iframe)) {
-                document.body.removeChild(iframe);
+      const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!iframeDoc) {
+        window.print();
+        return;
+      }
+
+      // Collect all active stylesheets so Tailwind and typography are 100% matched
+      let styleTags = '';
+      document.querySelectorAll('style, link[rel="stylesheet"]').forEach(node => {
+        styleTags += node.outerHTML;
+      });
+
+      iframeDoc.open();
+      iframeDoc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>${reportTitle} - ${shiftDateFormatted}</title>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            ${styleTags}
+            <style>
+              @page {
+                size: ${orientation === 'landscape' ? 'landscape' : 'portrait'};
+                margin: 8mm;
               }
-              URL.revokeObjectURL(blobUrl);
-            }, 3000);
-          }
-        }, 200);
-      };
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                box-sizing: border-box;
+              }
+              body {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+                margin: 0;
+                padding: 0;
+              }
+              .print-container {
+                width: 100%;
+                max-width: 100% !important;
+                margin: 0 auto;
+                padding: 0;
+                background: #ffffff !important;
+                border: none !important;
+                box-shadow: none !important;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="print-container">
+              ${printContent}
+            </div>
+          </body>
+        </html>
+      `);
+      iframeDoc.close();
+
+      setTimeout(() => {
+        try {
+          iframe.focus();
+          iframe.contentWindow?.print();
+        } catch (e) {
+          console.error('Iframe print failed, falling back to window.print', e);
+          window.print();
+        } finally {
+          setTimeout(() => {
+            if (document.body.contains(iframe)) {
+              document.body.removeChild(iframe);
+            }
+          }, 3000);
+        }
+      }, 400);
+
     } catch (err) {
-      console.error('Vector PDF print generation error, falling back:', err);
+      console.error('Print initialization error:', err);
       window.print();
-    } finally {
-      setIsGenerating(false);
     }
   };
 
