@@ -20,41 +20,85 @@ import {
   ArrowRight,
   Filter,
   CheckCircle2,
-  ShieldCheck
+  ShieldCheck,
+  Link2,
+  Unlink,
+  AlertTriangle,
+  Zap,
+  Plus,
+  Trash2,
+  X,
+  Info,
+  GitBranch
 } from 'lucide-react';
 import { Badge } from './ui';
 
 interface ActivityTimelineProps {
   activities: Activity[];
+  allActivities?: Activity[];
   onSelectActivity: (id: string) => void;
+  onUpdateActivity?: (activity: Activity) => void;
 }
 
 type TimelineViewMode = 'gantt' | 'calendar';
 type ZoomLevel = 'day' | 'week' | 'compact';
 
-export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimelineProps) {
+interface DependencyEdge {
+  id: string;
+  predId: string;
+  succId: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  path: string;
+  isConflict: boolean;
+  predName: string;
+  succName: string;
+  predFinishDate: string;
+  succStartDate: string;
+}
+
+export function ActivityTimeline({ 
+  activities, 
+  allActivities = activities, 
+  onSelectActivity,
+  onUpdateActivity 
+}: ActivityTimelineProps) {
   const [viewMode, setViewMode] = useState<TimelineViewMode>('gantt');
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('day');
   const [hoveredActivityId, setHoveredActivityId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   
+  // Dependency Engine State
+  const [showDependencies, setShowDependencies] = useState<boolean>(true);
+  const [linkSourceActivityId, setLinkSourceActivityId] = useState<string | null>(null);
+  const [managingDepsActivityId, setManagingDepsActivityId] = useState<string | null>(null);
+  const [dependencySuccessMsg, setDependencySuccessMsg] = useState<string | null>(null);
+
   // Calendar month state
   const [calendarDate, setCalendarDate] = useState<Date>(() => new Date());
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLDivElement>(null);
 
-  // Keyboard shortcut (Escape to exit fullscreen)
+  // Keyboard shortcut (Escape to exit fullscreen / linking mode)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isFullscreen) {
-        setIsFullscreen(false);
+      if (e.key === 'Escape') {
+        if (linkSourceActivityId) {
+          setLinkSourceActivityId(null);
+        } else if (managingDepsActivityId) {
+          setManagingDepsActivityId(null);
+        } else if (isFullscreen) {
+          setIsFullscreen(false);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFullscreen]);
+  }, [isFullscreen, linkSourceActivityId, managingDepsActivityId]);
 
   // Lock body scroll when fullscreen is active
   useEffect(() => {
@@ -108,7 +152,6 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
     });
 
     const nowTime = new Date().getTime();
-    // Ensure today is included in the span if reasonable
     if (min === Infinity || max === -Infinity) {
       min = nowTime;
       max = nowTime + 14 * 24 * 60 * 60 * 1000;
@@ -182,6 +225,196 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
 
   const timelineContentWidth = totalDays * dayColWidth;
 
+  // --- DEPENDENCY CALCULATIONS & SVG ROUTING ---
+  const { dependencyEdges, conflictEdges, activityCoordsMap } = useMemo(() => {
+    const coordsMap = new Map<string, { 
+      xStart: number; 
+      xEnd: number; 
+      yCenter: number; 
+      rowIndex: number;
+      activity: Activity; 
+    }>();
+
+    const ROW_HEIGHT = 56; // 14 * 4px
+    const BAR_VERTICAL_CENTER = 28;
+
+    filteredActivities.forEach((act, idx) => {
+      const start = new Date(act.startDate).getTime();
+      const end = new Date(act.finishDate || act.endDate || act.startDate).getTime();
+      
+      const startOffsetDays = Math.max(0, (start - minDate) / (24 * 60 * 60 * 1000));
+      const durationDays = Math.max(1, ((end - start) / (24 * 60 * 60 * 1000)) + 1);
+
+      const xStart = startOffsetDays * dayColWidth;
+      const xEnd = xStart + Math.max(durationDays * dayColWidth - 4, dayColWidth - 4);
+      const yCenter = idx * ROW_HEIGHT + BAR_VERTICAL_CENTER;
+
+      coordsMap.set(act.id, {
+        xStart,
+        xEnd,
+        yCenter,
+        rowIndex: idx,
+        activity: act
+      });
+    });
+
+    const edges: DependencyEdge[] = [];
+    const conflicts: DependencyEdge[] = [];
+
+    filteredActivities.forEach(succAct => {
+      const succ = coordsMap.get(succAct.id);
+      if (!succ) return;
+
+      const deps = succAct.dependencies || [];
+      deps.forEach(predId => {
+        const pred = coordsMap.get(predId);
+        if (!pred) return;
+
+        const x1 = pred.xEnd;
+        const y1 = pred.yCenter;
+        const x2 = succ.xStart;
+        const y2 = succ.yCenter;
+
+        const predFinishTime = new Date(pred.activity.finishDate || pred.activity.endDate || pred.activity.startDate).getTime();
+        const succStartTime = new Date(succ.activity.startDate).getTime();
+        const isConflict = succStartTime < predFinishTime;
+
+        // Routing path calculation
+        let path = '';
+        if (x2 >= x1 + 16) {
+          // Clean forward S-curve
+          path = `M ${x1} ${y1} C ${x1 + 18} ${y1}, ${x2 - 18} ${y2}, ${x2} ${y2}`;
+        } else {
+          // Loopback conflict / overlap path
+          const verticalStep = y2 > y1 ? 22 : -22;
+          path = `M ${x1} ${y1} L ${x1 + 12} ${y1} L ${x1 + 12} ${y1 + verticalStep} L ${x2 - 14} ${y1 + verticalStep} L ${x2 - 14} ${y2} L ${x2} ${y2}`;
+        }
+
+        const edge: DependencyEdge = {
+          id: `${predId}->${succAct.id}`,
+          predId,
+          succId: succAct.id,
+          x1,
+          y1,
+          x2,
+          y2,
+          path,
+          isConflict,
+          predName: pred.activity.name,
+          succName: succ.activity.name,
+          predFinishDate: pred.activity.finishDate || pred.activity.startDate,
+          succStartDate: succ.activity.startDate
+        };
+
+        edges.push(edge);
+        if (isConflict) {
+          conflicts.push(edge);
+        }
+      });
+    });
+
+    return {
+      dependencyEdges: edges,
+      conflictEdges: conflicts,
+      activityCoordsMap: coordsMap
+    };
+  }, [filteredActivities, minDate, dayColWidth]);
+
+  // Handle Link Creation
+  const handleStartLink = (e: React.MouseEvent, actId: string) => {
+    e.stopPropagation();
+    if (linkSourceActivityId === actId) {
+      setLinkSourceActivityId(null);
+    } else {
+      setLinkSourceActivityId(actId);
+    }
+  };
+
+  const handleCompleteLink = (targetActId: string) => {
+    if (!linkSourceActivityId || linkSourceActivityId === targetActId) {
+      setLinkSourceActivityId(null);
+      return;
+    }
+
+    const targetAct = allActivities.find(a => a.id === targetActId);
+    if (!targetAct || !onUpdateActivity) {
+      setLinkSourceActivityId(null);
+      return;
+    }
+
+    const existingDeps = targetAct.dependencies || [];
+    if (existingDeps.includes(linkSourceActivityId)) {
+      setLinkSourceActivityId(null);
+      return;
+    }
+
+    const updatedTarget: Activity = {
+      ...targetAct,
+      dependencies: [...existingDeps, linkSourceActivityId]
+    };
+
+    onUpdateActivity(updatedTarget);
+    const sourceAct = allActivities.find(a => a.id === linkSourceActivityId);
+    setDependencySuccessMsg(`Linked ${sourceAct?.name || linkSourceActivityId} → ${targetAct.name}`);
+    setTimeout(() => setDependencySuccessMsg(null), 3500);
+    setLinkSourceActivityId(null);
+  };
+
+  // Handle Remove Dependency
+  const handleRemoveDependency = (succId: string, predIdToRemove: string) => {
+    const targetAct = allActivities.find(a => a.id === succId);
+    if (!targetAct || !onUpdateActivity) return;
+
+    const updatedTarget: Activity = {
+      ...targetAct,
+      dependencies: (targetAct.dependencies || []).filter(id => id !== predIdToRemove)
+    };
+
+    onUpdateActivity(updatedTarget);
+  };
+
+  // Auto-Align Schedule Conflicts
+  const handleAutoAlignConflicts = () => {
+    if (!onUpdateActivity || conflictEdges.length === 0) return;
+
+    let alignedCount = 0;
+
+    conflictEdges.forEach(edge => {
+      const succAct = allActivities.find(a => a.id === edge.succId);
+      const predAct = allActivities.find(a => a.id === edge.predId);
+      if (!succAct || !predAct) return;
+
+      const predEnd = new Date(predAct.finishDate || predAct.endDate || predAct.startDate);
+      if (isNaN(predEnd.getTime())) return;
+
+      // Set new start date to 1 day after predecessor finish
+      const nextDay = new Date(predEnd);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const newStartDateStr = nextDay.toISOString().split('T')[0];
+
+      // Preserve original duration
+      const oldStart = new Date(succAct.startDate).getTime();
+      const oldEnd = new Date(succAct.finishDate || succAct.startDate).getTime();
+      const durationMs = Math.max(0, oldEnd - oldStart);
+
+      const newEndTime = new Date(nextDay.getTime() + durationMs);
+      const newFinishDateStr = newEndTime.toISOString().split('T')[0];
+
+      const updatedSucc: Activity = {
+        ...succAct,
+        startDate: newStartDateStr,
+        finishDate: newFinishDateStr,
+        endDate: newFinishDateStr
+      };
+
+      onUpdateActivity(updatedSucc);
+      alignedCount++;
+    });
+
+    setDependencySuccessMsg(`Auto-aligned ${alignedCount} conflicting activities with predecessor milestones!`);
+    setTimeout(() => setDependencySuccessMsg(null), 4000);
+  };
+
   // Scroll to Today handler
   const handleScrollToToday = () => {
     if (scrollContainerRef.current && todayIndex >= 0) {
@@ -241,7 +474,6 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
     const firstDayOfMonth = new Date(year, month, 1);
     const lastDayOfMonth = new Date(year, month + 1, 0);
 
-    // Monday-first indexing (0 = Mon, 6 = Sun)
     let startDayOfWeek = firstDayOfMonth.getDay() - 1;
     if (startDayOfWeek === -1) startDayOfWeek = 6;
 
@@ -251,7 +483,6 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
     const calendarGridDays: { dateStr: string; dayNumber: number; isCurrentMonth: boolean; isToday: boolean; isWeekend: boolean }[] = [];
     const todayStr = new Date().toISOString().split('T')[0];
 
-    // Leading days from previous month
     for (let i = startDayOfWeek - 1; i >= 0; i--) {
       const prevDate = new Date(year, month - 1, prevMonthLastDay - i);
       const dateStr = prevDate.toISOString().split('T')[0];
@@ -265,7 +496,6 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
       });
     }
 
-    // Days in current month
     for (let day = 1; day <= daysInMonth; day++) {
       const currDate = new Date(year, month, day);
       const dateStr = currDate.toISOString().split('T')[0];
@@ -279,7 +509,6 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
       });
     }
 
-    // Trailing days to fill 35 or 42 grid slots
     const totalSlots = calendarGridDays.length > 35 ? 42 : 35;
     const remainingSlots = totalSlots - calendarGridDays.length;
     for (let day = 1; day <= remainingSlots; day++) {
@@ -314,7 +543,6 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
       const endLimit = new Date(end);
       endLimit.setHours(0, 0, 0, 0);
 
-      // Max 60 days loop protection
       let loopCount = 0;
       while (cur <= endLimit && loopCount < 60) {
         const dateStr = cur.toISOString().split('T')[0];
@@ -344,6 +572,9 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
     );
   }
 
+  const linkingSourceAct = linkSourceActivityId ? allActivities.find(a => a.id === linkSourceActivityId) : null;
+  const managingDepsAct = managingDepsActivityId ? allActivities.find(a => a.id === managingDepsActivityId) : null;
+
   return (
     <div className={`transition-all duration-200 flex flex-col bg-white dark:bg-slate-900 ${
       isFullscreen 
@@ -351,6 +582,58 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
         : 'border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm'
     }`}>
       
+      {/* Active Linking Banner Alert */}
+      {linkSourceActivityId && (
+        <div className="bg-indigo-600 text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold shadow-md z-40 animate-in slide-in-from-top duration-200">
+          <div className="flex items-center gap-2">
+            <Link2 className="h-4 w-4 animate-pulse text-amber-300" />
+            <span>
+              SELECT SUCCESSOR TARGET: Click on any task bar below to link <strong>"{linkingSourceAct?.name || linkSourceActivityId}"</strong> as its Finish-to-Start (FS) Predecessor.
+            </span>
+          </div>
+          <button
+            onClick={() => setLinkSourceActivityId(null)}
+            className="px-2.5 py-1 rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors text-[11px]"
+          >
+            Cancel (Esc)
+          </button>
+        </div>
+      )}
+
+      {/* Success Notification Banner */}
+      {dependencySuccessMsg && (
+        <div className="bg-emerald-600 text-white px-4 py-2 flex items-center justify-between text-xs font-bold shadow-md z-40 animate-in slide-in-from-top duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-200 shrink-0" />
+            <span>{dependencySuccessMsg}</span>
+          </div>
+          <button onClick={() => setDependencySuccessMsg(null)} className="p-1 hover:bg-white/20 rounded">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Schedule Conflict Warning Strip (if conflicts exist) */}
+      {conflictEdges.length > 0 && showDependencies && viewMode === 'gantt' && !linkSourceActivityId && (
+        <div className="bg-amber-500/10 dark:bg-amber-950/40 border-b border-amber-300 dark:border-amber-800 px-4 py-2 flex items-center justify-between flex-wrap gap-2 text-xs">
+          <div className="flex items-center gap-2 text-amber-900 dark:text-amber-300 font-semibold">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>{conflictEdges.length} Schedule Conflict{conflictEdges.length === 1 ? '' : 's'} Detected:</strong> Successors start before predecessor tasks complete.
+            </span>
+          </div>
+          {onUpdateActivity && (
+            <button
+              onClick={handleAutoAlignConflicts}
+              className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-all"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              <span>Auto-Align Schedule</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Top Toolbar */}
       <div className="p-3 sm:px-5 bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3">
         
@@ -398,6 +681,20 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
                 title="Scroll timeline to project beginning"
               >
                 Fit Project
+              </button>
+
+              {/* Show/Hide Dependency Link Lines Toggle */}
+              <button
+                onClick={() => setShowDependencies(!showDependencies)}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-colors flex items-center gap-1 ${
+                  showDependencies
+                    ? 'border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-800'
+                }`}
+                title="Toggle visual dependency arrows on Gantt chart"
+              >
+                <GitBranch className="h-3 w-3" />
+                <span>Links ({dependencyEdges.length})</span>
               </button>
             </div>
           )}
@@ -524,7 +821,7 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
       </div>
 
       {/* ========================================================================= */}
-      {/* MODE 1: GANTT TIMELINE SCHEDULE VIEW                                      */}
+      {/* MODE 1: GANTT TIMELINE SCHEDULE VIEW WITH INTERACTIVE DEPENDENCIES        */}
       {/* ========================================================================= */}
       {viewMode === 'gantt' && (
         <div className={`flex flex-col ${isFullscreen ? 'flex-1 h-[calc(100vh-120px)]' : 'h-[650px]'}`}>
@@ -602,7 +899,7 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
                 </div>
               </div>
 
-              {/* Activity Rows */}
+              {/* Activity Rows Container */}
               <div className="flex-1 flex flex-col relative divide-y divide-slate-100 dark:divide-slate-800/80">
                 
                 {/* Vertical Today Line through the entire body */}
@@ -620,11 +917,87 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
                   </div>
                 )}
 
+                {/* SVG DEPENDENCY CONNECTOR LINES OVERLAY */}
+                {showDependencies && dependencyEdges.length > 0 && (
+                  <svg 
+                    className="absolute top-0 left-[280px] w-full h-full pointer-events-none z-15"
+                    style={{ minWidth: `${timelineContentWidth}px`, height: `${filteredActivities.length * 56}px` }}
+                  >
+                    <defs>
+                      {/* Normal Arrowhead Marker */}
+                      <marker
+                        id="arrow-normal"
+                        viewBox="0 0 10 10"
+                        refX="8"
+                        refY="5"
+                        markerWidth="6"
+                        markerHeight="6"
+                        orient="auto-start-reverse"
+                      >
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#6366f1" />
+                      </marker>
+
+                      {/* Conflict Arrowhead Marker (Red) */}
+                      <marker
+                        id="arrow-conflict"
+                        viewBox="0 0 10 10"
+                        refX="8"
+                        refY="5"
+                        markerWidth="6"
+                        markerHeight="6"
+                        orient="auto-start-reverse"
+                      >
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#f43f5e" />
+                      </marker>
+
+                      {/* Highlighted Arrowhead Marker (Gold) */}
+                      <marker
+                        id="arrow-highlight"
+                        viewBox="0 0 10 10"
+                        refX="8"
+                        refY="5"
+                        markerWidth="7"
+                        markerHeight="7"
+                        orient="auto-start-reverse"
+                      >
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#0B5FFF" />
+                      </marker>
+                    </defs>
+
+                    {dependencyEdges.map(edge => {
+                      const isHighlighted = hoveredActivityId === edge.predId || hoveredActivityId === edge.succId;
+
+                      return (
+                        <g key={edge.id}>
+                          {/* Background shadow stroke for contrast */}
+                          <path
+                            d={edge.path}
+                            fill="none"
+                            stroke="rgba(255,255,255,0.7)"
+                            strokeWidth={isHighlighted ? "4.5" : "3"}
+                            strokeLinecap="round"
+                          />
+                          {/* Active connector curve */}
+                          <path
+                            d={edge.path}
+                            fill="none"
+                            stroke={isHighlighted ? "#0B5FFF" : edge.isConflict ? "#f43f5e" : "#6366f1"}
+                            strokeWidth={isHighlighted ? "2.5" : "1.8"}
+                            strokeDasharray={edge.isConflict ? "5 3" : undefined}
+                            markerEnd={isHighlighted ? "url(#arrow-highlight)" : edge.isConflict ? "url(#arrow-conflict)" : "url(#arrow-normal)"}
+                            className="transition-all duration-150"
+                          />
+                        </g>
+                      );
+                    })}
+                  </svg>
+                )}
+
+                {/* Rows mapping */}
                 {filteredActivities.map(activity => {
                   const start = new Date(activity.startDate).getTime();
                   const end = new Date(activity.finishDate || activity.endDate || activity.startDate).getTime();
 
-                  // Calculate start offset in days from minDate
                   const startOffsetDays = Math.max(0, (start - minDate) / (24 * 60 * 60 * 1000));
                   const durationDays = Math.max(1, ((end - start) / (24 * 60 * 60 * 1000)) + 1);
 
@@ -632,8 +1005,10 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
                   const barWidthPx = Math.max(durationDays * dayColWidth - 4, dayColWidth - 4);
 
                   const isHovered = hoveredActivityId === activity.id;
+                  const isLinkSource = linkSourceActivityId === activity.id;
                   const subtasks = activity.subtasks || [];
                   const completedSubtasks = subtasks.filter(s => s.status === 'Completed').length;
+                  const depsCount = (activity.dependencies || []).length;
 
                   return (
                     <div 
@@ -642,7 +1017,7 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
                       onMouseLeave={() => setHoveredActivityId(null)}
                       className={`flex transition-colors relative group ${
                         isHovered ? 'bg-blue-50/50 dark:bg-slate-800/60' : 'hover:bg-slate-50/40 dark:hover:bg-slate-800/30'
-                      }`}
+                      } ${isLinkSource ? 'ring-2 ring-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30' : ''}`}
                     >
                       {/* Fixed Left Column */}
                       <div 
@@ -665,9 +1040,24 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
 
                         <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500">
                           <span className="truncate">{activity.workPackage || 'Standard'}</span>
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                            {activity.discipline || 'General'}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            {depsCount > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setManagingDepsActivityId(activity.id);
+                                }}
+                                className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-200 transition-colors flex items-center gap-0.5"
+                                title="View & edit predecessor dependencies"
+                              >
+                                <GitBranch className="h-2.5 w-2.5" />
+                                {depsCount}
+                              </button>
+                            )}
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                              {activity.discipline || 'General'}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -692,24 +1082,36 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
 
                         {/* Interactive Activity Schedule Bar */}
                         <div 
-                          onClick={() => onSelectActivity(activity.id)}
+                          onClick={() => {
+                            if (linkSourceActivityId) {
+                              handleCompleteLink(activity.id);
+                            } else {
+                              onSelectActivity(activity.id);
+                            }
+                          }}
                           style={{
                             left: `${barLeftPx + 2}px`,
                             width: `${barWidthPx}px`
                           }}
-                          className={`absolute h-8 rounded-xl cursor-pointer shadow-sm border text-white overflow-hidden transition-all bg-linear-to-r ${getStatusFillColor(activity.status)} ${
-                            isHovered ? 'ring-2 ring-blue-400 scale-[1.01] z-20 shadow-md' : 'z-10'
+                          className={`absolute h-8 rounded-xl cursor-pointer shadow-sm border text-white overflow-visible transition-all bg-linear-to-r ${getStatusFillColor(activity.status)} ${
+                            isLinkSource 
+                              ? 'ring-4 ring-indigo-400 z-30 scale-[1.02] shadow-lg' 
+                              : linkSourceActivityId 
+                              ? 'hover:ring-4 hover:ring-emerald-400 hover:scale-[1.02] z-25' 
+                              : isHovered 
+                              ? 'ring-2 ring-blue-400 scale-[1.01] z-20 shadow-md' 
+                              : 'z-10'
                           }`}
-                          title={`${activity.name} (${activity.startDate} → ${activity.finishDate || activity.startDate})`}
+                          title={linkSourceActivityId ? `Click to link as target successor: ${activity.name}` : `${activity.name} (${activity.startDate} → ${activity.finishDate || activity.startDate})`}
                         >
                           {/* Inner Progress Fill Bar */}
                           <div 
-                            className="absolute inset-y-0 left-0 bg-white/20 dark:bg-black/20"
+                            className="absolute inset-y-0 left-0 bg-white/20 dark:bg-black/20 rounded-l-xl pointer-events-none"
                             style={{ width: `${activity.progress || 0}%` }}
                           />
 
                           {/* Bar Content */}
-                          <div className="relative z-10 px-2.5 h-full flex items-center justify-between text-xs font-bold gap-2 min-w-0">
+                          <div className="relative z-10 px-2.5 h-full flex items-center justify-between text-xs font-bold gap-2 min-w-0 pointer-events-none">
                             <div className="flex items-center gap-1.5 truncate">
                               {getStatusIcon(activity.status)}
                               <span className="truncate text-[11px] font-semibold drop-shadow-xs">
@@ -726,6 +1128,17 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
                               <span>{activity.progress || 0}%</span>
                             </div>
                           </div>
+
+                          {/* Right Link Connector Handle (Appears on Hover) */}
+                          {onUpdateActivity && !linkSourceActivityId && (
+                            <button
+                              onClick={(e) => handleStartLink(e, activity.id)}
+                              className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-30 hover:scale-110"
+                              title={`Click to link ${activity.name} to a successor task`}
+                            >
+                              <Link2 className="h-3 w-3" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -836,10 +1249,145 @@ export function ActivityTimeline({ activities, onSelectActivity }: ActivityTimel
 
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-slate-400">
-            Click any task bar to view complete deliverables, labour & QA gates
+            Hover task bar & click 🔗 to link predecessor dependencies
           </span>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL: PREDECESSOR DEPENDENCIES MANAGER                                   */}
+      {/* ========================================================================= */}
+      {managingDepsAct && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                  <GitBranch className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Manage Predecessor Dependencies
+                  </h3>
+                  <p className="text-[11px] text-slate-500 truncate max-w-xs">
+                    {managingDepsAct.id} • {managingDepsAct.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setManagingDepsActivityId(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 dark:hover:bg-slate-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body: Active Predecessors List */}
+            <div className="p-4 space-y-3 max-h-[350px] overflow-y-auto custom-scrollbar">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Current Predecessors ({managingDepsAct.dependencies?.length || 0})
+              </div>
+
+              {(!managingDepsAct.dependencies || managingDepsAct.dependencies.length === 0) ? (
+                <div className="p-4 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                  No predecessor dependencies linked to this task.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {managingDepsAct.dependencies.map(predId => {
+                    const predAct = allActivities.find(a => a.id === predId);
+                    const predEnd = predAct ? (predAct.finishDate || predAct.startDate) : '—';
+                    const succStart = managingDepsAct.startDate;
+                    const isConflict = predAct && new Date(succStart).getTime() < new Date(predEnd).getTime();
+
+                    return (
+                      <div 
+                        key={predId}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs ${
+                          isConflict 
+                            ? 'border-rose-300 bg-rose-50/50 dark:border-rose-800 dark:bg-rose-950/30' 
+                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 shrink-0">
+                            {predId}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 dark:text-white truncate">
+                              {predAct?.name || predId}
+                            </p>
+                            <p className="text-[10px] text-slate-500">
+                              Finish: {predEnd} {isConflict && <span className="text-rose-600 font-bold ml-1">⚠️ Starts before predecessor finishes ({succStart})</span>}
+                            </p>
+                          </div>
+                        </div>
+
+                        {onUpdateActivity && (
+                          <button
+                            onClick={() => handleRemoveDependency(managingDepsAct.id, predId)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-950 transition-colors shrink-0"
+                            title="Unlink predecessor"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add Predecessor Dropdown */}
+              {onUpdateActivity && (
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Add Predecessor Activity
+                  </label>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const newPredId = e.target.value;
+                        const existing = managingDepsAct.dependencies || [];
+                        if (!existing.includes(newPredId)) {
+                          onUpdateActivity({
+                            ...managingDepsAct,
+                            dependencies: [...existing, newPredId]
+                          });
+                        }
+                        e.target.value = '';
+                      }
+                    }}
+                    className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="" disabled>Select activity to link as predecessor...</option>
+                    {allActivities
+                      .filter(a => a.id !== managingDepsAct.id && !(managingDepsAct.dependencies || []).includes(a.id))
+                      .map(a => (
+                        <option key={a.id} value={a.id}>
+                          {a.id} - {a.name} ({a.startDate} → {a.finishDate || a.startDate})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+              <button
+                onClick={() => setManagingDepsActivityId(null)}
+                className="px-4 py-1.5 rounded-xl bg-slate-800 text-white dark:bg-white dark:text-slate-900 text-xs font-bold shadow-2xs hover:opacity-90 transition-opacity"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
