@@ -98,6 +98,7 @@ export function DataMigrationEngineModal({
   const [includeBinaryAttachments, setIncludeBinaryAttachments] = useState<boolean>(true);
   const [binaryStats, setBinaryStats] = useState<{ count: number; totalBytes: number }>({ count: 0, totalBytes: 0 });
   const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportProgress, setExportProgress] = useState<number>(0);
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
 
   // --------------------------------------------------------------------------
@@ -206,6 +207,7 @@ export function DataMigrationEngineModal({
     }
 
     setIsExporting(true);
+    setExportProgress(0);
     setExportSuccessMsg(null);
 
     try {
@@ -228,16 +230,18 @@ export function DataMigrationEngineModal({
         filename,
         blob,
         title: manifest.label,
-        text: `Constructfield Archive (${manifest.sections.length} sections, ${manifest.totalRecords} records)`
+        text: `Constructfield Archive (${manifest.sections.length} sections, ${manifest.totalRecords} records)`,
+        onProgress: setExportProgress
       });
 
-      setExportSuccessMsg(`Successfully generated and downloaded "${filename}"!`);
+      setExportSuccessMsg(`Successfully generated and saved "${filename}"!`);
       setTimeout(() => setExportSuccessMsg(null), 6000);
     } catch (err: any) {
       console.error('Export error:', err);
       alert('Export failed: ' + (err.message || 'Unknown error'));
     } finally {
       setIsExporting(false);
+      setExportProgress(0);
     }
   };
 
@@ -724,6 +728,27 @@ export function DataMigrationEngineModal({
                   </div>
                 )}
 
+                {isExporting && (
+                  <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2 animate-in fade-in">
+                    <div className="flex justify-between text-xs font-bold text-blue-900 dark:text-blue-200">
+                      <span className="flex items-center gap-1.5">
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin text-[#0B5FFF]" />
+                        {exportProgress > 0 ? `Streaming chunked data to device: ${exportProgress}%` : 'Collecting database records...'}
+                      </span>
+                      <span className="font-mono">{exportProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-blue-100 dark:bg-blue-900/60 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-[#0B5FFF] transition-all duration-200 rounded-full"
+                        style={{ width: `${Math.max(5, exportProgress)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-300">
+                      Using low-memory chunked streaming. Prevents mobile crashes on large databases (100MB+).
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <div className="text-xs text-slate-500">
                     Target Format: <strong className="text-slate-900 dark:text-white font-mono">{isPasswordProtected ? '.cfbak (AES Encrypted Archive)' : '.json (Standard Snapshot)'}</strong>
@@ -735,7 +760,7 @@ export function DataMigrationEngineModal({
                     className="w-full sm:w-auto h-11 px-6 rounded-xl bg-[#0B5FFF] hover:bg-blue-600 text-white font-bold text-xs gap-2 shadow-sm"
                   >
                     {isExporting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                    {isExporting ? 'Generating Secure Archive...' : `Export Selected Archive (${selectedExportSections.length} Sections • ${totalSelectedExportRecords} Records)`}
+                    {isExporting ? `Exporting Archive (${exportProgress}%)...` : `Export Selected Archive (${selectedExportSections.length} Sections • ${totalSelectedExportRecords} Records)`}
                   </Button>
                 </div>
               </div>

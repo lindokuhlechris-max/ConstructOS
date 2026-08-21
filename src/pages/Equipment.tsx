@@ -21,6 +21,7 @@ import {
   EquipmentOwnership 
 } from '../types';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
+import { EquipmentNotesPanel } from '../components/EquipmentNotesPanel';
 
 // Helper for formatting South African Rand (ZAR)
 export const formatRand = (amount: number | undefined | null): string => {
@@ -1163,6 +1164,13 @@ export function Equipment() {
                       </div>
                     )}
                   </div>
+
+                  {/* Equipment Operational Notes & Field Memos Panel */}
+                  <EquipmentNotesPanel
+                    equipment={currentEq}
+                    canEdit={canEditEquipment}
+                    onUpdateEquipment={updateEquipment}
+                  />
 
                   {/* Recent Activity Timeline */}
                   <div className="border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-[#1E293B]/40 p-6 shadow-sm">

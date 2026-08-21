@@ -1741,6 +1741,7 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
           currentUserProfile={currentUserProfile}
           defaultProjectId={projects[0]?.id || 'all'}
           defaultFilterLabel={searchTerm ? `Search query: "${searchTerm}"` : timeframe !== 'all' ? `Timeframe: ${timeframe}` : 'All Filtered Activities'}
+          initialTemplate={mainScreen === 'daily_logs' ? 'daily_shift' : 'executive'}
         />
       )}
     </div>

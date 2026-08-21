@@ -482,14 +482,14 @@ export async function createExportArchive(options: {
     const encryptedPkg = await encryptArchiveData(plainPackage, password.trim(), passwordHint);
     const filename = `scedih-${secSlug}-${dateSlug}.cfbak`;
     return {
-      packageString: JSON.stringify(encryptedPkg, null, 2),
+      packageString: JSON.stringify(encryptedPkg),
       filename,
       manifest: encryptedPkg.manifest
     };
   } else {
     const filename = `scedih-${secSlug}-${dateSlug}.json`;
     return {
-      packageString: JSON.stringify(plainPackage, null, 2),
+      packageString: JSON.stringify(plainPackage),
       filename,
       manifest
     };
