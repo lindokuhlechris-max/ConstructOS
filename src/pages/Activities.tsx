@@ -881,7 +881,13 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
               onExportSelected={(selected) => exportActivitiesToExcel(selected, projects, 'selected')} 
             />
           ) : viewMode === 'timeline' ? (
-            <ActivityTimeline activities={filtered} onSelectActivity={(id) => setExpandedActivityId(expandedActivityId === id ? null : id)} />
+            <ActivityTimeline 
+              activities={filtered} 
+              onSelectActivity={(id) => {
+                const act = activities.find(a => a.id === id);
+                if (act) setSlideOverActivity(act);
+              }} 
+            />
           ) : (
         <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start" : "flex flex-col gap-4"}>
           {filtered.map((activity) => {
