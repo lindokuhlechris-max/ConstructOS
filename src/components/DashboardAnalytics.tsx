@@ -19,8 +19,10 @@ import {
   PieChart as PieChartIcon,
   LineChart as LineChartIcon,
   Sparkles,
-  Info
+  Info,
+  Maximize2
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -82,6 +84,7 @@ export function DashboardAnalytics({
   materialReceipts = [],
   onSelectActivity
 }: DashboardAnalyticsProps) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabMode>('overview');
   const [timeframe, setTimeframe] = useState<Timeframe>('14d');
   const [selectedDiscipline, setSelectedDiscipline] = useState<string>('all');
@@ -504,6 +507,16 @@ export function DashboardAnalytics({
               </button>
             ))}
           </div>
+
+          {/* Full Screen Page Link */}
+          <button
+            onClick={() => navigate('/analytics')}
+            className="h-8 px-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900 text-[#0B5FFF] dark:text-blue-300 flex items-center gap-1.5 transition-colors text-xs font-bold shadow-2xs cursor-pointer"
+            title="Open Dedicated Full-Screen Visual Analytics"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Full Screen</span>
+          </button>
 
           {/* Collapse / Expand Toggle Button */}
           <button

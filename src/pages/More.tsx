@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '../components/ui';
-import { Users, Truck, Package, ShieldCheck, AlertTriangle, Settings, HelpCircle, LogOut, ArrowLeft, Building2, History, Layers, Home } from 'lucide-react';
+import { Users, Truck, Package, ShieldCheck, AlertTriangle, Settings, HelpCircle, LogOut, ArrowLeft, Building2, History, Layers, Home, BarChart3 } from 'lucide-react';
 import { EquipmentModule } from '../components/modules/EquipmentModule';
 import { MaterialModule } from '../components/modules/MaterialModule';
 import { QualityModule } from '../components/modules/QualityModule';
@@ -16,11 +17,13 @@ import { useAppContext } from '../context/AppContext';
 import { ProjectSectionPermissions } from '../types';
 
 export function More() {
+  const navigate = useNavigate();
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const { projects, hasPermission, logout } = useAppContext();
   const currentProjectId = projects[0]?.id || '';
 
   const allMenuItems = [
+    { id: 'analytics', icon: BarChart3, label: 'Visual Analytics & Progress Charts', color: 'text-[#0B5FFF]' },
     { id: 'allocations', icon: Layers, label: 'Resource Allocation Tracking', color: 'text-[#0B5FFF]', section: 'activities' as keyof ProjectSectionPermissions },
     { id: 'labour', icon: Users, label: 'Labour Management', color: 'text-blue-500', section: 'labour' as keyof ProjectSectionPermissions },
     { id: 'equipment', icon: Truck, label: 'Equipment Tracking', color: 'text-orange-500', section: 'equipment' as keyof ProjectSectionPermissions },
@@ -150,7 +153,13 @@ export function More() {
               {menuItems.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setActiveModule(item.id)}
+                  onClick={() => {
+                    if (item.id === 'analytics') {
+                      navigate('/analytics');
+                    } else {
+                      setActiveModule(item.id);
+                    }
+                  }}
                   className="flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left"
                 >
                   <div className="flex items-center gap-4">

@@ -23,6 +23,7 @@ import { Accommodation } from './pages/Accommodation';
 import { Documents } from './pages/Documents';
 import { ActivityLogsPage } from './pages/ActivityLogsPage';
 import { ResourceAllocationPage } from './pages/ResourceAllocationPage';
+import { ProjectAnalyticsPage } from './pages/ProjectAnalyticsPage';
 import RemindersModule from './components/modules/RemindersModule';
 
 export default function App() {
@@ -32,6 +33,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
+            <Route path="analytics" element={<ProjectAnalyticsPage />} />
+            <Route path="visual-analytics" element={<ProjectAnalyticsPage />} />
             <Route path="activities" element={
               <ProtectedRoute requiredSection="activities"><Activities /></ProtectedRoute>
             } />

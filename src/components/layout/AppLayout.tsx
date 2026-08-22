@@ -32,7 +32,8 @@ import {
   Zap,
   History,
   Layers,
-  Home
+  Home,
+  BarChart3
 } from 'lucide-react';
 import { cn } from '../ui';
 import { useAppContext } from '../../context/AppContext';
@@ -138,6 +139,7 @@ export function AppLayout() {
 
   const allNavItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { name: 'Analytics', path: '/analytics', icon: BarChart3 },
     { name: 'Activities', path: '/activities', icon: ClipboardList, badge: blockedActivities > 0 ? blockedActivities : undefined, badgeColor: 'bg-red-500', section: 'activities' as any },
     { name: 'Allocations', path: '/allocations', icon: Layers, section: 'activities' as any },
     { name: 'Documents', path: '/documents', icon: FileText, section: 'documents' as any },
@@ -158,6 +160,7 @@ export function AppLayout() {
       groupTitle: 'Overview & Execution',
       items: [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { name: 'Analytics', path: '/analytics', icon: BarChart3 },
         { name: 'Activities', path: '/activities', icon: ClipboardList, badge: blockedActivities > 0 ? blockedActivities : undefined, badgeColor: 'bg-red-500', section: 'activities' as any },
         { name: 'Allocations', path: '/allocations', icon: Layers, section: 'activities' as any },
         { name: 'Projects', path: '/projects', icon: FolderKanban },
