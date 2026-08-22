@@ -613,14 +613,17 @@ export function ProjectAnalyticsPage() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as TabMode)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
+                title={tab.label}
+                className={`h-9 rounded-xl text-xs font-bold flex items-center gap-2 transition-all duration-200 whitespace-nowrap cursor-pointer select-none ${
                   isActive
-                    ? 'bg-[#0B5FFF] text-white shadow-xs'
-                    : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-transparent hover:border-slate-200 dark:hover:border-slate-700'
+                    ? 'bg-[#0B5FFF] text-white shadow-xs px-3.5'
+                    : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-transparent hover:border-slate-200 dark:hover:border-slate-700 px-3'
                 }`}
               >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{tab.label}</span>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className={`${isActive ? 'inline' : 'hidden md:inline'} transition-all`}>
+                  {tab.label}
+                </span>
               </button>
             );
           })}

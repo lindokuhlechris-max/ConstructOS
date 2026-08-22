@@ -446,50 +446,35 @@ export function DashboardAnalytics({
         <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-start lg:justify-end">
           {/* Main Visualizer Tabs */}
           <div className="flex items-center bg-slate-200/80 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                activeTab === 'overview'
-                  ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] dark:text-blue-300 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Overview</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('progress')}
-              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                activeTab === 'progress'
-                  ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] dark:text-blue-300 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <TrendingUp className="h-3.5 w-3.5" />
-              <span>S-Curve Progress</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('materials')}
-              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                activeTab === 'materials'
-                  ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] dark:text-blue-300 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <Package className="h-3.5 w-3.5" />
-              <span>Material Trends</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('activities')}
-              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                activeTab === 'activities'
-                  ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] dark:text-blue-300 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <Layers className="h-3.5 w-3.5" />
-              <span>Activity Breakdown</span>
-            </button>
+            {[
+              { id: 'overview', label: 'Overview', icon: Sparkles },
+              { id: 'progress', label: 'S-Curve Progress', icon: TrendingUp },
+              { id: 'materials', label: 'Material Trends', icon: Package },
+              { id: 'activities', label: 'Activity Breakdown', icon: Layers }
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as TabMode)}
+                  title={tab.label}
+                  className={`h-7 rounded-lg transition-all duration-200 flex items-center gap-1.5 cursor-pointer select-none ${
+                    isActive
+                      ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] dark:text-blue-300 shadow-xs px-2.5 font-bold'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 px-2'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  {isActive && (
+                    <span className="whitespace-nowrap animate-in fade-in zoom-in-95 duration-150">
+                      {tab.label}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Timeframe Selector */}
