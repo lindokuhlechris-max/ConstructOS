@@ -365,9 +365,11 @@ export function DashboardAnalytics({
   const totalCompletedActivities = activities.filter(a => a.status === 'Completed').length;
   const totalInProgressActivities = activities.filter(a => a.status === 'In Progress').length;
   const totalBlockedActivities = activities.filter(a => a.status === 'Blocked').length;
-  const overallAvgProgress = activities.length > 0
-    ? Math.round(activities.reduce((sum, a) => sum + (a.progress || 0), 0) / activities.length)
-    : 0;
+  const overallAvgProgress = project?.progress !== undefined 
+    ? project.progress
+    : (activities.length > 0
+        ? Math.round(activities.reduce((sum, a) => sum + (a.progress || 0), 0) / activities.length)
+        : 0);
 
   const totalMaterialsUsedSum = materials.reduce((sum, m) => sum + (m.usedQuantity || 0), 0);
   const totalMaterialsReceivedSum = materials.reduce((sum, m) => sum + (m.receivedQuantity || 0), 0);
@@ -548,8 +550,8 @@ export function DashboardAnalytics({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-xl font-bold text-slate-900 dark:text-slate-100">{overallAvgProgress}%</span>
-            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-              {totalCompletedActivities} of {activities.length} tasks
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              {totalCompletedActivities} of {activities.length} completed • {totalInProgressActivities} active
             </span>
           </div>
         </div>
