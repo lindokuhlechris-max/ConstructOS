@@ -89,6 +89,7 @@ export function ProjectAnalyticsPage() {
     materials = [], 
     materialUsages = [], 
     materialReceipts = [],
+    employees = [],
     labourAllocations = [],
     labourLogs = [],
     equipment = [],
@@ -154,8 +155,13 @@ export function ProjectAnalyticsPage() {
     const totalTasks = filteredActivities.length;
     const completedTasks = filteredActivities.filter(a => a.status === 'Completed').length;
     const inProgressTasks = filteredActivities.filter(a => a.status === 'In Progress').length;
+    const readyTasks = filteredActivities.filter(a => a.status === 'Ready').length;
     const blockedTasks = filteredActivities.filter(a => a.status === 'Blocked').length;
-    const delayedTasks = filteredActivities.filter(a => a.status === 'Waiting').length;
+    const waitingTasks = filteredActivities.filter(a => a.status === 'Waiting').length;
+    
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const overdueTasks = filteredActivities.filter(a => a.status !== 'Completed' && a.finishDate && a.finishDate < todayStr).length;
+    const criticalBlockedCount = blockedTasks + waitingTasks + overdueTasks;
 
     // Actual progress weighted average
     let totalWeight = 0;
@@ -186,37 +192,59 @@ export function ProjectAnalyticsPage() {
       }
     });
 
-    const actualProgressPct = totalWeight > 0 ? Math.round(actualWeightedSum / totalWeight) : 0;
+    const actualProgressPct = currentProject?.progress !== undefined && currentProject.progress > 0
+      ? currentProject.progress
+      : (totalWeight > 0 ? Math.round(actualWeightedSum / totalWeight) : 0);
+    
     const plannedProgressPct = totalWeight > 0 ? Math.round(plannedWeightedSum / totalWeight) : 0;
     const variancePct = actualProgressPct - plannedProgressPct;
 
-    // Materials metrics
-    const totalMaterialsReceived = materialReceipts.reduce((acc, r) => acc + (r.quantity || 0), 0);
-    const totalMaterialsUsed = materialUsages.reduce((acc, u) => acc + (u.quantity || 0), 0);
-    const inventoryItemsCount = materials.length;
+    // Materials metrics: accurate aggregation across inventory and receipts
+    const inventoryReceivedSum = materials.reduce((acc, m) => acc + (m.receivedQuantity || 0), 0);
+    const logReceiptsSum = materialReceipts.reduce((acc, r) => acc + (r.quantity || 0), 0);
+    const inventoryEstimatedSum = materials.reduce((acc, m) => acc + (m.estimatedQuantity || 0), 0);
+    const totalMaterialsReceived = inventoryReceivedSum > 0 ? inventoryReceivedSum : (logReceiptsSum > 0 ? logReceiptsSum : inventoryEstimatedSum);
+
+    const inventoryUsedSum = materials.reduce((acc, m) => acc + (m.usedQuantity || 0), 0);
+    const logUsedSum = materialUsages.reduce((acc, u) => acc + (u.quantity || 0), 0);
+    const totalMaterialsUsed = Math.max(inventoryUsedSum, logUsedSum);
+    const materialBurnPct = totalMaterialsReceived > 0 ? Math.round((totalMaterialsUsed / totalMaterialsReceived) * 100) : 0;
 
     // Labour manpower
-    const totalAllocatedLabour = labourAllocations.length > 0 ? labourAllocations.length : Math.max(inProgressTasks * 3, 4);
+    const activeEmployeesCount = employees.filter(e => e.status === 'Active' || !e.status).length;
+    const allocatedLabourCount = labourAllocations.length;
+    const dailyWorkforceCount = activeEmployeesCount > 0 ? activeEmployeesCount : (allocatedLabourCount > 0 ? allocatedLabourCount : Math.max(inProgressTasks * 3, 1));
 
     // Active Equipment
+    const totalFleetCount = equipment.length;
     const activeMachinesCount = equipment.filter(e => e.status === 'Operating').length;
+    const operatingFleetCount = activeMachinesCount > 0 ? activeMachinesCount : (totalFleetCount > 0 ? totalFleetCount : 0);
+    const fleetUtilizationRate = totalFleetCount > 0 ? Math.round((operatingFleetCount / totalFleetCount) * 100) : 0;
 
     return {
       totalTasks,
       completedTasks,
       inProgressTasks,
+      readyTasks,
       blockedTasks,
-      delayedTasks,
+      waitingTasks,
+      overdueTasks,
+      criticalBlockedCount,
       actualProgressPct,
       plannedProgressPct,
       variancePct,
       totalMaterialsReceived,
       totalMaterialsUsed,
-      inventoryItemsCount,
-      totalAllocatedLabour,
-      activeMachinesCount
+      materialBurnPct,
+      inventoryItemsCount: materials.length,
+      activeEmployeesCount,
+      allocatedLabourCount,
+      dailyWorkforceCount,
+      totalFleetCount,
+      operatingFleetCount,
+      fleetUtilizationRate
     };
-  }, [filteredActivities, materialReceipts, materialUsages, materials, labourAllocations, equipment]);
+  }, [filteredActivities, materialReceipts, materialUsages, materials, labourAllocations, employees, equipment, currentProject]);
 
   // 3. Project S-Curve: Planned vs Actual Cumulative Progress
   const scurveData = useMemo(() => {
@@ -610,7 +638,7 @@ export function ProjectAnalyticsPage() {
                   {executiveMetrics.actualProgressPct}%
                 </span>
                 <span className="text-[10px] text-slate-500 block font-medium">
-                  {executiveMetrics.completedTasks} of {executiveMetrics.totalTasks} tasks
+                  {executiveMetrics.completedTasks} of {executiveMetrics.totalTasks} completed • {executiveMetrics.inProgressTasks} active
                 </span>
               </div>
               <div className={`p-2.5 rounded-2xl ${
@@ -634,7 +662,7 @@ export function ProjectAnalyticsPage() {
                   {executiveMetrics.inProgressTasks}
                 </span>
                 <span className="text-[10px] text-slate-500 block font-medium">
-                  Active work fronts
+                  {executiveMetrics.inProgressTasks} active of {executiveMetrics.totalTasks} tasks
                 </span>
               </div>
               <div className="p-2.5 rounded-2xl bg-blue-50 text-[#0B5FFF] dark:bg-blue-950/60">
@@ -653,8 +681,10 @@ export function ProjectAnalyticsPage() {
                 <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
                   {executiveMetrics.totalMaterialsUsed.toLocaleString()}
                 </span>
-                <span className="text-[10px] text-slate-500 block font-medium truncate max-w-[110px]">
-                  of {executiveMetrics.totalMaterialsReceived.toLocaleString()} rec'd
+                <span className="text-[10px] text-slate-500 block font-medium truncate max-w-[130px]" title={`${executiveMetrics.totalMaterialsUsed.toLocaleString()} used of ${executiveMetrics.totalMaterialsReceived.toLocaleString()} received`}>
+                  {executiveMetrics.totalMaterialsReceived > 0 
+                    ? `of ${executiveMetrics.totalMaterialsReceived.toLocaleString()} rec'd (${executiveMetrics.materialBurnPct}% burn)`
+                    : `of ${executiveMetrics.inventoryItemsCount} tracked items`}
                 </span>
               </div>
               <div className="p-2.5 rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/60">
@@ -671,10 +701,12 @@ export function ProjectAnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
-                  {executiveMetrics.blockedTasks + executiveMetrics.delayedTasks}
+                  {executiveMetrics.criticalBlockedCount}
                 </span>
                 <span className="text-[10px] text-slate-500 block font-medium">
-                  {executiveMetrics.blockedTasks} blocked, {executiveMetrics.delayedTasks} delayed
+                  {executiveMetrics.criticalBlockedCount === 0 
+                    ? 'All systems clear • No blockers'
+                    : `${executiveMetrics.blockedTasks} blocked, ${executiveMetrics.overdueTasks} overdue`}
                 </span>
               </div>
               <div className="p-2.5 rounded-2xl bg-rose-50 text-rose-600 dark:bg-rose-950/60">
@@ -691,10 +723,12 @@ export function ProjectAnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-                  {executiveMetrics.totalAllocatedLabour}
+                  {executiveMetrics.dailyWorkforceCount}
                 </span>
                 <span className="text-[10px] text-slate-500 block font-medium">
-                  Personnel assigned
+                  {executiveMetrics.activeEmployeesCount > 0 
+                    ? `${executiveMetrics.activeEmployeesCount} active on roster`
+                    : `${executiveMetrics.allocatedLabourCount} personnel allocated`}
                 </span>
               </div>
               <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60">
@@ -711,10 +745,12 @@ export function ProjectAnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-                  {executiveMetrics.activeMachinesCount}
+                  {executiveMetrics.operatingFleetCount}
                 </span>
                 <span className="text-[10px] text-slate-500 block font-medium">
-                  Machines operating
+                  {executiveMetrics.totalFleetCount > 0 
+                    ? `${executiveMetrics.operatingFleetCount} of ${executiveMetrics.totalFleetCount} active (${executiveMetrics.fleetUtilizationRate}% util)`
+                    : 'No fleet registered'}
                 </span>
               </div>
               <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/60">
