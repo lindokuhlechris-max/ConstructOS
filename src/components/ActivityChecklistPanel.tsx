@@ -22,12 +22,19 @@ import {
   UserCheck, 
   CheckCircle2,
   ListChecks,
-  BookmarkPlus
+  BookmarkPlus,
+  Tag,
+  FolderPlus
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from './ui';
 import { Activity, ActivityChecklistItem } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { ChecklistTemplatesModal } from './ChecklistTemplatesModal';
+import { 
+  PrerequisiteCategoryModal, 
+  getCategoryMetadata, 
+  PREREQUISITE_CATEGORIES 
+} from './PrerequisiteCategoryModal';
 
 export interface ActivityChecklistPanelProps {
   activity: Activity;
@@ -35,46 +42,16 @@ export interface ActivityChecklistPanelProps {
   readOnly?: boolean;
 }
 
-const CATEGORY_STYLES: Record<string, { bg: string; text: string; border: string; icon: any }> = {
-  'Permit & Safety': { 
-    bg: 'bg-red-50 dark:bg-red-950/40', 
-    text: 'text-red-700 dark:text-red-300', 
-    border: 'border-red-200 dark:border-red-800',
-    icon: HardHat
-  },
-  'Survey & Location': { 
-    bg: 'bg-sky-50 dark:bg-sky-950/40', 
-    text: 'text-sky-700 dark:text-sky-300', 
-    border: 'border-sky-200 dark:border-sky-800',
-    icon: Compass
-  },
-  'Materials & Plant': { 
-    bg: 'bg-amber-50 dark:bg-amber-950/40', 
-    text: 'text-amber-700 dark:text-amber-300', 
-    border: 'border-amber-200 dark:border-amber-800',
-    icon: Truck
-  },
-  'QA & Method Statement': { 
-    bg: 'bg-purple-50 dark:bg-purple-950/40', 
-    text: 'text-purple-700 dark:text-purple-300', 
-    border: 'border-purple-200 dark:border-purple-800',
-    icon: ShieldCheck
-  },
-  'General': { 
-    bg: 'bg-slate-50 dark:bg-slate-800/60', 
-    text: 'text-slate-700 dark:text-slate-300', 
-    border: 'border-slate-200 dark:border-slate-700',
-    icon: FileCheck
-  }
-};
-
 export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly = false }: ActivityChecklistPanelProps) {
   const { currentUserProfile } = useAppContext();
   const checklists = useMemo(() => activity.checklists || [], [activity.checklists]);
 
   const [isAddingInline, setIsAddingInline] = useState(false);
   const [newItemText, setNewItemText] = useState('');
-  const [newItemCategory, setNewItemCategory] = useState<'Permit & Safety' | 'Survey & Location' | 'Materials & Plant' | 'QA & Method Statement' | 'General'>('Permit & Safety');
+  const [newItemCategory, setNewItemCategory] = useState<string>('Permit & Safety');
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [editingCategoryItemId, setEditingCategoryItemId] = useState<string | null>(null);
+
   const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
   const [modalDefaultTab, setModalDefaultTab] = useState<'browse' | 'saveCurrent'>('browse');
 
@@ -125,6 +102,19 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
     onUpdateChecklists([...checklists, newItem]);
     setNewItemText('');
     setIsAddingInline(false);
+  };
+
+  // Category Selected from Pop-up Modal
+  const handleSelectCategory = (catName: string) => {
+    if (editingCategoryItemId) {
+      const updated = checklists.map(c => 
+        c.id === editingCategoryItemId ? { ...c, category: catName } : c
+      );
+      onUpdateChecklists(updated);
+      setEditingCategoryItemId(null);
+    } else {
+      setNewItemCategory(catName);
+    }
   };
 
   // Apply template items from modal
@@ -180,14 +170,41 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
     onUpdateChecklists(updated);
   };
 
+  // Unique categories in current checklist for dynamic filter bar
+  const availableFilterCategories = useMemo(() => {
+    const set = new Set<string>();
+    checklists.forEach(c => {
+      if (c.category) set.add(c.category);
+    });
+    return Array.from(set);
+  }, [checklists]);
+
   // Filtered items
   const filteredChecklists = useMemo(() => {
     if (filterCategory === 'all') return checklists;
     return checklists.filter(c => c.category === filterCategory);
   }, [checklists, filterCategory]);
 
+  const newCatMeta = getCategoryMetadata(newItemCategory);
+  const NewCatIcon = newCatMeta.icon;
+
+  const currentModalCategory = editingCategoryItemId 
+    ? (checklists.find(c => c.id === editingCategoryItemId)?.category || 'Permit & Safety')
+    : newItemCategory;
+
   return (
     <Card className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+      {/* Category Picker Pop-up Modal */}
+      <PrerequisiteCategoryModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => {
+          setIsCategoryModalOpen(false);
+          setEditingCategoryItemId(null);
+        }}
+        selectedCategory={currentModalCategory}
+        onSelectCategory={handleSelectCategory}
+      />
+
       {/* Template Management Modal */}
       <ChecklistTemplatesModal
         isOpen={isTemplatesModalOpen}
@@ -303,9 +320,9 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
 
       {!isCollapsed && (
         <CardContent className="p-4 sm:p-5 space-y-4">
-          {/* 2. Inline Add Item Form */}
+          {/* 2. Inline Add Item Form with Clean Category Pop-up Button */}
         {isAddingInline && !readOnly && (
-          <form onSubmit={handleAddItem} className="p-3 rounded-2xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2.5 animate-in fade-in">
+          <form onSubmit={handleAddItem} className="p-3.5 rounded-2xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2.5 animate-in fade-in">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-[#0B5FFF]">Add New Prerequisite Requirement</span>
               <button
@@ -325,22 +342,27 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                   placeholder="e.g. Underground cable scan completed & permit signed..."
                   value={newItemText}
                   onChange={e => setNewItemText(e.target.value)}
-                  className="w-full h-8 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white outline-none focus:border-[#0B5FFF]"
+                  className="w-full h-9 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white outline-none focus:border-[#0B5FFF]"
                 />
               </div>
 
+              {/* Clean Category Pop-up Button Trigger */}
               <div>
-                <select
-                  value={newItemCategory}
-                  onChange={e => setNewItemCategory(e.target.value as any)}
-                  className="w-full h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingCategoryItemId(null);
+                    setIsCategoryModalOpen(true);
+                  }}
+                  className={`w-full h-9 px-2.5 rounded-xl border flex items-center justify-between gap-1.5 text-xs font-bold transition-all ${newCatMeta.bg} ${newCatMeta.text} ${newCatMeta.border} shadow-2xs hover:opacity-90`}
+                  title="Click to select from 15+ construction, HSE & operational categories or add custom"
                 >
-                  <option value="Permit & Safety">Permit & Safety</option>
-                  <option value="Survey & Location">Survey & Location</option>
-                  <option value="Materials & Plant">Materials & Plant</option>
-                  <option value="QA & Method Statement">QA & Method</option>
-                  <option value="General">General</option>
-                </select>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <NewCatIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{newItemCategory}</span>
+                  </div>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                </button>
               </div>
             </div>
 
@@ -365,24 +387,45 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
           </form>
         )}
 
-        {/* 3. Category Filter Pills */}
-        {totalCount > 4 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+        {/* 3. Dynamic Category Filter Pills */}
+        {totalCount > 3 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">Filter:</span>
-            {['all', 'Permit & Safety', 'Survey & Location', 'Materials & Plant', 'QA & Method Statement', 'General'].map(cat => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setFilterCategory(cat)}
-                className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all ${
-                  filterCategory === cat
-                    ? 'bg-[#0B5FFF] text-white shadow-2xs'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                }`}
-              >
-                {cat === 'all' ? 'All' : cat}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => setFilterCategory('all')}
+              className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all ${
+                filterCategory === 'all'
+                  ? 'bg-[#0B5FFF] text-white shadow-2xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              All ({checklists.length})
+            </button>
+
+            {availableFilterCategories.map(cat => {
+              const meta = getCategoryMetadata(cat);
+              const IconComp = meta.icon;
+              const isSelected = filterCategory === cat;
+              const countInCat = checklists.filter(c => c.category === cat).length;
+
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setFilterCategory(cat)}
+                  className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
+                    isSelected
+                      ? 'bg-[#0B5FFF] text-white shadow-2xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  <IconComp className="h-3 w-3" />
+                  <span>{cat}</span>
+                  <span className="opacity-70 font-normal">({countInCat})</span>
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -424,7 +467,7 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
           <div className="space-y-2 max-h-[550px] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {filteredChecklists.map((item) => {
               const categoryKey = item.category || 'General';
-              const style = CATEGORY_STYLES[categoryKey] || CATEGORY_STYLES['General'];
+              const style = getCategoryMetadata(categoryKey);
               const IconComp = style.icon;
               const isEditingThis = editingItemId === item.id;
 
@@ -498,12 +541,23 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                         </div>
                       </label>
 
-                      {/* Right Category Pill & Item Actions */}
+                      {/* Right Category Pill (Clickable to change category) & Item Actions */}
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border flex items-center gap-1 ${style.bg} ${style.text} ${style.border}`}>
+                        <button
+                          type="button"
+                          disabled={readOnly}
+                          onClick={() => {
+                            if (!readOnly) {
+                              setEditingCategoryItemId(item.id);
+                              setIsCategoryModalOpen(true);
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold border flex items-center gap-1 transition-transform ${readOnly ? '' : 'hover:scale-105 cursor-pointer'} ${style.bg} ${style.text} ${style.border}`}
+                          title={readOnly ? categoryKey : `Click to change category: ${categoryKey}`}
+                        >
                           <IconComp className="h-3 w-3" />
                           <span className="hidden sm:inline">{categoryKey}</span>
-                        </span>
+                        </button>
 
                         {!readOnly && (
                           <div className="flex items-center">
@@ -514,7 +568,7 @@ export function ActivityChecklistPanel({ activity, onUpdateChecklists, readOnly 
                                 setEditingItemText(item.text);
                               }}
                               className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-                              title="Edit item"
+                              title="Edit item text"
                             >
                               <Edit className="h-3 w-3" />
                             </button>

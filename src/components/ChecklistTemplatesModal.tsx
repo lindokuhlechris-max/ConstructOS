@@ -34,6 +34,11 @@ import {
   resetDefaultChecklistTemplates 
 } from '../lib/checklistTemplateService';
 import { useAppContext } from '../context/AppContext';
+import { 
+  PrerequisiteCategoryModal, 
+  getCategoryMetadata, 
+  PREREQUISITE_CATEGORIES 
+} from './PrerequisiteCategoryModal';
 
 export interface ChecklistTemplatesModalProps {
   isOpen: boolean;
@@ -91,17 +96,21 @@ export function ChecklistTemplatesModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [expandedTemplateIds, setExpandedTemplateIds] = useState<Record<string, boolean>>({});
+  
+  // Category Picker Pop-up state
+  const [isCategoryPickerOpen, setIsCategoryPickerOpen] = useState(false);
+  const [categoryPickerTarget, setCategoryPickerTarget] = useState<'save' | 'create' | null>(null);
 
   // Form state for saving current checklist as template
   const [saveTitle, setSaveTitle] = useState('');
-  const [saveCategory, setSaveCategory] = useState<ChecklistTemplate['category']>('Permit & Safety');
+  const [saveCategory, setSaveCategory] = useState<string>('Permit & Safety');
   const [saveDiscipline, setSaveDiscipline] = useState('Civil / General');
   const [saveDescription, setSaveDescription] = useState('');
   const [selectedItemIndexes, setSelectedItemIndexes] = useState<Record<number, boolean>>({});
 
   // Form state for creating custom template from scratch
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState<ChecklistTemplate['category']>('Permit & Safety');
+  const [newCategory, setNewCategory] = useState<string>('Permit & Safety');
   const [newDiscipline, setNewDiscipline] = useState('General');
   const [newDescription, setNewDescription] = useState('');
   const [newItemsList, setNewItemsList] = useState<string[]>(['']);
@@ -430,17 +439,26 @@ export function ChecklistTemplatesModal({
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Primary Category *
                   </label>
-                  <select
-                    value={saveCategory}
-                    onChange={e => setSaveCategory(e.target.value as any)}
-                    className="w-full h-9 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:border-emerald-500"
-                  >
-                    <option value="Permit & Safety">Permit & Safety</option>
-                    <option value="Survey & Location">Survey & Location</option>
-                    <option value="Materials & Plant">Materials & Plant</option>
-                    <option value="QA & Method Statement">QA & Method Statement</option>
-                    <option value="General">General</option>
-                  </select>
+                  {(() => {
+                    const meta = getCategoryMetadata(saveCategory);
+                    const IconC = meta.icon;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCategoryPickerTarget('save');
+                          setIsCategoryPickerOpen(true);
+                        }}
+                        className={`w-full h-9 px-3 rounded-xl border flex items-center justify-between gap-1.5 text-xs font-bold transition-all ${meta.bg} ${meta.text} ${meta.border} shadow-2xs hover:opacity-90`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <IconC className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{saveCategory}</span>
+                        </div>
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                      </button>
+                    );
+                  })()}
                 </div>
 
                 <div>
@@ -574,17 +592,26 @@ export function ChecklistTemplatesModal({
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Category *
                   </label>
-                  <select
-                    value={newCategory}
-                    onChange={e => setNewCategory(e.target.value as any)}
-                    className="w-full h-9 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:border-[#0B5FFF]"
-                  >
-                    <option value="Permit & Safety">Permit & Safety</option>
-                    <option value="Survey & Location">Survey & Location</option>
-                    <option value="Materials & Plant">Materials & Plant</option>
-                    <option value="QA & Method Statement">QA & Method Statement</option>
-                    <option value="General">General</option>
-                  </select>
+                  {(() => {
+                    const meta = getCategoryMetadata(newCategory);
+                    const IconC = meta.icon;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCategoryPickerTarget('create');
+                          setIsCategoryPickerOpen(true);
+                        }}
+                        className={`w-full h-9 px-3 rounded-xl border flex items-center justify-between gap-1.5 text-xs font-bold transition-all ${meta.bg} ${meta.text} ${meta.border} shadow-2xs hover:opacity-90`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <IconC className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{newCategory}</span>
+                        </div>
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                      </button>
+                    );
+                  })()}
                 </div>
 
                 <div>
@@ -752,7 +779,7 @@ export function ChecklistTemplatesModal({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   {filteredTemplates.map(template => {
-                    const style = CATEGORY_STYLES[template.category] || CATEGORY_STYLES['General'];
+                    const style = getCategoryMetadata(template.category);
                     const IconComp = style.icon;
                     const isExpanded = !!expandedTemplateIds[template.id];
 
@@ -874,24 +901,36 @@ export function ChecklistTemplatesModal({
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 flex items-center justify-between text-xs text-slate-500">
-          <div className="flex items-center gap-1.5">
-            <Info className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <span>Saved templates are stored in persistent memory and available across all project activities.</span>
-          </div>
-
+        {/* Footer */}
+        <div className="p-3.5 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+          <span>{templates.length} templates available in library</span>
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={onClose}
-            className="rounded-xl text-xs font-bold"
+            className="rounded-xl text-xs"
           >
             Close
           </Button>
         </div>
 
+        {/* Category Picker Pop-up Modal */}
+        <PrerequisiteCategoryModal
+          isOpen={isCategoryPickerOpen}
+          onClose={() => {
+            setIsCategoryPickerOpen(false);
+            setCategoryPickerTarget(null);
+          }}
+          selectedCategory={categoryPickerTarget === 'create' ? newCategory : saveCategory}
+          onSelectCategory={(catName) => {
+            if (categoryPickerTarget === 'create') {
+              setNewCategory(catName);
+            } else {
+              setSaveCategory(catName);
+            }
+          }}
+        />
       </div>
     </div>
   );

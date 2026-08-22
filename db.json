@@ -7703,7 +7703,7 @@
       "unit": "m²",
       "status": "In Progress",
       "createdAt": "2026-08-19",
-      "updatedAt": "2026-08-20",
+      "updatedAt": "2026-08-21",
       "startDate": "2026-07-29",
       "finishDate": "2026-08-29",
       "plannedHours": 0,
@@ -8274,6 +8274,9 @@
           "completedAt": "2026-08-19T20:37:26.417Z",
           "completedBy": "Lindokuhle Chris (Admin)"
         }
+      ],
+      "dependencies": [
+        "ACT-7295"
       ]
     },
     {

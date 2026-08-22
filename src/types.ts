@@ -225,7 +225,7 @@ export type SubtaskExplainerItem = ActivityExplainerItem;
 export interface ActivityChecklistItem {
   id: string;
   text: string;
-  category?: 'Permit & Safety' | 'Survey & Location' | 'Materials & Plant' | 'QA & Method Statement' | 'General';
+  category?: 'Permit & Safety' | 'Survey & Location' | 'Materials & Plant' | 'QA & Method Statement' | 'General' | string;
   completed: boolean;
   completedAt?: string;
   completedBy?: string;
@@ -234,7 +234,7 @@ export interface ActivityChecklistItem {
 export interface ChecklistTemplate {
   id: string;
   title: string;
-  category: 'Permit & Safety' | 'Survey & Location' | 'Materials & Plant' | 'QA & Method Statement' | 'General';
+  category: 'Permit & Safety' | 'Survey & Location' | 'Materials & Plant' | 'QA & Method Statement' | 'General' | string;
   discipline?: string;
   description?: string;
   items: string[];
