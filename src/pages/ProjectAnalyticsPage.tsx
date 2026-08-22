@@ -32,7 +32,8 @@ import {
   ArrowRight,
   Zap,
   FolderKanban,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ChevronRight
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -56,6 +57,7 @@ import { useAppContext } from '../context/AppContext';
 import { Activity, MaterialInventory, MaterialUsage, MaterialReceipt, Project } from '../types';
 import { parseISO, format, subDays, startOfDay } from 'date-fns';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../components/ui';
+import { AnalyticsKpiDetailModal, AnalyticsKpiType } from '../components/AnalyticsKpiDetailModal';
 
 type TabMode = 'overview' | 'scurve' | 'materials' | 'activities' | 'labour' | 'updates';
 type Timeframe = '7d' | '14d' | '30d' | '90d' | 'all';
@@ -106,6 +108,7 @@ export function ProjectAnalyticsPage() {
   const [materialCategoryFilter, setMaterialCategoryFilter] = useState<string>('all');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
+  const [activeKpiModal, setActiveKpiModal] = useState<AnalyticsKpiType | null>(null);
 
   // Handle Fullscreen Escape
   useEffect(() => {
@@ -628,10 +631,17 @@ export function ProjectAnalyticsPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           
           {/* 1. Overall Completion */}
-          <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-              Overall Completion
-            </span>
+          <div 
+            onClick={() => setActiveKpiModal('overall')}
+            className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs hover:border-[#0B5FFF] dark:hover:border-[#0B5FFF] hover:shadow-md cursor-pointer transition-all group select-none relative overflow-hidden"
+            title="Click to view detailed overall completion breakdown"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-[#0B5FFF] transition-colors">
+                Overall Completion
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0B5FFF] group-hover:translate-x-0.5 transition-all" />
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
@@ -641,7 +651,7 @@ export function ProjectAnalyticsPage() {
                   {executiveMetrics.completedTasks} of {executiveMetrics.totalTasks} completed • {executiveMetrics.inProgressTasks} active
                 </span>
               </div>
-              <div className={`p-2.5 rounded-2xl ${
+              <div className={`p-2.5 rounded-2xl transition-transform group-hover:scale-105 ${
                 executiveMetrics.variancePct >= 0 
                   ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60' 
                   : 'bg-rose-50 text-rose-600 dark:bg-rose-950/60'
@@ -652,10 +662,17 @@ export function ProjectAnalyticsPage() {
           </div>
 
           {/* 2. Active In-Progress */}
-          <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#0B5FFF] block mb-1">
-              Active In-Progress
-            </span>
+          <div 
+            onClick={() => setActiveKpiModal('in-progress')}
+            className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs hover:border-[#0B5FFF] dark:hover:border-[#0B5FFF] hover:shadow-md cursor-pointer transition-all group select-none relative overflow-hidden"
+            title="Click to view all active in-progress activities"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#0B5FFF]">
+                Active In-Progress
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0B5FFF] group-hover:translate-x-0.5 transition-all" />
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
@@ -665,17 +682,24 @@ export function ProjectAnalyticsPage() {
                   {executiveMetrics.inProgressTasks} active of {executiveMetrics.totalTasks} tasks
                 </span>
               </div>
-              <div className="p-2.5 rounded-2xl bg-blue-50 text-[#0B5FFF] dark:bg-blue-950/60">
+              <div className="p-2.5 rounded-2xl bg-blue-50 text-[#0B5FFF] dark:bg-blue-950/60 transition-transform group-hover:scale-105">
                 <ActivityIcon className="h-4 w-4" />
               </div>
             </div>
           </div>
 
           {/* 3. Materials Consumed */}
-          <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-purple-600 block mb-1">
-              Material Consumed
-            </span>
+          <div 
+            onClick={() => setActiveKpiModal('materials')}
+            className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs hover:border-purple-500 dark:hover:border-purple-500 hover:shadow-md cursor-pointer transition-all group select-none relative overflow-hidden"
+            title="Click to view material burn rate and inventory details"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-purple-600">
+                Material Consumed
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-all" />
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
@@ -687,17 +711,24 @@ export function ProjectAnalyticsPage() {
                     : `of ${executiveMetrics.inventoryItemsCount} tracked items`}
                 </span>
               </div>
-              <div className="p-2.5 rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/60">
+              <div className="p-2.5 rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/60 transition-transform group-hover:scale-105">
                 <Package className="h-4 w-4" />
               </div>
             </div>
           </div>
 
           {/* 4. Critical / Blocked */}
-          <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 block mb-1">
-              Critical / Blocked
-            </span>
+          <div 
+            onClick={() => setActiveKpiModal('critical')}
+            className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs hover:border-rose-500 dark:hover:border-rose-500 hover:shadow-md cursor-pointer transition-all group select-none relative overflow-hidden"
+            title="Click to view critical path blockers and overdue activities"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600">
+                Critical / Blocked
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-rose-600 group-hover:translate-x-0.5 transition-all" />
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
@@ -709,17 +740,24 @@ export function ProjectAnalyticsPage() {
                     : `${executiveMetrics.blockedTasks} blocked, ${executiveMetrics.overdueTasks} overdue`}
                 </span>
               </div>
-              <div className="p-2.5 rounded-2xl bg-rose-50 text-rose-600 dark:bg-rose-950/60">
+              <div className="p-2.5 rounded-2xl bg-rose-50 text-rose-600 dark:bg-rose-950/60 transition-transform group-hover:scale-105">
                 <AlertTriangle className="h-4 w-4" />
               </div>
             </div>
           </div>
 
           {/* 5. Daily Manpower */}
-          <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 block mb-1">
-              Daily Workforce
-            </span>
+          <div 
+            onClick={() => setActiveKpiModal('workforce')}
+            className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs hover:border-indigo-500 dark:hover:border-indigo-500 hover:shadow-md cursor-pointer transition-all group select-none relative overflow-hidden"
+            title="Click to view personnel on site and trade allocation breakdown"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">
+                Daily Workforce
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
@@ -731,17 +769,24 @@ export function ProjectAnalyticsPage() {
                     : `${executiveMetrics.allocatedLabourCount} personnel allocated`}
                 </span>
               </div>
-              <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60">
+              <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 transition-transform group-hover:scale-105">
                 <Users className="h-4 w-4" />
               </div>
             </div>
           </div>
 
           {/* 6. Active Plant & Fleet */}
-          <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 block mb-1">
-              Operating Fleet
-            </span>
+          <div 
+            onClick={() => setActiveKpiModal('fleet')}
+            className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs hover:border-amber-500 dark:hover:border-amber-500 hover:shadow-md cursor-pointer transition-all group select-none relative overflow-hidden"
+            title="Click to view operating machinery fleet and plant hour meters"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600">
+                Operating Fleet
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-amber-600 group-hover:translate-x-0.5 transition-all" />
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
@@ -753,7 +798,7 @@ export function ProjectAnalyticsPage() {
                     : 'No fleet registered'}
                 </span>
               </div>
-              <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/60">
+              <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/60 transition-transform group-hover:scale-105">
                 <Truck className="h-4 w-4" />
               </div>
             </div>
@@ -1175,6 +1220,12 @@ export function ProjectAnalyticsPage() {
         )}
 
       </div>
+
+      {/* Detailed KPI Drilldown Modal */}
+      <AnalyticsKpiDetailModal
+        type={activeKpiModal}
+        onClose={() => setActiveKpiModal(null)}
+      />
 
     </div>
   );
