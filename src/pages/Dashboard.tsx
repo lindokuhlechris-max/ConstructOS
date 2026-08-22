@@ -39,7 +39,6 @@ import { printActivitiesSummary } from '../lib/pdfPrint';
 import { exportActivitiesToCSV } from '../lib/csvExport';
 import { useAppContext } from '../context/AppContext';
 import { DashboardAnalytics } from '../components/DashboardAnalytics';
-import { MilestonesWidget } from '../components/MilestonesWidget';
 import { QuickAccessPanel } from '../components/QuickAccessPanel';
 import { CalendarWidget } from '../components/CalendarWidget';
 
@@ -281,9 +280,6 @@ export function Dashboard() {
       <div className={`flex flex-col gap-5 min-w-0 transition-all duration-300 ease-in-out ${isRightPanelOpen ? 'flex-1 lg:flex-[3]' : 'w-full flex-1'}`}>
         {/* KPI Row */}
         <KPIGrid metrics={kpiMetrics} onMetricClick={(metric) => setSelectedKpi(metric)} />
-
-        {/* Milestones Widget */}
-        <MilestonesWidget activities={activities} onSelectActivity={(act) => setSelectedActivity(act)} />
 
         {/* Recharts Powered Data Visualization Component */}
         <DashboardAnalytics 

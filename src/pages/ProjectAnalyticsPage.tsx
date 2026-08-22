@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   BarChart3, 
   LineChart as LineChartIcon, 
@@ -33,7 +34,8 @@ import {
   Zap,
   FolderKanban,
   FileSpreadsheet,
-  ChevronRight
+  ChevronRight,
+  Flag
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -58,8 +60,9 @@ import { Activity, MaterialInventory, MaterialUsage, MaterialReceipt, Project } 
 import { parseISO, format, subDays, startOfDay } from 'date-fns';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../components/ui';
 import { AnalyticsKpiDetailModal, AnalyticsKpiType } from '../components/AnalyticsKpiDetailModal';
+import { MilestonesWidget } from '../components/MilestonesWidget';
 
-type TabMode = 'overview' | 'scurve' | 'materials' | 'activities' | 'labour' | 'updates';
+type TabMode = 'overview' | 'milestones' | 'scurve' | 'materials' | 'activities' | 'labour' | 'updates';
 type Timeframe = '7d' | '14d' | '30d' | '90d' | 'all';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -85,6 +88,7 @@ const DISCIPLINE_PALETTE = [
 ];
 
 export function ProjectAnalyticsPage() {
+  const navigate = useNavigate();
   const { 
     projects = [], 
     activities = [], 
@@ -595,6 +599,7 @@ export function ProjectAnalyticsPage() {
         <div className="flex items-center gap-1.5 pt-4 overflow-x-auto">
           {[
             { id: 'overview', label: 'Overview Dashboard', icon: BarChart3 },
+            { id: 'milestones', label: 'Milestones & Checkpoints', icon: Flag },
             { id: 'scurve', label: 'S-Curve Progress', icon: TrendingUp },
             { id: 'materials', label: 'Material Burn & Inflow', icon: Package },
             { id: 'activities', label: 'Workstream Breakdown', icon: Layers },
@@ -951,6 +956,16 @@ export function ProjectAnalyticsPage() {
             </div>
 
           </div>
+        )}
+
+        {/* ================================================================ */}
+        {/* VIEW: PROJECT MILESTONES & KEY CHECKPOINTS PANEL                */}
+        {/* ================================================================ */}
+        {(activeTab === 'overview' || activeTab === 'milestones') && (
+          <MilestonesWidget 
+            activities={filteredActivities} 
+            onSelectActivity={(act) => navigate('/activities')} 
+          />
         )}
 
         {/* ================================================================ */}
