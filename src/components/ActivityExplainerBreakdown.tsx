@@ -480,7 +480,7 @@ export function ActivityExplainerBreakdown({ activity, onUpdateActivity, readOnl
             )}
 
             {/* LIST OF ALL SUBTASK EXPLAINERS */}
-            <div className="space-y-2.5 sm:space-y-3">
+            <div className="space-y-2.5 sm:space-y-3 max-h-[660px] overflow-y-auto pr-1.5 custom-scrollbar">
               {explainerItems.map((item, index) => (
                 <div 
                   key={item.id}
@@ -611,6 +611,14 @@ export function ActivityExplainerBreakdown({ activity, onUpdateActivity, readOnl
                 </div>
               )}
             </div>
+
+            {/* Scroll Indicator Footer when > 5 items */}
+            {explainerItems.length > 5 && (
+              <div className="pt-2 text-center text-[10px] font-bold text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                <span>Showing 5 visible • {explainerItems.length} total subtasks</span>
+                <span className="text-[10px] text-[#0B5FFF]">↕ Scroll to view all</span>
+              </div>
+            )}
           </CardContent>
         )}
       </Card>
