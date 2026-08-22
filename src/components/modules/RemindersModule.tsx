@@ -24,7 +24,9 @@ import {
   CalendarDays,
   Flame,
   ArrowRight,
-  Pin
+  Pin,
+  Edit3,
+  Save
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../ui';
@@ -53,11 +55,13 @@ export default function RemindersModule() {
   // Sub-tab navigation
   const [activeTab, setActiveTab] = useState<'reminders' | 'notes' | 'calendar'>('reminders');
   
-  // Reminder creation & filters
+  // Reminder creation & editing
   const [isCreating, setIsCreating] = useState(false);
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   // Selected calendar date
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string>(
@@ -155,6 +159,59 @@ export default function RemindersModule() {
       linkedActivityId: '',
       attachments: []
     });
+  };
+
+  const handleOpenEdit = (reminder: Reminder) => {
+    setEditingReminder({ ...reminder });
+  };
+
+  const handleEditFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !editingReminder) return;
+
+    Array.from(files).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (result) {
+          setEditingReminder(prev => prev ? ({
+            ...prev,
+            attachments: [...(prev.attachments || []), result]
+          }) : null);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (editFileInputRef.current) editFileInputRef.current.value = '';
+  };
+
+  const removeEditAttachment = (index: number) => {
+    if (!editingReminder) return;
+    setEditingReminder(prev => prev ? ({
+      ...prev,
+      attachments: (prev.attachments || []).filter((_, i) => i !== index)
+    }) : null);
+  };
+
+  const handleSaveEdit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingReminder || !editingReminder.title.trim()) return;
+
+    const modules = new Set(editingReminder.linkedModules || []);
+    if (editingReminder.linkedEmployeeId) modules.add('Employees');
+    if (editingReminder.linkedEquipmentId) modules.add('Equipment');
+    if (editingReminder.linkedActivityId) modules.add('Activities');
+
+    const updated: Reminder = {
+      ...editingReminder,
+      title: editingReminder.title.trim(),
+      linkedModules: Array.from(modules),
+      updatedAt: new Date().toISOString()
+    };
+
+    updateReminder(updated);
+    setEditingReminder(null);
   };
 
   const toggleStatus = (reminder: Reminder) => {
@@ -553,15 +610,30 @@ export default function RemindersModule() {
 
                         </div>
 
-                        {/* Delete Button */}
-                        <button
-                          type="button"
-                          onClick={() => deleteReminder(reminder.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors shrink-0"
-                          title="Delete reminder"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {/* Action Buttons: Edit & Delete */}
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(reminder)}
+                            className="p-1.5 text-slate-400 hover:text-[#0B5FFF] rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
+                            title="Edit reminder"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Delete reminder "${reminder.title}"?`)) {
+                                deleteReminder(reminder.id);
+                              }
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            title="Delete reminder"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })
@@ -633,9 +705,19 @@ export default function RemindersModule() {
                                 </span>
                               </div>
                             </div>
-                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shrink-0">
-                              {rem.status}
-                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                                {rem.status}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(rem)}
+                                className="p-1 text-slate-400 hover:text-[#0B5FFF] rounded-lg hover:bg-blue-100 dark:hover:bg-blue-950/60 transition-colors"
+                                title="Edit reminder"
+                              >
+                                <Edit3 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
                         ))}
 
@@ -876,6 +958,227 @@ export default function RemindersModule() {
                 <Plus className="h-3.5 w-3.5" /> Save Reminder
               </Button>
             </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Edit Reminder Modal */}
+      {editingReminder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 border border-slate-200 dark:border-slate-800 max-h-[92vh] flex flex-col">
+            
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-blue-100 dark:bg-blue-950/60 text-[#0B5FFF] flex items-center justify-center shrink-0 shadow-2xs">
+                  <Edit3 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">Edit Reminder</h2>
+                  <p className="text-xs text-slate-500 font-mono">{editingReminder.id} • Modify alert, schedule & linked entities</p>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setEditingReminder(null)} 
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveEdit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Title *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={editingReminder.title} 
+                    onChange={e => setEditingReminder({...editingReminder, title: e.target.value})}
+                    className="w-full h-10 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 focus:outline-none focus:border-[#0B5FFF] text-xs sm:text-sm font-semibold"
+                    placeholder="e.g. Inspect trench depth & check soil compaction"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Description / Notes</label>
+                  <textarea 
+                    value={editingReminder.description || ''} 
+                    onChange={e => setEditingReminder({...editingReminder, description: e.target.value})}
+                    rows={3}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:outline-none focus:border-[#0B5FFF] text-xs font-normal"
+                    placeholder="Additional details and instructions..."
+                  />
+                </div>
+
+                {/* Date, Time, Priority & Status */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Due Date</label>
+                    <input 
+                      type="date" 
+                      value={editingReminder.dueDate} 
+                      onChange={e => setEditingReminder({...editingReminder, dueDate: e.target.value})}
+                      className="w-full h-9 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Due Time</label>
+                    <input 
+                      type="time" 
+                      value={editingReminder.dueTime || ''} 
+                      onChange={e => setEditingReminder({...editingReminder, dueTime: e.target.value})}
+                      className="w-full h-9 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Priority</label>
+                    <select 
+                      value={editingReminder.priority}
+                      onChange={e => setEditingReminder({...editingReminder, priority: e.target.value as any})}
+                      className="w-full h-9 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 text-xs font-semibold"
+                    >
+                      <option>Low</option>
+                      <option>Medium</option>
+                      <option>High</option>
+                      <option>Critical</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Status</label>
+                    <select 
+                      value={editingReminder.status}
+                      onChange={e => setEditingReminder({...editingReminder, status: e.target.value as any})}
+                      className="w-full h-9 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 text-xs font-semibold"
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Overdue">Overdue</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Entity Linking */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Link Specific Entities</h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1">
+                        <User className="h-3.5 w-3.5 text-purple-600" /> Assignee
+                      </label>
+                      <select
+                        value={editingReminder.linkedEmployeeId || ''}
+                        onChange={e => setEditingReminder({...editingReminder, linkedEmployeeId: e.target.value})}
+                        className="w-full h-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2 text-xs"
+                      >
+                        <option value="">-- Unassigned --</option>
+                        {employees.map(emp => (
+                          <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1">
+                        <Truck className="h-3.5 w-3.5 text-amber-600" /> Machinery
+                      </label>
+                      <select
+                        value={editingReminder.linkedEquipmentId || ''}
+                        onChange={e => setEditingReminder({...editingReminder, linkedEquipmentId: e.target.value})}
+                        className="w-full h-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2 text-xs"
+                      >
+                        <option value="">-- None --</option>
+                        {equipment.map(eq => (
+                          <option key={eq.id} value={eq.id}>{eq.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1">
+                        <ClipboardList className="h-3.5 w-3.5 text-indigo-600" /> Activity Task
+                      </label>
+                      <select
+                        value={editingReminder.linkedActivityId || ''}
+                        onChange={e => setEditingReminder({...editingReminder, linkedActivityId: e.target.value})}
+                        className="w-full h-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2 text-xs"
+                      >
+                        <option value="">-- None --</option>
+                        {activities.map(act => (
+                          <option key={act.id} value={act.id}>{act.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Attachments */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    Attachments (Images, Documents)
+                  </label>
+                  
+                  <input 
+                    type="file" 
+                    ref={editFileInputRef} 
+                    onChange={handleEditFileUpload} 
+                    multiple 
+                    accept="image/*,.pdf,.doc,.docx"
+                    className="hidden" 
+                  />
+
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <button 
+                      type="button" 
+                      onClick={() => editFileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
+                    >
+                      <Paperclip className="h-3.5 w-3.5 text-[#0B5FFF]" /> Add Files
+                    </button>
+
+                    {(editingReminder.attachments || []).map((att, idx) => (
+                      <div key={idx} className="relative flex items-center gap-1 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 rounded-xl p-1 text-xs">
+                        {att.startsWith('data:image/') ? (
+                          <img src={att} alt="Attachment" className="h-8 w-8 object-cover rounded-lg" />
+                        ) : (
+                          <div className="px-2 text-[10px] font-bold">Doc #{idx + 1}</div>
+                        )}
+                        <button 
+                          type="button" 
+                          onClick={() => removeEditAttachment(idx)}
+                          className="text-slate-400 hover:text-rose-500 p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2 bg-slate-50/50 dark:bg-slate-900/50">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingReminder(null)}
+                  className="rounded-xl text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="rounded-xl text-xs font-bold bg-[#0B5FFF] hover:bg-blue-600 text-white gap-1 shadow-sm"
+                >
+                  <Save className="h-3.5 w-3.5" /> Save Changes
+                </Button>
+              </div>
+            </form>
 
           </div>
         </div>

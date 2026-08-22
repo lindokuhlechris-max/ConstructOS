@@ -34,6 +34,7 @@ export interface Reminder {
   attachments?: string[];
   createdBy: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface CustomFieldDefinition {
