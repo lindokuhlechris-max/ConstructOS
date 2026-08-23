@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, CustomSelect, Badge } from './ui';
-import { DailyReport, Activity, SubTask } from '../types';
+import { DailyReport, Activity, SubTask, ActivityStatus } from '../types';
 import { 
   CloudRain, 
   Cloud, 
@@ -19,11 +19,14 @@ import {
   Check, 
   Pin, 
   Plus, 
+  Minus,
   Search, 
   Filter, 
   ChevronDown, 
+  ChevronUp,
   ChevronRight, 
   CheckSquare, 
+  CheckCircle2,
   Sparkles, 
   Users, 
   Layers, 
@@ -32,10 +35,14 @@ import {
   ShieldCheck, 
   Clock, 
   Compass, 
-  Building2 
+  Building2,
+  SlidersHorizontal,
+  ListTodo,
+  Lock,
+  Eye
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { normalizeLabourAssignments } from '../lib/labourUtils';
+import { normalizeLabourAssignments, getSubtaskProgressionNumber, getPersonInitials } from '../lib/labourUtils';
 
 interface DailyLogFormProps {
   onSubmit: (report: Partial<DailyReport>) => void;
@@ -80,7 +87,7 @@ const REPORT_TEMPLATES = {
 };
 
 export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormProps) {
-  const { activities = [], projects = [], employees = [], equipment = [] } = useAppContext();
+  const { activities = [], projects = [], employees = [], equipment = [], updateActivity } = useAppContext();
 
   // --------------------------------------------------------------------------
   // Form State
@@ -114,6 +121,20 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
   });
 
   // --------------------------------------------------------------------------
+  // Local Working Copy of Activities (to reflect live actual progress)
+  // --------------------------------------------------------------------------
+  const [workingActivities, setWorkingActivities] = useState<Activity[]>(() => {
+    return JSON.parse(JSON.stringify(activities));
+  });
+
+  // Sync when activities change if working copy is empty
+  useEffect(() => {
+    if (workingActivities.length === 0 && activities.length > 0) {
+      setWorkingActivities(JSON.parse(JSON.stringify(activities)));
+    }
+  }, [activities]);
+
+  // --------------------------------------------------------------------------
   // Pinned Activities & Subtasks State
   // Mapping: activityId -> 'all' | string[] (subtask IDs)
   // --------------------------------------------------------------------------
@@ -129,13 +150,13 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
     const targetProject = initialData?.projectId || projects[0]?.id || 'PRJ-001';
     const active = activities.filter(a => a.projectId === targetProject && (a.status === 'In Progress' || a.status === 'Not Started'));
     const map: Record<string, 'all' | string[]> = {};
-    active.slice(0, 3).forEach(a => {
+    active.slice(0, 4).forEach(a => {
       map[a.id] = 'all';
     });
     return map;
   });
 
-  // Track progress, quantities, and notes per pinned activity
+  // Track progress notes & daily quantities per pinned activity
   const [activityProgress, setActivityProgress] = useState<Record<string, { dailyQuantity?: number; unit?: string; notes?: string; completedSubtasks?: string[] }>>(() => {
     if (initialData?.activityProgress) return initialData.activityProgress;
     const savedDraft = localStorage.getItem('dailyReportActivityProgress');
@@ -146,6 +167,25 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
     }
     return {};
   });
+
+  // --------------------------------------------------------------------------
+  // UI Interactive States (Matching DailyLogsTrackerView)
+  // --------------------------------------------------------------------------
+  const [collapsedActivityIds, setCollapsedActivityIds] = useState<string[]>([]);
+  const [editingFocusActivityId, setEditingFocusActivityId] = useState<string | null>(null);
+  const [showAllSubtasksActivityIds, setShowAllSubtasksActivityIds] = useState<string[]>([]);
+
+  const handleToggleCollapseActivity = (activityId: string) => {
+    setCollapsedActivityIds(prev => 
+      prev.includes(activityId) ? prev.filter(id => id !== activityId) : [...prev, activityId]
+    );
+  };
+
+  const handleToggleShowAllSubtasks = (activityId: string) => {
+    setShowAllSubtasksActivityIds(prev =>
+      prev.includes(activityId) ? prev.filter(id => id !== activityId) : [...prev, activityId]
+    );
+  };
 
   // --------------------------------------------------------------------------
   // Pin Selection Modal State
@@ -184,6 +224,7 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
     });
     setPinnedSubtaskMap({});
     setActivityProgress({});
+    setWorkingActivities(JSON.parse(JSON.stringify(activities)));
   };
 
   const [errors, setErrors] = useState<Partial<Record<keyof DailyReport, string>>>({});
@@ -233,8 +274,8 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
   // Filter activities relevant to the selected project
   const currentProjectActivities = useMemo(() => {
     const pId = formData.projectId || projects[0]?.id;
-    return activities.filter(a => !pId || a.projectId === pId);
-  }, [activities, formData.projectId, projects]);
+    return workingActivities.filter(a => !pId || a.projectId === pId);
+  }, [workingActivities, formData.projectId, projects]);
 
   // List of pinned activity objects
   const pinnedActivitiesList = useMemo(() => {
@@ -277,8 +318,99 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
   }, [currentProjectActivities, pinModalDiscipline, pinModalFilterStatus, pinModalSearch, formData.date]);
 
   // --------------------------------------------------------------------------
-  // Pinning Handlers
+  // Live Progression Handlers (Matching DailyLogsTrackerView)
   // --------------------------------------------------------------------------
+  
+  // Toggle Subtask Completion & Recalculate Actual Activity Progress
+  const handleToggleSubtaskStatus = (activityId: string, subtaskId: string) => {
+    setWorkingActivities(prev => {
+      return prev.map(act => {
+        if (act.id !== activityId) return act;
+
+        const subtasks = act.subtasks || [];
+        const target = subtasks.find(s => s.id === subtaskId);
+        if (!target) return act;
+
+        const nextStatus: SubTask['status'] = 
+          target.status === 'Completed' ? 'In Progress' : 'Completed';
+
+        const updatedSubtasks = subtasks.map(s => {
+          if (s.id === subtaskId) {
+            return {
+              ...s,
+              status: nextStatus,
+              completedQuantity: nextStatus === 'Completed' ? (s.targetQuantity || s.completedQuantity || 1) : 0
+            };
+          }
+          return s;
+        });
+
+        const completedCount = updatedSubtasks.filter(s => s.status === 'Completed').length;
+        const calcProgress = updatedSubtasks.length > 0 ? Math.round((completedCount / updatedSubtasks.length) * 100) : act.progress;
+        const calcStatus: ActivityStatus = calcProgress === 100 ? 'Completed' : calcProgress > 0 ? 'In Progress' : act.status;
+
+        return {
+          ...act,
+          subtasks: updatedSubtasks,
+          progress: calcProgress,
+          status: calcStatus,
+          updatedAt: formData.date || new Date().toISOString().split('T')[0]
+        };
+      });
+    });
+  };
+
+  // Stepper / Input Quantity Update & Live Recalculation
+  const handleUpdateSubtaskQuantity = (activityId: string, subtaskId: string, newQty: number) => {
+    setWorkingActivities(prev => {
+      return prev.map(act => {
+        if (act.id !== activityId) return act;
+
+        const subtasks = act.subtasks || [];
+        const updatedSubtasks = subtasks.map(s => {
+          if (s.id === subtaskId) {
+            const targetQty = s.targetQuantity || 1;
+            const clampedQty = Math.max(0, Math.min(newQty, targetQty * 2));
+            const isFinished = clampedQty >= targetQty;
+            const isStarted = clampedQty > 0;
+            const calcStatus: SubTask['status'] = isFinished ? 'Completed' : isStarted ? 'In Progress' : 'Not Started';
+
+            return {
+              ...s,
+              completedQuantity: clampedQty,
+              status: calcStatus
+            };
+          }
+          return s;
+        });
+
+        // Compute overall activity progress from subtasks
+        let totalPct = 0;
+        if (updatedSubtasks.length > 0) {
+          const sumPcts = updatedSubtasks.reduce((sum, s) => {
+            const t = s.targetQuantity || 1;
+            const c = s.completedQuantity || (s.status === 'Completed' ? t : 0);
+            return sum + Math.min(100, Math.round((c / t) * 100));
+          }, 0);
+          totalPct = Math.round(sumPcts / updatedSubtasks.length);
+        } else {
+          totalPct = act.progress;
+        }
+
+        const calcStatus: ActivityStatus = totalPct === 100 ? 'Completed' : totalPct > 0 ? 'In Progress' : act.status;
+
+        return {
+          ...act,
+          subtasks: updatedSubtasks,
+          progress: totalPct,
+          status: calcStatus,
+          updatedAt: formData.date || new Date().toISOString().split('T')[0]
+        };
+      });
+    });
+  };
+
+  // Toggle Whole Activity Pin
   const handleToggleActivity = (actId: string) => {
     setPinnedSubtaskMap(prev => {
       const copy = { ...prev };
@@ -306,7 +438,7 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
   };
 
   const handleToggleSubtaskSelection = (actId: string, subtaskId: string) => {
-    const act = activities.find(a => a.id === actId);
+    const act = workingActivities.find(a => a.id === actId);
     if (!act) return;
     const allSubtasks = act.subtasks || [];
 
@@ -359,35 +491,6 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
     }));
   };
 
-  const handleToggleSubtaskCompletion = (actId: string, subtaskId: string) => {
-    setActivityProgress(prev => {
-      const current = prev[actId] || {};
-      const completed = current.completedSubtasks || [];
-      const updated = completed.includes(subtaskId)
-        ? completed.filter(id => id !== subtaskId)
-        : [...completed, subtaskId];
-
-      return {
-        ...prev,
-        [actId]: {
-          ...current,
-          completedSubtasks: updated
-        }
-      };
-    });
-  };
-
-  const handleDailyQuantityChange = (actId: string, qty: number, unit?: string) => {
-    setActivityProgress(prev => ({
-      ...prev,
-      [actId]: {
-        ...(prev[actId] || {}),
-        dailyQuantity: qty,
-        unit: unit || prev[actId]?.unit
-      }
-    }));
-  };
-
   const handleActivityNoteChange = (actId: string, note: string) => {
     setActivityProgress(prev => ({
       ...prev,
@@ -413,17 +516,14 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
     pinnedActivitiesList.forEach((act, idx) => {
       const prog = activityProgress[act.id] || {};
       const focusedSt = getFocusedSubtasks(act);
-      const completedSt = (prog.completedSubtasks || []).map(id => focusedSt.find(s => s.id === id)?.title).filter(Boolean);
+      const completedSt = focusedSt.filter(s => s.status === 'Completed').map(s => s.title);
       
-      let line = `${idx + 1}. [${act.code || act.id}] ${act.name}`;
-      if (prog.dailyQuantity !== undefined && prog.dailyQuantity > 0) {
-        line += ` - Executed Output: ${prog.dailyQuantity} ${prog.unit || act.unit || 'units'}`;
-      }
+      let line = `${idx + 1}. [${act.code || act.id}] ${act.name} (Overall Progress: ${act.progress}%)`;
       if (completedSt.length > 0) {
-        line += ` | Completed: ${completedSt.join(', ')}`;
+        line += ` | Completed Subtasks: ${completedSt.join(', ')}`;
       }
       if (prog.notes?.trim()) {
-        line += ` (${prog.notes.trim()})`;
+        line += ` | Remarks: ${prog.notes.trim()}`;
       }
       lines.push(line);
     });
@@ -502,24 +602,26 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
       localStorage.removeItem('dailyReportPinnedMap');
       localStorage.removeItem('dailyReportActivityProgress');
 
-      // Compile worked activities and completed subtasks lists
+      // 1. Commit and update all modified activities to permanent AppContext
+      pinnedActivitiesList.forEach(act => {
+        updateActivity(act);
+      });
+
+      // 2. Compile worked activities and completed subtasks lists
       const activitiesWorked = pinnedActivitiesList.map(a => a.name);
       const activitiesLogged = pinnedActivitiesList.map(a => a.id);
       const subtasksCompleted: string[] = [];
 
       pinnedActivitiesList.forEach(act => {
-        const prog = activityProgress[act.id];
-        if (prog?.completedSubtasks) {
-          const focused = getFocusedSubtasks(act);
-          prog.completedSubtasks.forEach(stId => {
-            const match = focused.find(s => s.id === stId);
-            if (match) subtasksCompleted.push(`[${act.code || act.id}] ${match.title}`);
-          });
-        }
+        const focused = getFocusedSubtasks(act);
+        focused.filter(s => s.status === 'Completed').forEach(s => {
+          subtasksCompleted.push(`[${act.code || act.id}] ${s.title}`);
+        });
       });
 
       const reportPayload: Partial<DailyReport> = {
         ...formData,
+        createdAt: new Date().toISOString(),
         activitiesWorked,
         activitiesLogged,
         subtasksCompleted,
@@ -768,20 +870,25 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
           </div>
 
           {/* ========================================================================= */}
-          {/* Section 3: Pinned Activities & Subtasks Engine (Interactive Selection)   */}
+          {/* Section 3: Pinned Activities & Subtask Verification Ledger (Matching Image 2) */}
           {/* ========================================================================= */}
           <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-2">
                   <Pin className="h-4 w-4 text-[#0B5FFF]" />
-                  <span>3. Pinned Activities & Subtasks for this Shift</span>
+                  <span>3. Today's Pinned Focus & Deliverable Verification</span>
                   <span className="ml-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-[#0B5FFF]">
-                    {pinnedActivitiesList.length} Activities ({totalSubtasksPinnedCount} Subtasks)
+                    {pinnedActivitiesList.length} Activities
                   </span>
+                  {totalSubtasksPinnedCount > 0 && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
+                      {totalSubtasksPinnedCount} Subtasks Active
+                    </span>
+                  )}
                 </h4>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Select and pin all or specific activities & subtasks to report daily output progress, checklist completions, and shift observations.
+                  Verify subtasks, adjust step quantities, sign off quality gates, and view workforce allocations for this shift.
                 </p>
               </div>
 
@@ -789,10 +896,10 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
                 <Button
                   type="button"
                   onClick={() => setIsPinModalOpen(true)}
-                  className="gap-1.5 bg-[#0B5FFF] hover:bg-blue-700 text-white rounded-xl text-xs font-semibold h-9 shadow-sm"
+                  className="gap-1.5 bg-[#0B5FFF] hover:bg-blue-700 text-white rounded-xl text-xs font-bold h-9 shadow-sm"
                 >
                   <Pin className="h-3.5 w-3.5" />
-                  Select & Pin Activities
+                  Pin Tasks ({pinnedActivitiesList.length})
                 </Button>
 
                 {pinnedActivitiesList.length > 0 && (
@@ -841,95 +948,182 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
               </div>
             ) : (
               <div className="space-y-4">
-                {pinnedActivitiesList.map((act, index) => {
+                {pinnedActivitiesList.map(act => {
+                  const allSubtasks = act.subtasks || [];
                   const focusedSubtasks = getFocusedSubtasks(act);
-                  const prog = activityProgress[act.id] || {};
-                  const completedStIds = prog.completedSubtasks || [];
+                  const selectionState = getActivitySelectionState(act);
+                  const isPartial = selectionState === 'partial';
+                  const isEditingFocus = editingFocusActivityId === act.id;
+                  const isShowingAll = showAllSubtasksActivityIds.includes(act.id);
+                  const isCollapsed = collapsedActivityIds.includes(act.id);
+                  
+                  const displayedSubtasks = isShowingAll ? allSubtasks : focusedSubtasks;
+                  const actLabour = normalizeLabourAssignments(act.assignedLabour, employees);
+                  const actEquipment = act.assignedEquipment || [];
 
                   return (
                     <div 
                       key={act.id}
-                      className="p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/70 space-y-4 transition-all"
+                      className={`bg-white dark:bg-slate-900 rounded-3xl border shadow-sm overflow-hidden transition-all ${
+                        isPartial 
+                          ? 'border-indigo-200 dark:border-indigo-900/60' 
+                          : 'border-slate-200 dark:border-slate-800'
+                      }`}
                     >
-                      {/* Activity Title Header */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <span className="font-mono text-xs font-bold text-[#0B5FFF] bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded-md">
-                            {act.code || `ACT-${index + 1}`}
-                          </span>
-                          <div>
-                            <h5 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                              {act.name}
-                            </h5>
-                            <div className="flex items-center gap-2 text-[11px] text-slate-400 flex-wrap">
-                              <span>Discipline: <strong>{act.discipline || 'General'}</strong></span>
-                              <span>•</span>
-                              <span>Target: <strong>{act.plannedQuantity || 100} {act.unit || 'units'}</strong></span>
-                              <span>•</span>
-                              <span className={`font-semibold ${act.status === 'In Progress' ? 'text-blue-600' : 'text-slate-500'}`}>
-                                {act.status}
+                      {/* Activity Top Header Strip - Clickable to Collapse (Matching Image 2) */}
+                      <div 
+                        onClick={() => handleToggleCollapseActivity(act.id)}
+                        className="p-4 sm:p-5 bg-slate-50/70 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 cursor-pointer hover:bg-slate-100/70 dark:hover:bg-slate-800/80 transition-colors select-none"
+                      >
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleActivity(act.id);
+                            }}
+                            className="mt-1 p-1 rounded-lg text-[#0B5FFF] hover:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-700 transition-colors"
+                            title="Unpin this activity from shift"
+                          >
+                            <Pin className="h-4 w-4 fill-blue-500 text-blue-500" />
+                          </button>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-xs font-black text-[#0B5FFF]">
+                                {act.code || act.id}
                               </span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                {act.discipline || 'General'}
+                              </span>
+                              {act.sectionSpan && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                                  Span: {act.sectionSpan}
+                                </span>
+                              )}
+
+                              {/* Granular Focus Badge (Matching Image 2) */}
+                              {isPartial ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                                  <Target className="h-3 w-3 text-amber-600" />
+                                  Targeted Focus: {focusedSubtasks.length} of {allSubtasks.length} Subtasks
+                                </span>
+                              ) : allSubtasks.length > 0 ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] border border-blue-200 dark:border-blue-800">
+                                  All Subtasks ({allSubtasks.length})
+                                </span>
+                              ) : null}
                             </div>
+
+                            <h4 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white mt-1 truncate">
+                              {act.name}
+                            </h4>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 self-end sm:self-auto">
-                          <Button
+                        {/* Overall Progress Percentage & Focus Subtasks Trigger */}
+                        <div className="flex items-center gap-2.5 self-end sm:self-center shrink-0">
+                          {allSubtasks.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingFocusActivityId(isEditingFocus ? null : act.id);
+                              }}
+                              className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                                isEditingFocus 
+                                  ? 'bg-blue-600 text-white shadow-xs' 
+                                  : isPartial 
+                                  ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-200 hover:bg-amber-200 border border-amber-300 dark:border-amber-800'
+                                  : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                              }`}
+                              title="Select specific subtasks to track for this shift"
+                            >
+                              <SlidersHorizontal className="h-3 w-3" />
+                              <span className="hidden md:inline">Focus Subtasks</span>
+                              <span className="md:hidden">Focus</span>
+                            </button>
+                          )}
+
+                          <div className="text-right">
+                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Overall Activity</span>
+                            <span className="text-xs font-black text-[#0B5FFF]">{act.progress || 0}%</span>
+                          </div>
+
+                          <div className="w-16 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden hidden sm:block">
+                            <div 
+                              className="h-full bg-[#0B5FFF] rounded-full transition-all duration-300"
+                              style={{ width: `${act.progress || 0}%` }}
+                            />
+                          </div>
+
+                          <button
                             type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleToggleActivity(act.id)}
-                            className="h-8 px-2.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl"
-                            title="Unpin activity"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleCollapseActivity(act.id);
+                            }}
+                            className="p-1.5 rounded-xl hover:bg-slate-200/80 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-transform"
                           >
-                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Unpin
-                          </Button>
+                            {isCollapsed ? (
+                              <ChevronDown className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                            ) : (
+                              <ChevronUp className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                            )}
+                          </button>
                         </div>
                       </div>
 
-                      {/* Focused Subtask Checklist for this Activity */}
-                      {focusedSubtasks.length > 0 && (
-                        <div className="space-y-2">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                            Subtask Progression Checklist ({completedStIds.length}/{focusedSubtasks.length} Completed):
-                          </span>
+                      {/* Inline Subtask Focus Quick Editor Drawer */}
+                      {isEditingFocus && (
+                        <div className="p-4 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-indigo-100 dark:border-indigo-900/60 animate-in fade-in space-y-3">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <Target className="h-4 w-4 text-indigo-600" />
+                              <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200">
+                                Select active subtasks for this shift ({focusedSubtasks.length}/{allSubtasks.length} active)
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSelectAllSubtasksForActivity(act.id)}
+                                className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-900"
+                              >
+                                Select All
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingFocusActivityId(null)}
+                                className="text-[11px] font-bold text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded bg-indigo-200/60 dark:bg-indigo-900/60 hover:bg-indigo-300"
+                              >
+                                Done
+                              </button>
+                            </div>
+                          </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {focusedSubtasks.map(st => {
-                              const isCompleted = completedStIds.includes(st.id);
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {allSubtasks.map((st, sIdx) => {
+                              const isPinned = isSubtaskPinned(act.id, st.id);
+                              const progNum = getSubtaskProgressionNumber(allSubtasks, sIdx);
                               return (
-                                <label 
+                                <label
                                   key={st.id}
-                                  className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-colors cursor-pointer select-none ${
-                                    isCompleted 
-                                      ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-emerald-950 dark:text-emerald-200' 
-                                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/80 text-slate-800 dark:text-slate-200'
+                                  className={`flex items-center gap-2 p-2 rounded-xl border text-xs cursor-pointer transition-all select-none ${
+                                    isPinned
+                                      ? 'bg-white dark:bg-slate-900 border-indigo-400 shadow-2xs font-bold text-indigo-950 dark:text-indigo-100'
+                                      : 'bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-300'
                                   }`}
                                 >
-                                  <input 
+                                  <input
                                     type="checkbox"
-                                    checked={isCompleted}
-                                    onChange={() => handleToggleSubtaskCompletion(act.id, st.id)}
-                                    className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                                    checked={isPinned}
+                                    onChange={() => handleToggleSubtaskSelection(act.id, st.id)}
+                                    className="rounded text-[#0B5FFF] focus:ring-[#0B5FFF] h-3.5 w-3.5"
                                   />
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className={`text-xs font-semibold ${isCompleted ? 'line-through opacity-80' : ''}`}>
-                                        {st.title}
-                                      </span>
-                                      {st.isHoldPoint && (
-                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300">
-                                          <ShieldCheck className="h-2.5 w-2.5" /> Hold Point
-                                        </span>
-                                      )}
-                                      {st.isMilestone && (
-                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300">
-                                          🎯 Milestone
-                                        </span>
-                                      )}
-                                    </div>
-                                    <span className="text-[10px] text-slate-400 block">{st.category || 'Standard Task'}</span>
-                                  </div>
+                                  <span className="font-mono text-[10px] text-slate-400">{progNum}</span>
+                                  <span className="truncate flex-1">{st.title}</span>
+                                  {st.isHoldPoint && <span className="text-[10px]" title="QA Hold Point">🔒</span>}
                                 </label>
                               );
                             })}
@@ -937,36 +1131,210 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
                         </div>
                       )}
 
-                      {/* Daily Output Quantity & Notes Row */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-                        <div>
-                          <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                            Daily Output Executed ({act.unit || 'units'})
-                          </label>
-                          <input 
-                            type="number"
-                            step="any"
-                            min="0"
-                            placeholder="e.g. 12.5"
-                            value={prog.dailyQuantity || ''}
-                            onChange={(e) => handleDailyQuantityChange(act.id, parseFloat(e.target.value) || 0, act.unit)}
-                            className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
-                          />
-                        </div>
+                      {/* Subtasks Progression & Verification List (Matching Image 2) */}
+                      {!isCollapsed && (
+                        <div className="p-4 sm:p-5 space-y-3 animate-in fade-in duration-150">
+                          {allSubtasks.length > 0 && (
+                            <div className="flex items-center justify-between text-xs text-slate-500 pb-1 flex-wrap gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <ListTodo className="h-3.5 w-3.5 text-slate-400" />
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                  {isShowingAll 
+                                    ? `Showing all ${allSubtasks.length} subtasks (${focusedSubtasks.length} active in today's shift)` 
+                                    : isPartial 
+                                    ? `Showing ${focusedSubtasks.length} targeted subtasks for today's shift`
+                                    : `All ${allSubtasks.length} subtasks active for today's shift`}
+                                </span>
+                              </div>
 
-                        <div className="md:col-span-2">
-                          <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                            Activity Notes / Delays / Observations
-                          </label>
-                          <input 
-                            type="text"
-                            placeholder="e.g. Completed initial 45m; awaiting compaction test results..."
-                            value={prog.notes || ''}
-                            onChange={(e) => handleActivityNoteChange(act.id, e.target.value)}
-                            className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
-                          />
+                              {isPartial && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleShowAllSubtasks(act.id)}
+                                  className="text-[11px] font-bold text-[#0B5FFF] hover:underline"
+                                >
+                                  {isShowingAll ? 'Show focused only' : `Show all (${allSubtasks.length})`}
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {displayedSubtasks.length === 0 ? (
+                            <div className="p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between flex-wrap gap-2">
+                              <span>No subtasks currently selected for today's focus on this activity.</span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => handleSelectAllSubtasksForActivity(act.id)}
+                                className="h-7 text-[11px] rounded-lg bg-[#0B5FFF] text-white"
+                              >
+                                Focus All Subtasks
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {displayedSubtasks.map((st) => {
+                                const origIdx = allSubtasks.findIndex(s => s.id === st.id);
+                                const progNum = getSubtaskProgressionNumber(allSubtasks, origIdx >= 0 ? origIdx : 0);
+                                const isFocusedOnShift = isSubtaskPinned(act.id, st.id);
+
+                                let itemPercent = 0;
+                                if (st.targetQuantity && st.targetQuantity > 0) {
+                                  itemPercent = Math.min(100, Math.round(((st.completedQuantity || 0) / st.targetQuantity) * 100));
+                                } else {
+                                  itemPercent = st.status === 'Completed' ? 100 : st.status === 'In Progress' ? 50 : 0;
+                                }
+
+                                return (
+                                  <div
+                                    key={st.id}
+                                    className={`flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-2xl border transition-all ${
+                                      !isFocusedOnShift
+                                        ? 'bg-slate-50/40 dark:bg-slate-900/30 border-dashed border-slate-300 dark:border-slate-800 opacity-60'
+                                        : st.status === 'Completed'
+                                        ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40'
+                                        : st.status === 'In Progress'
+                                        ? 'bg-blue-50/40 dark:bg-blue-950/20 border-blue-200/80 dark:border-blue-900/40'
+                                        : 'bg-white dark:bg-slate-900/80 border-slate-200 dark:border-slate-800'
+                                    } ${st.isHoldPoint ? 'border-l-4 border-l-rose-500' : ''}`}
+                                  >
+                                    {/* Left: Progression Number, Status Toggle, Title & Badges */}
+                                    <div className="flex items-center gap-2.5 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
+                                      <div 
+                                        className={`h-6 min-w-[2.4rem] px-1.5 rounded-lg font-mono font-black text-[11px] flex items-center justify-center shrink-0 shadow-2xs ${
+                                          st.status === 'Completed'
+                                            ? 'bg-emerald-600 text-white'
+                                            : st.status === 'In Progress'
+                                            ? 'bg-[#0B5FFF] text-white'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                                        }`}
+                                        title={`Progression Step ${progNum}`}
+                                      >
+                                        {progNum}
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleSubtaskStatus(act.id, st.id)}
+                                        className="shrink-0 transition-transform active:scale-95"
+                                        title="Toggle Status / Completion"
+                                      >
+                                        {st.status === 'Completed' ? (
+                                          <CheckCircle2 className="h-4 w-4 text-emerald-500 fill-emerald-100 dark:fill-emerald-950/50" />
+                                        ) : st.status === 'In Progress' ? (
+                                          <Clock className="h-4 w-4 text-blue-500 animate-pulse" />
+                                        ) : (
+                                          <div className="h-4 w-4 rounded-full border-2 border-slate-300 dark:border-slate-600" />
+                                        )}
+                                      </button>
+
+                                      <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+                                        <span className={`text-xs font-bold truncate max-w-[260px] sm:max-w-[340px] md:max-w-none ${st.status === 'Completed' ? 'line-through text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                                          {st.title}
+                                        </span>
+
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0">
+                                          {st.category}
+                                        </span>
+
+                                        {st.isHoldPoint && (
+                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800 border border-rose-300 shrink-0">
+                                            🔒 QA Hold Point
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Right: Quantity Stepper & Live Progress Bar (Matching Image 2) */}
+                                    <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center flex-wrap sm:flex-nowrap">
+                                      {st.targetQuantity ? (
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateSubtaskQuantity(act.id, st.id, (st.completedQuantity || 0) - 1)}
+                                            className="w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-[10px]"
+                                            title="Decrease quantity"
+                                          >
+                                            <Minus className="h-2.5 w-2.5" />
+                                          </button>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max={st.targetQuantity}
+                                            value={st.completedQuantity || 0}
+                                            onChange={(e) => handleUpdateSubtaskQuantity(act.id, st.id, Number(e.target.value))}
+                                            className="w-12 h-6 text-center font-bold text-[11px] border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-[#0B5FFF]"
+                                          />
+                                          <span className="text-[10px] text-slate-500 font-medium whitespace-nowrap">
+                                            / {st.targetQuantity} {st.unit || act.unit || 'm'}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateSubtaskQuantity(act.id, st.id, (st.completedQuantity || 0) + 1)}
+                                            className="w-5 h-5 rounded bg-blue-100 dark:bg-blue-900/60 hover:bg-blue-200 text-[#0B5FFF] flex items-center justify-center font-bold text-[10px]"
+                                            title="Increase quantity"
+                                          >
+                                            <Plus className="h-2.5 w-2.5" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-400 font-medium">{st.status}</span>
+                                      )}
+
+                                      <div className="w-14 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden shrink-0 hidden sm:block">
+                                        <div 
+                                          className={`h-full rounded-full transition-all ${itemPercent === 100 ? 'bg-emerald-500' : 'bg-[#0B5FFF]'}`}
+                                          style={{ width: `${itemPercent}%` }} 
+                                        />
+                                      </div>
+                                      <span className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 w-8 text-right shrink-0">
+                                        {itemPercent}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Workforce on Shift Footer Bar (Matching Image 2) */}
+                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                <HardHat className="h-3 w-3" /> Workforce on Shift:
+                              </span>
+                              {actLabour.length === 0 ? (
+                                <span className="text-[11px] text-slate-400 italic">No workers assigned</span>
+                              ) : (
+                                actLabour.map((l, lIdx) => (
+                                  <span key={lIdx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800/60 text-[10px] font-bold">
+                                    <span className="w-3.5 h-3.5 rounded bg-amber-200 dark:bg-amber-800 text-[8px] flex items-center justify-center font-bold">
+                                      {getPersonInitials(l.name)}
+                                    </span>
+                                    {l.name} ({l.hours || 8}h)
+                                  </span>
+                                ))
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                <Truck className="h-3 w-3" /> Machinery:
+                              </span>
+                              {actEquipment.length === 0 ? (
+                                <span className="text-[11px] text-slate-400 italic">No equipment assigned</span>
+                              ) : (
+                                actEquipment.map((eq, eIdx) => (
+                                  <span key={eIdx} className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-800/60 text-[10px] font-bold">
+                                    {typeof eq === 'string' ? eq : (eq.name || eq.equipmentId || 'Equipment')}
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                          </div>
+
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1210,8 +1578,9 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {allSubtasks.map(st => {
+                            {allSubtasks.map((st, stIdx) => {
                               const isSubPinned = isSubtaskPinned(act.id, st.id);
+                              const progNum = getSubtaskProgressionNumber(allSubtasks, stIdx);
                               return (
                                 <label
                                   key={st.id}
@@ -1227,6 +1596,7 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
                                     onChange={() => handleToggleSubtaskSelection(act.id, st.id)}
                                     className="rounded text-[#0B5FFF] focus:ring-blue-500 h-3.5 w-3.5 mt-0.5"
                                   />
+                                  <span className="font-mono text-[10px] text-slate-400 mt-0.5">{progNum}</span>
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <span>{st.title}</span>

@@ -107,21 +107,35 @@ export function Reports() {
 
   const formatReportTime = (createdAt?: string, fallbackDate?: string) => {
     if (createdAt) {
-      try {
-        const d = new Date(createdAt);
-        if (!isNaN(d.getTime())) {
-          return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        }
-      } catch (e) {}
-      const timeMatch = createdAt.match(/(\d{2}:\d{2})/);
-      if (timeMatch) return timeMatch[1];
+      // Check if it has an explicit time component (e.g. "T14:30", "14:30:00", etc.)
+      const hasTimeComponent = createdAt.includes('T') || createdAt.includes(':');
+      
+      if (hasTimeComponent) {
+        try {
+          const d = new Date(createdAt);
+          if (!isNaN(d.getTime())) {
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+          }
+        } catch (e) {}
+
+        const timeMatch = createdAt.match(/(\d{2}:\d{2})/);
+        if (timeMatch) return timeMatch[1];
+      }
     }
-    // Fallback deterministic time from date
-    return '08:30';
+
+    // If only a date is present, check if it is today or a previous shift
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (fallbackDate === todayStr || createdAt === todayStr) {
+      return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+
+    // Default standard end-of-shift logging time for historical entries
+    return '16:30';
   };
 
   // Convert daily reports to uniform list items for unified view
   const allUnifiedItems = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
     const dailyAsUniversal: UniversalReportItem[] = reports.map(d => ({
       id: d.id,
       projectId: d.projectId,
@@ -132,7 +146,7 @@ export function Reports() {
       revision: 'Rev 0',
       date: d.date,
       submissionDate: d.date,
-      createdAt: d.createdAt || `${d.date}T08:00:00`,
+      createdAt: d.createdAt || (d.date === todayStr ? new Date().toISOString() : `${d.date}T16:30:00`),
       author: d.submittedBy || d.supervisor || 'Site Supervisor',
       status: (d.status as any) || 'Approved',
       location: 'Site-Wide',

@@ -34,6 +34,7 @@ import {
 import { useAppContext } from '../context/AppContext';
 import { DailyReport, Activity, LabourLog, SafetyIncident, Equipment, MaterialReceipt } from '../types';
 import { exportSingleReportPDF, parseSupervisorNotes } from '../lib/pdfReportExport';
+import { normalizeLabourAssignments, getSubtaskProgressionNumber, getPersonInitials } from '../lib/labourUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -45,7 +46,7 @@ interface ReportDetailProps {
 }
 
 export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetailProps) {
-  const { activities, labourLogs, safetyIncidents, equipment, materialReceipts, projects } = useAppContext();
+  const { activities, labourLogs, safetyIncidents, equipment, materialReceipts, projects, employees = [] } = useAppContext();
 
   // Active Tab: 'overview' | 'activities' | 'manpower' | 'equipment' | 'safety'
   const [activeTab, setActiveTab] = useState<'overview' | 'activities' | 'manpower' | 'equipment' | 'safety'>('overview');
@@ -482,53 +483,141 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
                     const focusedSubtasks = !pinnedMap || pinnedMap === 'all'
                       ? allSubtasks
                       : allSubtasks.filter(s => Array.isArray(pinnedMap) && pinnedMap.includes(s.id));
+                    const isPartial = Array.isArray(pinnedMap) && pinnedMap.length > 0 && pinnedMap.length < allSubtasks.length;
                     const completedSubtaskIds = prog.completedSubtasks || [];
 
+                    const actLabour = normalizeLabourAssignments(act.assignedLabour, employees);
+                    const actEquipment = act.assignedEquipment || [];
+
                     return (
-                      <div key={act.id} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-bold text-[#0B5FFF] bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded">
+                      <div 
+                        key={act.id} 
+                        className={`p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border shadow-sm space-y-4 transition-all ${
+                          isPartial ? 'border-indigo-200 dark:border-indigo-900/60' : 'border-slate-200 dark:border-slate-800'
+                        }`}
+                      >
+                        {/* Header Strip */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-xs font-black text-[#0B5FFF]">
                               {act.code || act.id}
                             </span>
-                            <span className="font-bold text-sm text-slate-900 dark:text-white">{act.name}</span>
-                            <Badge variant="outline" className="text-[10px]">{act.discipline || 'General'}</Badge>
-                          </div>
-                          {prog.dailyQuantity !== undefined && prog.dailyQuantity > 0 && (
-                            <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-xl">
-                              Daily Output: {prog.dailyQuantity} {prog.unit || act.unit || 'units'}
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                              {act.discipline || 'General'}
                             </span>
-                          )}
+                            {act.sectionSpan && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                                Span: {act.sectionSpan}
+                              </span>
+                            )}
+                            {isPartial ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                                <Target className="h-3 w-3 text-amber-600" />
+                                Targeted Focus: {focusedSubtasks.length} of {allSubtasks.length} Subtasks
+                              </span>
+                            ) : allSubtasks.length > 0 ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] border border-blue-200 dark:border-blue-800">
+                                All Subtasks ({allSubtasks.length})
+                              </span>
+                            ) : null}
+
+                            <h4 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
+                              {act.name}
+                            </h4>
+                          </div>
+
+                          <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
+                            <div className="text-right">
+                              <span className="text-[10px] font-bold text-slate-400 block uppercase">Overall Activity</span>
+                              <span className="text-xs font-black text-[#0B5FFF]">{act.progress || 0}%</span>
+                            </div>
+                            <div className="w-16 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden hidden sm:block">
+                              <div 
+                                className="h-full bg-[#0B5FFF] rounded-full transition-all duration-300"
+                                style={{ width: `${act.progress || 0}%` }}
+                              />
+                            </div>
+                          </div>
                         </div>
 
+                        {/* Subtasks Progression Breakdown */}
                         {focusedSubtasks.length > 0 && (
-                          <div className="space-y-1.5">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                              Subtasks ({completedSubtaskIds.length}/{focusedSubtasks.length} Completed):
-                            </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                              {focusedSubtasks.map(st => {
-                                const isDone = completedSubtaskIds.includes(st.id) || (report.subtasksCompleted && report.subtasksCompleted.some(s => s.includes(st.title)));
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-xs text-slate-500 pb-1">
+                              <span className="font-bold uppercase tracking-wider text-[11px] text-slate-400">
+                                Subtask Deliverables & Daily Output ({focusedSubtasks.filter(s => s.status === 'Completed' || completedSubtaskIds.includes(s.id)).length}/{focusedSubtasks.length} Complete):
+                              </span>
+                            </div>
+
+                            <div className="space-y-2">
+                              {focusedSubtasks.map((st, sIdx) => {
+                                const origIdx = allSubtasks.findIndex(s => s.id === st.id);
+                                const progNum = getSubtaskProgressionNumber(allSubtasks, origIdx >= 0 ? origIdx : sIdx);
+                                const isDone = st.status === 'Completed' || completedSubtaskIds.includes(st.id) || (report.subtasksCompleted && report.subtasksCompleted.some(s => s.includes(st.title)));
+
+                                let itemPercent = 0;
+                                if (st.targetQuantity && st.targetQuantity > 0) {
+                                  itemPercent = Math.min(100, Math.round(((st.completedQuantity || 0) / st.targetQuantity) * 100));
+                                } else {
+                                  itemPercent = isDone ? 100 : st.status === 'In Progress' ? 50 : 0;
+                                }
+
                                 return (
                                   <div 
                                     key={st.id}
-                                    className={`flex items-center gap-2 p-2 rounded-xl text-xs border ${
+                                    className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl border transition-all ${
                                       isDone 
-                                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300 font-semibold' 
-                                        : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                        ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40' 
+                                        : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800'
                                     }`}
                                   >
-                                    <span className={`h-4 w-4 rounded-full flex items-center justify-center text-[10px] shrink-0 ${
-                                      isDone ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
-                                    }`}>
-                                      {isDone ? '✓' : '○'}
-                                    </span>
-                                    <span className="truncate">{st.title}</span>
-                                    {st.isHoldPoint && (
-                                      <span className="ml-auto text-[9px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 px-1 py-0.2 rounded">
-                                        Hold Point
+                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                      <div 
+                                        className={`h-6 min-w-[2.4rem] px-1.5 rounded-lg font-mono font-black text-[11px] flex items-center justify-center shrink-0 shadow-2xs ${
+                                          isDone ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                        }`}
+                                      >
+                                        {progNum}
+                                      </div>
+
+                                      {isDone ? (
+                                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                                      ) : (
+                                        <div className="h-4 w-4 rounded-full border-2 border-slate-300 dark:border-slate-600 shrink-0" />
+                                      )}
+
+                                      <span className={`text-xs font-bold truncate ${isDone ? 'line-through text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
+                                        {st.title}
                                       </span>
-                                    )}
+
+                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0">
+                                        {st.category}
+                                      </span>
+
+                                      {st.isHoldPoint && (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 shrink-0">
+                                          🔒 QA Hold Point
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+                                      {st.targetQuantity ? (
+                                        <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
+                                          {st.completedQuantity || 0} / {st.targetQuantity} {st.unit || act.unit || 'm'}
+                                        </span>
+                                      ) : null}
+
+                                      <div className="w-14 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden shrink-0 hidden sm:block">
+                                        <div 
+                                          className={`h-full rounded-full transition-all ${itemPercent === 100 ? 'bg-emerald-500' : 'bg-[#0B5FFF]'}`}
+                                          style={{ width: `${itemPercent}%` }} 
+                                        />
+                                      </div>
+                                      <span className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 w-8 text-right">
+                                        {itemPercent}%
+                                      </span>
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -541,6 +630,43 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
                             <strong>Shift Notes:</strong> {prog.notes}
                           </p>
                         )}
+
+                        {/* Workforce & Machinery Bar */}
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                              <HardHat className="h-3 w-3" /> Workforce on Shift:
+                            </span>
+                            {actLabour.length === 0 ? (
+                              <span className="text-[11px] text-slate-400 italic">No workers assigned</span>
+                            ) : (
+                              actLabour.map((l, lIdx) => (
+                                <span key={lIdx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800/60 text-[10px] font-bold">
+                                  <span className="w-3.5 h-3.5 rounded bg-amber-200 dark:bg-amber-800 text-[8px] flex items-center justify-center font-bold">
+                                    {getPersonInitials(l.name)}
+                                  </span>
+                                  {l.name} ({l.hours || 8}h)
+                                </span>
+                              ))
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                              <Truck className="h-3 w-3" /> Machinery:
+                            </span>
+                            {actEquipment.length === 0 ? (
+                              <span className="text-[11px] text-slate-400 italic">No equipment assigned</span>
+                            ) : (
+                              actEquipment.map((eq, eIdx) => (
+                                <span key={eIdx} className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-800/60 text-[10px] font-bold">
+                                  {typeof eq === 'string' ? eq : (eq.name || eq.equipmentId || 'Equipment')}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
                       </div>
                     );
                   })}

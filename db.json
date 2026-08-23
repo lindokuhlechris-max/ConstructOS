@@ -12113,6 +12113,38 @@
       },
       "workSummary": "Standard production activities continued as planned. No major delays.",
       "status": "Approved"
+    },
+    {
+      "id": "RPT-1787484265433",
+      "date": "2026-08-23",
+      "projectId": "PRJ-5401",
+      "weather": "Sunny",
+      "temperature": "24°C",
+      "siteConditions": "Normal operations, clear access",
+      "significantEvents": "",
+      "workersOnSite": 12,
+      "equipmentRunning": 3,
+      "incidents": 0,
+      "ncr": 0,
+      "supervisorNotes": "",
+      "activitiesWorked": [
+        "PTS14 - PTS15"
+      ],
+      "activitiesLogged": [
+        "ACT-5191"
+      ],
+      "subtasksCompleted": [],
+      "pinnedSubtaskMap": {
+        "ACT-5191": [
+          "ST-1787145302893-gztk",
+          "ST-1787145302893-a0ah",
+          "ST-1787145302893-pp5i",
+          "ST-1787145302893-scyl"
+        ]
+      },
+      "activityProgress": {},
+      "workSummary": "",
+      "status": "Approved"
     }
   ],
   "labourLogs": [
@@ -20271,6 +20303,31 @@
       "timestamp": "2026-08-23T11:13:04.668Z",
       "entityType": "Report",
       "entityId": "RPT-1787483584667",
+      "actionType": "create",
+      "newValue": "Date: 2026-08-23 | Weather: Sunny"
+    },
+    {
+      "id": "AL-mt5py60z-hap1",
+      "projectId": "PRJ-001",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "WeeklyProgress Deleted",
+      "details": "Deleted WeeklyProgress Report \"Weekly Progress Report - Week 34 (17 Aug - 23 Aug 2026)\"",
+      "timestamp": "2026-08-23T11:23:33.251Z",
+      "entityType": "Report",
+      "entityId": "REP-WPR-2026-W34",
+      "actionType": "delete"
+    },
+    {
+      "id": "AL-mt5pzaai-lno6",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Daily Report Created",
+      "details": "Created Daily Site Report for 2026-08-23",
+      "timestamp": "2026-08-23T11:24:25.434Z",
+      "entityType": "Report",
+      "entityId": "RPT-1787484265433",
       "actionType": "create",
       "newValue": "Date: 2026-08-23 | Weather: Sunny"
     }
