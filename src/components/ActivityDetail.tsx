@@ -81,7 +81,14 @@ import {
   ShieldCheck,
   Wrench,
   ArrowRightLeft,
-  AlertOctagon
+  AlertOctagon,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  ArrowRight,
+  ListFilter
 } from 'lucide-react';
 
 interface ActivityDetailProps {
@@ -304,6 +311,11 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isRecordActivityModalOpen, setIsRecordActivityModalOpen] = useState(false);
   const [logProgressIsGranularMode, setLogProgressIsGranularMode] = useState<boolean>(true);
+  const [logProgressActiveSubtaskId, setLogProgressActiveSubtaskId] = useState<string>('');
+  const [isSubtaskDropdownOpen, setIsSubtaskDropdownOpen] = useState<boolean>(false);
+  const [subtaskDropdownSearch, setSubtaskDropdownSearch] = useState<string>('');
+  const [subtaskDropdownFilter, setSubtaskDropdownFilter] = useState<'all' | 'incomplete' | 'staged' | 'holdPoint'>('all');
+  const subtaskDropdownRef = useRef<HTMLDivElement>(null);
   const [logProgressSelectedSubtaskIds, setLogProgressSelectedSubtaskIds] = useState<string[]>([]);
   const [logProgressSubtaskInputs, setLogProgressSubtaskInputs] = useState<Record<string, {
     mode: 'shift' | 'cumulative';
@@ -327,6 +339,21 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
   const [logProgressSubtasks, setLogProgressSubtasks] = useState<SubTask[]>([]);
   const [logProgressPostReport, setLogProgressPostReport] = useState<boolean>(true);
   const [logProgressDelayReason, setLogProgressDelayReason] = useState<string>('');
+
+  // Click outside listener for subtask select popout
+  useEffect(() => {
+    function handleClickOutsideSubtaskDropdown(event: MouseEvent) {
+      if (subtaskDropdownRef.current && !subtaskDropdownRef.current.contains(event.target as Node)) {
+        setIsSubtaskDropdownOpen(false);
+      }
+    }
+    if (isSubtaskDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutsideSubtaskDropdown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideSubtaskDropdown);
+    };
+  }, [isSubtaskDropdownOpen]);
 
   // Voice Notes, Sign-Off, and Field Remarks State
   const [isAddVoiceNoteOpen, setIsAddVoiceNoteOpen] = useState(false);
@@ -451,43 +478,46 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
     // 1. Process Granular Subtasks if in Granular Mode
     if (logProgressIsGranularMode && subtasksToSave.length > 0) {
       subtasksToSave = subtasksToSave.map(st => {
-        const isSelected = logProgressSelectedSubtaskIds.includes(st.id);
         const input = logProgressSubtaskInputs[st.id];
+        if (!input) return st;
 
-        if (!isSelected || !input) return st;
+        const hasShiftChange = input.mode === 'shift' && Number(input.shiftOutput) > 0;
+        const hasCumulativeChange = input.mode === 'cumulative' && Number(input.cumulativeOutput) !== (st.completedQuantity || 0);
+        const hasStatusChange = input.status && input.status !== st.status;
+        const hasNotes = Boolean(input.notes && input.notes.trim());
+        const hasHoldApproval = Boolean(input.holdPointApproved && !st.holdPointSignOff?.approved);
+
+        if (!hasShiftChange && !hasCumulativeChange && !hasStatusChange && !hasNotes && !hasHoldApproval) {
+          return st;
+        }
 
         let updatedSt = { ...st };
 
         // QA Hold Point Sign-Off Handling
-        if (st.isHoldPoint) {
-          if (input.holdPointApproved) {
-            updatedSt.holdPointSignOff = {
-              signedBy: input.holdPointSignedBy || currentUserProfile?.name || 'Site Supervisor',
-              signedAt: todayStr,
-              signatureNote: input.notes || 'Inspection cleared and approved on site.',
-              approved: true
-            };
-            updatedSt.status = 'Completed';
-          } else {
-            updatedSt.status = input.status || st.status;
-          }
+        if (st.isHoldPoint && input.holdPointApproved) {
+          updatedSt.holdPointSignOff = {
+            signedBy: input.holdPointSignedBy || currentUserProfile?.name || 'Site Supervisor',
+            signedAt: todayStr,
+            signatureNote: input.notes || 'Inspection cleared and approved on site.',
+            approved: true
+          };
+          updatedSt.status = 'Completed';
+        } else if (input.status) {
+          updatedSt.status = input.status;
         }
 
         // Apply Shift Output or Cumulative change
-        const hasOutputChange = input.mode === 'shift' ? input.shiftOutput > 0 : (input.cumulativeOutput !== st.completedQuantity);
-        if (hasOutputChange || input.notes.trim()) {
+        if (hasShiftChange || hasCumulativeChange || hasNotes) {
           updatedSt = recordSubtaskProgress(updatedSt, {
             date: todayStr,
-            shiftOutput: input.mode === 'shift' ? input.shiftOutput : input.cumulativeOutput,
+            shiftOutput: input.mode === 'shift' ? Number(input.shiftOutput) : Number(input.cumulativeOutput),
             mode: input.mode,
             status: input.status,
-            notes: input.notes.trim(),
+            notes: input.notes ? input.notes.trim() : '',
             loggedBy: currentUserProfile?.name || 'Site Supervisor',
             weather: logProgressWeather,
             chainageSpan: input.chainageSpan
           });
-        } else if (input.status && input.status !== st.status) {
-          updatedSt.status = input.status;
         }
 
         return updatedSt;
@@ -551,7 +581,13 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
       const subtaskSummaryLines = subtasksToSave.length > 0
         ? subtasksToSave.map((s, idx) => {
             const input = logProgressSubtaskInputs[s.id];
-            const wasLoggedToday = logProgressSelectedSubtaskIds.includes(s.id);
+            const wasLoggedToday = input && (
+              (input.mode === 'shift' && Number(input.shiftOutput) > 0) ||
+              (input.mode === 'cumulative' && Number(input.cumulativeOutput) !== (s.completedQuantity || 0)) ||
+              (input.status !== s.status) ||
+              Boolean(input.notes?.trim()) ||
+              Boolean(input.holdPointApproved)
+            );
             const metrics = calculateSubtaskDailyAverage(s);
             const shiftGain = wasLoggedToday && input?.mode === 'shift' && input.shiftOutput > 0 ? ` (+${input.shiftOutput} ${s.unit || 'units'} today)` : '';
             const runRateStr = metrics.dailyAverage > 0 ? ` [Avg: ${metrics.formattedRate}]` : '';
@@ -1407,8 +1443,15 @@ ${subtaskSummaryLines}
                   initialSelectedIds.push(subtasks[0].id);
                 }
 
+                const firstIncomplete = subtasks.find((st: SubTask) => st.status !== 'Completed');
+                const initialActiveId = firstIncomplete ? firstIncomplete.id : (subtasks[0]?.id || '');
+
                 setLogProgressSubtaskInputs(initialInputs);
                 setLogProgressSelectedSubtaskIds(initialSelectedIds);
+                setLogProgressActiveSubtaskId(initialActiveId);
+                setIsSubtaskDropdownOpen(false);
+                setSubtaskDropdownSearch('');
+                setSubtaskDropdownFilter('all');
                 setLogProgressIsGranularMode(subtasks.length > 0);
                 setIsLogProgressModalOpen(true);
               }} 
@@ -3782,83 +3825,422 @@ ${subtaskSummaryLines}
               {/* GRANULAR SUBTASKS LOGGING ENGINE */}
               {logProgressIsGranularMode && logProgressSubtasks && logProgressSubtasks.length > 0 ? (
                 <div className="space-y-4">
-                  {/* Subtask Quick Selector Chips */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <label className="font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                        <CheckSquare className="h-4 w-4 text-[#0B5FFF]" /> Select Subtasks Worked On Today
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setLogProgressSelectedSubtaskIds(logProgressSubtasks.map(s => s.id))}
-                          className="text-[11px] font-semibold text-[#0B5FFF] hover:underline"
-                        >
-                          Select All
-                        </button>
-                        <span className="text-slate-300">|</span>
-                        <button
-                          type="button"
-                          onClick={() => setLogProgressSelectedSubtaskIds(logProgressSubtasks.filter(s => s.status !== 'Completed').map(s => s.id))}
-                          className="text-[11px] font-semibold text-slate-500 hover:underline"
-                        >
-                          Incomplete Only
-                        </button>
-                      </div>
-                    </div>
+                  {(() => {
+                    const activeSubtaskIndex = Math.max(0, logProgressSubtasks.findIndex(s => s.id === logProgressActiveSubtaskId));
+                    const currentActiveSubtask = logProgressSubtasks[activeSubtaskIndex] || logProgressSubtasks[0];
 
-                    <div className="flex flex-wrap gap-2">
-                      {logProgressSubtasks.map((st, idx) => {
-                        const isSelected = logProgressSelectedSubtaskIds.includes(st.id);
-                        return (
-                          <button
-                            key={st.id || idx}
-                            type="button"
-                            onClick={() => {
-                              if (isSelected) {
-                                setLogProgressSelectedSubtaskIds(logProgressSelectedSubtaskIds.filter(id => id !== st.id));
-                              } else {
-                                setLogProgressSelectedSubtaskIds([...logProgressSelectedSubtaskIds, st.id]);
-                              }
-                            }}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border ${
-                              isSelected
-                                ? 'bg-blue-50 dark:bg-blue-950/60 border-[#0B5FFF]/40 text-[#0B5FFF] dark:text-blue-300 shadow-xs ring-1 ring-[#0B5FFF]/20'
-                                : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
-                            }`}
-                          >
-                            <span className={`h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                              isSelected ? 'bg-[#0B5FFF] text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
-                            }`}>
-                              {idx + 1}
-                            </span>
-                            <span className="truncate max-w-[180px]">{st.title}</span>
-                            {st.targetQuantity ? (
-                              <span className="text-[10px] font-mono text-slate-400">
-                                ({st.completedQuantity || 0}/{st.targetQuantity}{st.unit ? ` ${st.unit}` : ''})
+                    // Identify all subtasks with staged/remembered modifications in current session
+                    const stagedSubtasks = logProgressSubtasks.filter(st => {
+                      const input = logProgressSubtaskInputs[st.id];
+                      if (!input) return false;
+                      const hasShiftChange = input.mode === 'shift' && Number(input.shiftOutput) > 0;
+                      const hasCumulativeChange = input.mode === 'cumulative' && Number(input.cumulativeOutput) !== (st.completedQuantity || 0);
+                      const hasStatusChange = Boolean(input.status && input.status !== (st.status || 'Not Started'));
+                      const hasNotes = Boolean(input.notes && input.notes.trim());
+                      const hasHoldApproval = Boolean(input.holdPointApproved && !st.holdPointSignOff?.approved);
+                      return hasShiftChange || hasCumulativeChange || hasStatusChange || hasNotes || hasHoldApproval;
+                    }).map(st => {
+                      const input = logProgressSubtaskInputs[st.id];
+                      let label = '';
+                      if (input.mode === 'shift' && Number(input.shiftOutput) > 0) {
+                        label = `+${input.shiftOutput} ${st.unit || 'units'}`.trim();
+                      } else if (input.mode === 'cumulative' && Number(input.cumulativeOutput) !== (st.completedQuantity || 0)) {
+                        label = `Total: ${input.cumulativeOutput} ${st.unit || ''}`.trim();
+                      } else if (input.status && input.status !== st.status) {
+                        label = input.status;
+                      } else if (input.holdPointApproved) {
+                        label = 'QA Cleared';
+                      } else {
+                        label = 'Notes Staged';
+                      }
+                      return { subtask: st, input, changeLabel: label };
+                    });
+
+                    // Live auto-rollup calculation across all staged subtasks
+                    const simulatedSubtasks = logProgressSubtasks.map(st => {
+                      const input = logProgressSubtaskInputs[st.id];
+                      if (!input) return st;
+                      const hasShiftChange = input.mode === 'shift' && Number(input.shiftOutput) > 0;
+                      const hasCumulativeChange = input.mode === 'cumulative' && Number(input.cumulativeOutput) !== (st.completedQuantity || 0);
+                      const hasStatusChange = Boolean(input.status && input.status !== st.status);
+                      const hasNotes = Boolean(input.notes && input.notes.trim());
+                      const hasHoldApproval = Boolean(input.holdPointApproved && !st.holdPointSignOff?.approved);
+
+                      if (hasShiftChange || hasCumulativeChange || hasStatusChange || hasNotes || hasHoldApproval) {
+                        const prev = st.completedQuantity || 0;
+                        const newTot = input.mode === 'shift' ? prev + (Number(input.shiftOutput) || 0) : (Number(input.cumulativeOutput) || 0);
+                        let newStatus = input.status || st.status;
+                        if (st.isHoldPoint && input.holdPointApproved) newStatus = 'Completed';
+                        else if (st.targetQuantity && newTot >= st.targetQuantity && newStatus !== 'Completed') newStatus = 'Completed';
+
+                        return {
+                          ...st,
+                          completedQuantity: newTot,
+                          status: newStatus
+                        };
+                      }
+                      return st;
+                    });
+                    const previewRollup = calculateActivityRollupFromSubtasks(activity, simulatedSubtasks);
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Subtask Select Popout Bar */}
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                            <label className="font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                              <CheckSquare className="h-4 w-4 text-[#0B5FFF]" /> Select & Update Subtask
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+                                Subtask {activeSubtaskIndex + 1} of {logProgressSubtasks.length}
                               </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                              {stagedSubtasks.length > 0 && (
+                                <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                  <Check className="h-3 w-3" /> {stagedSubtasks.length} Remembered for Today
+                                </span>
+                              )}
+                            </div>
+                          </div>
 
-                  {/* Active Subtask Editor Cards */}
-                  {logProgressSelectedSubtaskIds.length === 0 ? (
-                    <div className="p-6 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-400 bg-slate-50/50 dark:bg-slate-900/30">
-                      No subtasks selected. Click on the subtask pills above to log progress for today's shift.
-                    </div>
-                  ) : (
-                    <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                      {logProgressSubtasks
-                        .filter(st => logProgressSelectedSubtaskIds.includes(st.id))
-                        .map((st, idx) => {
+                          {/* Popout Selector Bar with Prev / Next Navigation */}
+                          <div className="flex items-center gap-2 relative" ref={subtaskDropdownRef}>
+                            {/* Prev Subtask Button */}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              disabled={activeSubtaskIndex <= 0}
+                              onClick={() => {
+                                if (activeSubtaskIndex > 0) {
+                                  setLogProgressActiveSubtaskId(logProgressSubtasks[activeSubtaskIndex - 1].id);
+                                }
+                              }}
+                              className="h-12 w-12 rounded-2xl shrink-0 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-35 cursor-pointer shadow-xs"
+                              title="Previous Subtask"
+                            >
+                              <ChevronLeft className="h-4 w-4" />
+                            </Button>
+
+                            {/* Main Dropdown Popout Trigger Button */}
+                            <button
+                              type="button"
+                              onClick={() => setIsSubtaskDropdownOpen(!isSubtaskDropdownOpen)}
+                              className="flex-1 min-h-[48px] px-4 py-2 rounded-2xl bg-white dark:bg-slate-800/90 border-2 border-slate-200 dark:border-slate-700 hover:border-[#0B5FFF]/60 focus:border-[#0B5FFF] flex items-center justify-between gap-3 text-left shadow-xs transition-all cursor-pointer"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <span className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                  currentActiveSubtask?.status === 'Completed'
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-blue-100 dark:bg-blue-950 text-[#0B5FFF]'
+                                }`}>
+                                  {activeSubtaskIndex + 1}
+                                </span>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                                      {currentActiveSubtask?.title || 'Select Subtask'}
+                                    </span>
+                                    {currentActiveSubtask?.category && (
+                                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 px-1.5 py-0.2 bg-slate-100 dark:bg-slate-700 rounded-md">
+                                        {currentActiveSubtask.category}
+                                      </span>
+                                    )}
+                                    {currentActiveSubtask?.targetQuantity ? (
+                                      <span className="text-[11px] font-mono text-slate-400">
+                                        ({currentActiveSubtask.completedQuantity || 0}/{currentActiveSubtask.targetQuantity}{currentActiveSubtask.unit ? ` ${currentActiveSubtask.unit}` : ''})
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {(() => {
+                                  const stagedEntry = stagedSubtasks.find(s => s.subtask.id === currentActiveSubtask?.id);
+                                  if (stagedEntry) {
+                                    return (
+                                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 shrink-0 flex items-center gap-1 shadow-xs">
+                                        <Zap className="h-2.5 w-2.5 text-emerald-600" />
+                                        {stagedEntry.changeLabel}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${isSubtaskDropdownOpen ? 'rotate-180 text-[#0B5FFF]' : ''}`} />
+                              </div>
+                            </button>
+
+                            {/* Next Subtask Button */}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              disabled={activeSubtaskIndex >= logProgressSubtasks.length - 1}
+                              onClick={() => {
+                                if (activeSubtaskIndex < logProgressSubtasks.length - 1) {
+                                  setLogProgressActiveSubtaskId(logProgressSubtasks[activeSubtaskIndex + 1].id);
+                                }
+                              }}
+                              className="h-12 w-12 rounded-2xl shrink-0 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-35 cursor-pointer shadow-xs"
+                              title="Next Subtask"
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+
+                            {/* The Floating Popout Menu Panel */}
+                            {isSubtaskDropdownOpen && (
+                              <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[380px]">
+                                {/* Search & Category Tabs */}
+                                <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 space-y-2">
+                                  <div className="relative">
+                                    <Search className="h-4 w-4 absolute left-3 top-2.5 text-slate-400" />
+                                    <input
+                                      type="text"
+                                      placeholder="Filter subtasks by title, number, or category..."
+                                      value={subtaskDropdownSearch}
+                                      onChange={(e) => setSubtaskDropdownSearch(e.target.value)}
+                                      className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#0B5FFF]"
+                                      autoFocus
+                                    />
+                                  </div>
+                                  
+                                  {/* Filter Buttons */}
+                                  <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSubtaskDropdownFilter('all')}
+                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${
+                                        subtaskDropdownFilter === 'all'
+                                          ? 'bg-[#0B5FFF] text-white shadow-xs'
+                                          : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300'
+                                      }`}
+                                    >
+                                      All ({logProgressSubtasks.length})
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSubtaskDropdownFilter('incomplete')}
+                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${
+                                        subtaskDropdownFilter === 'incomplete'
+                                          ? 'bg-[#0B5FFF] text-white shadow-xs'
+                                          : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300'
+                                      }`}
+                                    >
+                                      Incomplete ({logProgressSubtasks.filter(s => s.status !== 'Completed').length})
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSubtaskDropdownFilter('staged')}
+                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${
+                                        subtaskDropdownFilter === 'staged'
+                                          ? 'bg-emerald-600 text-white shadow-xs'
+                                          : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800'
+                                      }`}
+                                    >
+                                      Staged for Shift ({stagedSubtasks.length})
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSubtaskDropdownFilter('holdPoint')}
+                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${
+                                        subtaskDropdownFilter === 'holdPoint'
+                                          ? 'bg-rose-600 text-white shadow-xs'
+                                          : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 hover:bg-rose-100 border border-rose-200 dark:border-rose-800'
+                                      }`}
+                                    >
+                                      QA Hold Points ({logProgressSubtasks.filter(s => s.isHoldPoint).length})
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Subtasks Scroll List */}
+                                <div className="overflow-y-auto p-1.5 divide-y divide-slate-100 dark:divide-slate-800/60">
+                                  {(() => {
+                                    const filtered = logProgressSubtasks.filter((st, idx) => {
+                                      if (subtaskDropdownSearch.trim()) {
+                                        const q = subtaskDropdownSearch.toLowerCase();
+                                        const matchTitle = st.title.toLowerCase().includes(q);
+                                        const matchCat = (st.category || '').toLowerCase().includes(q);
+                                        const matchIdx = (idx + 1).toString().includes(q);
+                                        if (!matchTitle && !matchCat && !matchIdx) return false;
+                                      }
+                                      if (subtaskDropdownFilter === 'incomplete') return st.status !== 'Completed';
+                                      if (subtaskDropdownFilter === 'staged') return stagedSubtasks.some(s => s.subtask.id === st.id);
+                                      if (subtaskDropdownFilter === 'holdPoint') return st.isHoldPoint;
+                                      return true;
+                                    });
+
+                                    if (filtered.length === 0) {
+                                      return (
+                                        <div className="p-6 text-center text-xs text-slate-400">
+                                          No subtasks match the search/filter criteria.
+                                        </div>
+                                      );
+                                    }
+
+                                    return filtered.map((st) => {
+                                      const idx = logProgressSubtasks.findIndex(s => s.id === st.id);
+                                      const isActive = st.id === currentActiveSubtask?.id;
+                                      const stagedEntry = stagedSubtasks.find(s => s.subtask.id === st.id);
+
+                                      return (
+                                        <button
+                                          key={st.id || idx}
+                                          type="button"
+                                          onClick={() => {
+                                            setLogProgressActiveSubtaskId(st.id);
+                                            setIsSubtaskDropdownOpen(false);
+                                          }}
+                                          className={`w-full p-2.5 rounded-xl flex items-center justify-between gap-3 text-left transition-all cursor-pointer ${
+                                            isActive 
+                                              ? 'bg-blue-50/90 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-800/80 shadow-xs' 
+                                              : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2.5 min-w-0">
+                                            <span className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                              st.status === 'Completed' 
+                                                ? 'bg-emerald-500 text-white' 
+                                                : isActive 
+                                                  ? 'bg-[#0B5FFF] text-white' 
+                                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                            }`}>
+                                              {idx + 1}
+                                            </span>
+                                            <div className="min-w-0">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <span className={`text-xs font-bold truncate ${isActive ? 'text-[#0B5FFF] dark:text-blue-300' : 'text-slate-900 dark:text-white'}`}>
+                                                  {st.title}
+                                                </span>
+                                                {st.isHoldPoint && (
+                                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200">
+                                                    🔒 QA Gate
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium mt-0.5">
+                                                <span>{st.category || 'General'}</span>
+                                                <span>•</span>
+                                                <span>{st.completedQuantity || 0}/{st.targetQuantity || 0} {st.unit || ''}</span>
+                                                <span>•</span>
+                                                <span className={`${st.status === 'Completed' ? 'text-emerald-600' : st.status === 'In Progress' ? 'text-blue-600' : 'text-slate-400'}`}>
+                                                  {st.status || 'Not Started'}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          <div className="shrink-0 flex items-center gap-1.5">
+                                            {stagedEntry && (
+                                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 flex items-center gap-1">
+                                                <Check className="h-3 w-3 text-emerald-600" /> {stagedEntry.changeLabel}
+                                              </span>
+                                            )}
+                                            {isActive && <Check className="h-4 w-4 text-[#0B5FFF]" />}
+                                          </div>
+                                        </button>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Staged Subtasks Quick Ribbon (Remembered Tasks Summary) */}
+                          {stagedSubtasks.length > 0 && (
+                            <div className="p-2.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-900/60 flex flex-col gap-1.5">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Staged For Today ({stagedSubtasks.length} Subtasks Remembered)
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const resetInputs: Record<string, any> = {};
+                                    logProgressSubtasks.forEach(st => {
+                                      resetInputs[st.id] = {
+                                        mode: 'shift',
+                                        shiftOutput: 0,
+                                        cumulativeOutput: st.completedQuantity || 0,
+                                        status: st.status || 'Not Started',
+                                        notes: '',
+                                        chainageSpan: st.chainage || '',
+                                        holdPointApproved: st.holdPointSignOff?.approved || false,
+                                        holdPointSignedBy: st.holdPointSignOff?.signedBy || currentUserProfile?.name || ''
+                                      };
+                                    });
+                                    setLogProgressSubtaskInputs(resetInputs);
+                                  }}
+                                  className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                                >
+                                  Clear All Staged
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                                {stagedSubtasks.map(({ subtask: st, changeLabel }) => {
+                                  const idx = logProgressSubtasks.findIndex(s => s.id === st.id);
+                                  const isCurrentlyActive = st.id === currentActiveSubtask?.id;
+                                  return (
+                                    <div
+                                      key={st.id}
+                                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
+                                        isCurrentlyActive
+                                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                                          : 'bg-white dark:bg-slate-800 text-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100/50'
+                                      }`}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => setLogProgressActiveSubtaskId(st.id)}
+                                        className="flex items-center gap-1 text-left cursor-pointer"
+                                      >
+                                        <span className="font-mono font-bold">#{idx + 1}</span>
+                                        <span className="truncate max-w-[140px]">{st.title}</span>
+                                        <span className="opacity-90 font-mono text-[10px]">({changeLabel})</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const updated = { ...logProgressSubtaskInputs };
+                                          updated[st.id] = {
+                                            mode: 'shift',
+                                            shiftOutput: 0,
+                                            cumulativeOutput: st.completedQuantity || 0,
+                                            status: st.status || 'Not Started',
+                                            notes: '',
+                                            chainageSpan: st.chainage || '',
+                                            holdPointApproved: st.holdPointSignOff?.approved || false,
+                                            holdPointSignedBy: st.holdPointSignOff?.signedBy || currentUserProfile?.name || ''
+                                          };
+                                          setLogProgressSubtaskInputs(updated);
+                                        }}
+                                        className="hover:opacity-70 p-0.5 rounded ml-0.5 cursor-pointer"
+                                        title="Clear this subtask from today's shift"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Single Active Subtask Editor Card */}
+                        {currentActiveSubtask && (() => {
+                          const st = currentActiveSubtask;
+                          const idx = activeSubtaskIndex;
                           const input = logProgressSubtaskInputs[st.id] || {
                             mode: 'shift',
                             shiftOutput: 0,
                             cumulativeOutput: st.completedQuantity || 0,
-                            status: st.status || 'In Progress',
+                            status: st.status || 'Not Started',
                             notes: '',
                             chainageSpan: st.chainage || '',
                             holdPointApproved: st.holdPointSignOff?.approved || false,
@@ -3874,25 +4256,34 @@ ${subtaskSummaryLines}
                           const newPct = targetQty > 0 ? Math.min(100, Math.round((newCalculatedTotal / targetQty) * 100)) : 0;
 
                           return (
-                            <div 
-                              key={st.id || idx}
-                              className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 shadow-xs flex flex-col gap-3.5"
-                            >
-                              {/* Subtask Card Header */}
-                              <div className="flex items-center justify-between flex-wrap gap-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="px-2 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-950 text-[#0B5FFF] font-bold text-xs font-mono">
-                                    #{logProgressSubtasks.findIndex(s => s.id === st.id) + 1}
+                            <div className="p-4 sm:p-5 rounded-3xl bg-slate-50/90 dark:bg-slate-800/70 border-2 border-slate-200/90 dark:border-slate-700/80 shadow-sm flex flex-col gap-4">
+                              {/* Card Header */}
+                              <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80 dark:border-slate-700/80">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="px-2.5 py-1 rounded-xl bg-[#0B5FFF] text-white font-extrabold text-xs font-mono shrink-0 shadow-xs">
+                                    #{idx + 1}
                                   </span>
-                                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                                    {st.title}
-                                  </h4>
-                                  <Badge variant="outline" className="text-[10px]">{st.category || 'General'}</Badge>
+                                  <div className="min-w-0">
+                                    <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                                      {st.title}
+                                    </h4>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <Badge variant="outline" className="text-[10px]">{st.category || 'General'}</Badge>
+                                      {st.isMilestone && (
+                                        <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950 px-1.5 py-0.2 rounded border border-purple-200">
+                                          🎯 Milestone
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
 
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 shrink-0">
                                   {metrics.dailyAverage > 0 && (
-                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                                    <span 
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800"
+                                      title={`Average Daily Output: ${metrics.formattedRate}${metrics.projectedDaysLeft !== undefined ? ` • Est. ${metrics.projectedDaysLeft} shift(s) remaining` : ''}`}
+                                    >
                                       <Zap className="h-3 w-3 text-emerald-500" />
                                       {metrics.formattedRate}
                                     </span>
@@ -3905,7 +4296,7 @@ ${subtaskSummaryLines}
                                       updated[st.id] = { ...input, status: e.target.value as any };
                                       setLogProgressSubtaskInputs(updated);
                                     }}
-                                    className="px-2.5 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-200"
+                                    className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 shadow-xs focus:outline-none focus:border-[#0B5FFF]"
                                   >
                                     <option value="Not Started">Not Started</option>
                                     <option value="In Progress">In Progress</option>
@@ -3915,9 +4306,9 @@ ${subtaskSummaryLines}
                               </div>
 
                               {/* Shift Output Mode & Quantity Inputs */}
-                              <div className="p-3 bg-white dark:bg-slate-900/90 rounded-xl border border-slate-200/90 dark:border-slate-700/80 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[11px] font-semibold">
+                              <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3 shadow-xs">
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                  <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-xs font-semibold">
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -3925,7 +4316,7 @@ ${subtaskSummaryLines}
                                         updated[st.id] = { ...input, mode: 'shift' };
                                         setLogProgressSubtaskInputs(updated);
                                       }}
-                                      className={`px-2 py-1 rounded-md transition-all ${
+                                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                                         input.mode === 'shift' 
                                           ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] font-bold shadow-xs' 
                                           : 'text-slate-500 hover:text-slate-800'
@@ -3940,7 +4331,7 @@ ${subtaskSummaryLines}
                                         updated[st.id] = { ...input, mode: 'cumulative' };
                                         setLogProgressSubtaskInputs(updated);
                                       }}
-                                      className={`px-2 py-1 rounded-md transition-all ${
+                                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                                         input.mode === 'cumulative' 
                                           ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] font-bold shadow-xs' 
                                           : 'text-slate-500 hover:text-slate-800'
@@ -3950,37 +4341,40 @@ ${subtaskSummaryLines}
                                     </button>
                                   </div>
 
-                                  <span className="text-xs font-bold text-[#0B5FFF]">
-                                    {newCalculatedTotal} {st.unit || 'units'} {targetQty > 0 ? `(${newPct}%)` : ''}
+                                  <span className="text-xs font-extrabold text-[#0B5FFF] bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
+                                    New Total: {newCalculatedTotal} {st.unit || 'units'} {targetQty > 0 ? `(${newPct}%)` : ''}
                                   </span>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                   {input.mode === 'shift' ? (
                                     <div>
-                                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
                                         Today's Shift Output ({st.unit || 'units'})
                                       </label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="any"
-                                        placeholder="e.g. 150"
-                                        value={input.shiftOutput || ''}
-                                        onChange={(e) => {
-                                          const val = Number(e.target.value);
-                                          const updated = { ...logProgressSubtaskInputs };
-                                          const newTot = prevQty + val;
-                                          const autoStatus = (targetQty > 0 && newTot >= targetQty) ? 'Completed' : (newTot > 0 ? 'In Progress' : input.status);
-                                          updated[st.id] = { ...input, shiftOutput: val, cumulativeOutput: newTot, status: autoStatus };
-                                          setLogProgressSubtaskInputs(updated);
-                                        }}
-                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold text-[#0B5FFF] focus:outline-none focus:border-[#0B5FFF]"
-                                      />
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-2.5 font-bold text-emerald-600">+</span>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="any"
+                                          placeholder="e.g. 150"
+                                          value={input.shiftOutput || ''}
+                                          onChange={(e) => {
+                                            const val = Number(e.target.value);
+                                            const updated = { ...logProgressSubtaskInputs };
+                                            const newTot = prevQty + val;
+                                            const autoStatus = (targetQty > 0 && newTot >= targetQty) ? 'Completed' : (newTot > 0 ? 'In Progress' : input.status);
+                                            updated[st.id] = { ...input, shiftOutput: val, cumulativeOutput: newTot, status: autoStatus };
+                                            setLogProgressSubtaskInputs(updated);
+                                          }}
+                                          className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold text-[#0B5FFF] focus:outline-none focus:border-[#0B5FFF]"
+                                        />
+                                      </div>
                                     </div>
                                   ) : (
                                     <div>
-                                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
                                         Cumulative Output to Date ({st.unit || 'units'})
                                       </label>
                                       <input
@@ -4001,7 +4395,7 @@ ${subtaskSummaryLines}
                                   )}
 
                                   <div>
-                                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
                                       Chainage / Section Span (Optional)
                                     </label>
                                     <input
@@ -4020,25 +4414,25 @@ ${subtaskSummaryLines}
 
                                 {/* Visual Mini Progress Bar */}
                                 {targetQty > 0 && (
-                                  <div className="space-y-1 pt-1">
-                                    <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                                  <div className="space-y-1.5 pt-1">
+                                    <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
                                       <div 
-                                        className="h-full bg-blue-400" 
+                                        className="h-full bg-blue-500" 
                                         style={{ width: `${Math.min(100, Math.round((prevQty / targetQty) * 100))}%` }} 
-                                        title={`Previous: ${prevQty} ${st.unit}`}
+                                        title={`Previous Completed: ${prevQty} ${st.unit}`}
                                       />
                                       {input.mode === 'shift' && input.shiftOutput > 0 && (
                                         <div 
                                           className="h-full bg-emerald-500 animate-pulse" 
                                           style={{ width: `${Math.min(100 - Math.round((prevQty / targetQty) * 100), Math.round((input.shiftOutput / targetQty) * 100))}%` }} 
-                                          title={`Today's Gain: +${input.shiftOutput} ${st.unit}`}
+                                          title={`Today's Shift Gain: +${input.shiftOutput} ${st.unit}`}
                                         />
                                       )}
                                     </div>
-                                    <div className="flex justify-between text-[10px] text-slate-400">
-                                      <span>Prior: {prevQty} {st.unit}</span>
-                                      <span className="font-semibold text-slate-600 dark:text-slate-300">
-                                        Target: {targetQty} {st.unit}
+                                    <div className="flex justify-between text-[11px] text-slate-500">
+                                      <span>Prior Logged: {prevQty} {st.unit}</span>
+                                      <span className="font-bold text-slate-700 dark:text-slate-300">
+                                        Target: {targetQty} {st.unit} ({newPct}% Total)
                                       </span>
                                     </div>
                                   </div>
@@ -4047,11 +4441,11 @@ ${subtaskSummaryLines}
 
                               {/* QA Hold Point Inspection Box */}
                               {st.isHoldPoint && (
-                                <div className="p-3 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-xl space-y-2 text-xs">
+                                <div className="p-3.5 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-2xl space-y-2 text-xs">
                                   <div className="flex items-center justify-between">
                                     <span className="font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
                                       <ShieldCheck className="h-4 w-4 text-rose-600" />
-                                      QA Hold Point Sign-Off
+                                      QA Hold Point Quality Gate
                                     </span>
                                     <label className="flex items-center gap-2 cursor-pointer font-bold text-rose-900 dark:text-rose-200">
                                       <input
@@ -4073,7 +4467,7 @@ ${subtaskSummaryLines}
                                     </label>
                                   </div>
                                   {input.holdPointApproved && (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-rose-200/50">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-rose-200/60">
                                       <input
                                         type="text"
                                         placeholder="Inspector / Signee Name"
@@ -4083,10 +4477,10 @@ ${subtaskSummaryLines}
                                           updated[st.id] = { ...input, holdPointSignedBy: e.target.value };
                                           setLogProgressSubtaskInputs(updated);
                                         }}
-                                        className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-800 rounded-lg text-xs"
+                                        className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-800 rounded-xl text-xs text-slate-900 dark:text-white"
                                       />
                                       <span className="text-[11px] text-emerald-700 dark:text-emerald-300 flex items-center gap-1 font-semibold">
-                                        <CheckCircle2 className="h-3.5 w-3.5" /> Ready for formal QA record
+                                        <CheckCircle2 className="h-3.5 w-3.5" /> Cleared for today's daily record
                                       </span>
                                     </div>
                                   )}
@@ -4095,56 +4489,89 @@ ${subtaskSummaryLines}
 
                               {/* Subtask Specific Remarks */}
                               <div>
+                                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                                  Subtask Field Remarks & Observations
+                                </label>
                                 <input
                                   type="text"
-                                  placeholder="Subtask field remarks (e.g. Pegged western boundary, soil compacted to 98% Mod AASHTO)..."
+                                  placeholder="e.g. Trench marked out along pegs 12-18, soil density tested..."
                                   value={input.notes}
                                   onChange={(e) => {
                                     const updated = { ...logProgressSubtaskInputs };
                                     updated[st.id] = { ...input, notes: e.target.value };
                                     setLogProgressSubtaskInputs(updated);
                                   }}
-                                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-[#0B5FFF]"
+                                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-[#0B5FFF]"
                                 />
+                              </div>
+
+                              {/* Bottom Card Subtask Stepper Actions */}
+                              <div className="flex items-center justify-between pt-2 border-t border-slate-200/80 dark:border-slate-700/80 gap-2">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={activeSubtaskIndex <= 0}
+                                  onClick={() => {
+                                    if (activeSubtaskIndex > 0) {
+                                      setLogProgressActiveSubtaskId(logProgressSubtasks[activeSubtaskIndex - 1].id);
+                                    }
+                                  }}
+                                  className="text-xs text-slate-600 dark:text-slate-300 gap-1 rounded-xl cursor-pointer disabled:opacity-40"
+                                >
+                                  <ChevronLeft className="h-3.5 w-3.5" /> Previous Subtask
+                                </Button>
+
+                                <div className="text-[11px] font-semibold text-slate-400 text-center">
+                                  {stagedSubtasks.some(s => s.subtask.id === st.id) ? (
+                                    <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-bold">
+                                      <Check className="h-3.5 w-3.5" /> Staged & Remembered
+                                    </span>
+                                  ) : (
+                                    <span>Not modified yet</span>
+                                  )}
+                                </div>
+
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (activeSubtaskIndex < logProgressSubtasks.length - 1) {
+                                      setLogProgressActiveSubtaskId(logProgressSubtasks[activeSubtaskIndex + 1].id);
+                                    }
+                                  }}
+                                  disabled={activeSubtaskIndex >= logProgressSubtasks.length - 1}
+                                  className="text-xs bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 gap-1 rounded-xl font-bold cursor-pointer disabled:opacity-40"
+                                >
+                                  <span>Next Subtask</span>
+                                  <ChevronRight className="h-3.5 w-3.5" />
+                                </Button>
                               </div>
                             </div>
                           );
-                        })}
-                    </div>
-                  )}
+                        })()}
 
-                  {/* Master Activity Live Rollup Indicator Banner */}
-                  {(() => {
-                    // Preview rollup from simulated inputs
-                    const simulatedSubtasks = logProgressSubtasks.map(st => {
-                      const input = logProgressSubtaskInputs[st.id];
-                      const isSelected = logProgressSelectedSubtaskIds.includes(st.id);
-                      if (!isSelected || !input) return st;
-                      const prev = st.completedQuantity || 0;
-                      const newTot = input.mode === 'shift' ? prev + (Number(input.shiftOutput) || 0) : (Number(input.cumulativeOutput) || 0);
-                      return {
-                        ...st,
-                        completedQuantity: newTot,
-                        status: input.status
-                      };
-                    });
-                    const previewRollup = calculateActivityRollupFromSubtasks(activity, simulatedSubtasks);
-
-                    return (
-                      <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800/80 rounded-2xl flex items-center justify-between flex-wrap gap-2 text-xs">
-                        <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
-                          <Sparkles className="h-4 w-4 text-[#0B5FFF]" />
-                          <span>Auto Master Activity Rollup:</span>
-                          <span className="text-[#0B5FFF] font-extrabold text-sm">{previewRollup.overallProgress}% Complete</span>
-                          {activity.targetQuantity ? (
-                            <span className="text-slate-500 font-normal">
-                              ({previewRollup.actualQuantity} / {activity.targetQuantity} {activity.unit || 'units'})
-                            </span>
-                          ) : null}
+                        {/* Master Activity Live Rollup Indicator Banner */}
+                        <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800/80 rounded-2xl flex items-center justify-between flex-wrap gap-2 text-xs">
+                          <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
+                            <Sparkles className="h-4 w-4 text-[#0B5FFF]" />
+                            <span>Auto Master Activity Rollup:</span>
+                            <span className="text-[#0B5FFF] font-extrabold text-sm">{previewRollup.overallProgress}% Complete</span>
+                            {activity.targetQuantity ? (
+                              <span className="text-slate-500 font-normal">
+                                ({previewRollup.actualQuantity} / {activity.targetQuantity} {activity.unit || 'units'})
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center gap-2 font-semibold text-slate-600 dark:text-slate-300">
+                            <span>{previewRollup.completedSubtasksCount} / {previewRollup.totalSubtasksCount} Subtasks Completed</span>
+                            {stagedSubtasks.length > 0 && (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-bold">
+                                {stagedSubtasks.length} Staged for Report
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <span className="font-semibold text-slate-600 dark:text-slate-300">
-                          {previewRollup.completedSubtasksCount} / {previewRollup.totalSubtasksCount} Subtasks Completed
-                        </span>
                       </div>
                     );
                   })()}
