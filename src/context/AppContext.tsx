@@ -104,7 +104,7 @@ interface AppContextType {
   addProfile: (profile: UserProfile) => void;
   updateProfile: (profile: UserProfile) => void;
   deleteProfile: (id: string) => void;
-  updateActivity: (updatedActivity: Activity) => void;
+  updateActivity: (updatedActivity: Activity, oldId?: string) => void;
   addActivity: (newActivity: Activity) => void;
   deleteActivity: (id: string) => void;
   addReport: (newReport: DailyReport) => void;
@@ -1436,7 +1436,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncToServer('add_audit_log', newLog);
   };
 
-  const updateActivity = (updatedActivity: Activity) => {
+  const updateActivity = (updatedActivity: Activity, oldId?: string) => {
+    const targetId = oldId || updatedActivity.id;
     let auditLogToAdd: AuditLog | null = null;
     const today = new Date().toISOString().split('T')[0];
     
@@ -1446,7 +1447,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     setActivities(prev => {
-      const oldActivity = prev.find(a => a.id === updatedActivity.id);
+      const oldActivity = prev.find(a => a.id === targetId || a.id === updatedActivity.id);
       if (oldActivity) {
         activityWithDates = {
           ...activityWithDates,
@@ -1482,12 +1483,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
             newValue: `${updatedActivity.progress || 0}%`,
             timestamp: new Date().toISOString()
           };
+        } else if (oldActivity.id !== updatedActivity.id) {
+          auditLogToAdd = {
+            id: `AL-${Math.random().toString(36).substr(2, 9)}`,
+            projectId: updatedActivity.projectId,
+            userId: currentUserProfile?.name || (userRole === 'Manager' ? 'Site Manager' : 'Current User'),
+            action: 'Activity Code Updated',
+            details: `Activity code/ID changed from "${oldActivity.id}" to "${updatedActivity.id}" on "${updatedActivity.name}"`,
+            entityType: 'Activity',
+            entityId: updatedActivity.id,
+            actionType: 'update',
+            activityName: updatedActivity.name,
+            previousValue: oldActivity.id,
+            newValue: updatedActivity.id,
+            timestamp: new Date().toISOString()
+          };
         }
       } else if (!activityWithDates.createdAt) {
         activityWithDates.createdAt = activityWithDates.startDate || today;
       }
       
-      const newActivities = prev.map(a => a.id === activityWithDates.id ? activityWithDates : a);
+      const newActivities = prev.map(a => (a.id === targetId || a.id === activityWithDates.id) ? activityWithDates : a);
       
       // Also update project progress
       setProjects(currentProjects => 
@@ -1504,9 +1520,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       return newActivities;
     });
+
+    // If activity ID changed, update linked items across other collections
+    if (targetId && targetId !== updatedActivity.id) {
+      setQAInspections(prev => prev.map(qa => {
+        if (qa.activityId === targetId || qa.linkedActivityId === targetId || (qa.linkedActivityIds && qa.linkedActivityIds.includes(targetId))) {
+          return {
+            ...qa,
+            activityId: qa.activityId === targetId ? updatedActivity.id : qa.activityId,
+            linkedActivityId: qa.linkedActivityId === targetId ? updatedActivity.id : qa.linkedActivityId,
+            linkedActivityIds: qa.linkedActivityIds ? qa.linkedActivityIds.map(id => id === targetId ? updatedActivity.id : id) : undefined
+          };
+        }
+        return qa;
+      }));
+
+      setLabourLogs(prev => prev.map(l => l.activityId === targetId ? { ...l, activityId: updatedActivity.id } : l));
+      setEquipmentLogs(prev => prev.map(e => e.activityId === targetId ? { ...e, activityId: updatedActivity.id } : e));
+    }
     
     // Side effects outside updater
-    syncToServer('update_activity', activityWithDates);
+    syncToServer('update_activity', { ...activityWithDates, originalId: targetId });
     if (auditLogToAdd) {
       addAuditLog(auditLogToAdd);
     }

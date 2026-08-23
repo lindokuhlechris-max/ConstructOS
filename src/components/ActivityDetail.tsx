@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Activity, ActivityStatus, Priority, TaskMaterialAssignment, TaskLabourAssignment, TaskEquipmentAssignment, SubTask, DailyReport, canUserEditSection, WORKSTREAMS, WorkstreamType, Comment, ActivityChecklistItem } from '../types';
 import { Card, CardHeader, CardTitle, CardContent, Badge, ProgressBar, Button } from './ui';
@@ -81,7 +81,7 @@ import {
 
 interface ActivityDetailProps {
   activity: Activity;
-  onSave?: (updatedActivity: Activity) => void;
+  onSave?: (updatedActivity: Activity, oldId?: string) => void;
   onClose?: () => void;
   onDelete?: (id: string) => void;
   onDuplicate?: (activity: Activity) => void;
@@ -96,6 +96,11 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
   } = useAppContext();
   const canEditActivities = canUserEditSection(currentUserProfile, 'activities');
   const [activity, setActivity] = useState<Activity>(initialActivity);
+
+  useEffect(() => {
+    setActivity(initialActivity);
+  }, [initialActivity]);
+
   const [isEditing, setIsEditing] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -1093,22 +1098,20 @@ ${subtaskSummaryLines}
 
   const handleSave = () => {
     const today = new Date().toISOString().split('T')[0];
-    const updated = {
+    const newId = (activity.id || '').trim() || initialActivity.id;
+    const oldId = initialActivity.id;
+
+    const updated: Activity = {
       ...activity,
-      id: activity.id.trim() || initialActivity.id,
+      id: newId,
       updatedAt: today,
       createdAt: activity.createdAt || activity.startDate || today
     };
     setActivity(updated);
     if (onSave) {
-      onSave(updated);
+      onSave(updated, oldId);
     } else {
-      if (initialActivity.id && initialActivity.id !== updated.id) {
-        deleteActivity(initialActivity.id);
-        addActivity(updated);
-      } else {
-        updateActivity(updated);
-      }
+      updateActivity(updated, oldId);
     }
     setIsEditing(false);
   };

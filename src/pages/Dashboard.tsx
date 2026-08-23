@@ -238,9 +238,9 @@ export function Dashboard() {
     setDeletingActivityId(null);
   };
 
-  const handleSaveActivity = (updated: ActivityType) => {
+  const handleSaveActivity = (updated: ActivityType, oldId?: string) => {
     if (updateActivity) {
-        updateActivity(updated);
+      updateActivity(updated, oldId);
     }
     setSelectedActivity(updated);
   };

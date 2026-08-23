@@ -167,7 +167,7 @@ export function ActivityForm({ onClose, onSubmit, initialValues, isDuplicate }: 
 
     if (validate()) {
       setIsSubmitting(true);
-      const activityId = formData.id || `ACT-${Math.floor(1000 + Math.random() * 9000)}`;
+      const activityId = (formData.id && formData.id.trim()) ? formData.id.trim() : `ACT-${Math.floor(1000 + Math.random() * 9000)}`;
       const today = new Date().toISOString().split('T')[0];
 
       let assignedLabour = [...(formData.assignedLabour || [])];
@@ -387,7 +387,17 @@ export function ActivityForm({ onClose, onSubmit, initialValues, isDuplicate }: 
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1">Activity Code / ID</label>
+              <input
+                type="text"
+                value={formData.id || ''}
+                onChange={(e) => handleChange('id', e.target.value)}
+                className={`${getInputClass('id')} font-mono`}
+                placeholder="Auto (e.g. ACT-1179)"
+              />
+            </div>
             <div>
               <label className="text-xs font-semibold text-slate-500 block mb-1">Project *</label>
               <select

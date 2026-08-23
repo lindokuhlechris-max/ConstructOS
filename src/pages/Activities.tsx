@@ -424,9 +424,9 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
     setDeletingActivityId(null);
   };
 
-  const handleSaveActivity = (updated: Activity) => {
+  const handleSaveActivity = (updated: Activity, oldId?: string) => {
     if (updateActivity) {
-      updateActivity(updated);
+      updateActivity(updated, oldId);
     }
     setSelectedActivity(updated);
   };

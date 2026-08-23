@@ -16,6 +16,11 @@ export function ResourceAllocationPage() {
         <ErrorBoundary moduleName="Activity Detail">
           <ActivityDetail
             activity={selectedActivity}
+            onSave={(updated, oldId) => {
+              if (oldId && selectedActivityId === oldId) {
+                setSelectedActivityId(updated.id);
+              }
+            }}
             onClose={() => setSelectedActivityId(null)}
           />
         </ErrorBoundary>
