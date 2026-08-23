@@ -279,11 +279,18 @@ export function Reports() {
               temperature: formData.temperature || '24°C',
               siteConditions: formData.siteConditions || 'Dry / Optimal',
               significantEvents: formData.significantEvents || '',
-              workersOnSite: formData.workersOnSite || 12,
-              equipmentRunning: formData.equipmentRunning || 3,
-              incidents: formData.incidents || 0,
-              ncr: formData.ncr || 0,
+              workersOnSite: formData.workersOnSite ?? 12,
+              equipmentRunning: formData.equipmentRunning ?? 3,
+              incidents: formData.incidents ?? 0,
+              ncr: formData.ncr ?? 0,
               supervisorNotes: formData.supervisorNotes || '',
+              activitiesWorked: formData.activitiesWorked,
+              activitiesLogged: formData.activitiesLogged,
+              subtasksCompleted: formData.subtasksCompleted,
+              pinnedSubtaskMap: formData.pinnedSubtaskMap,
+              activityProgress: formData.activityProgress,
+              workSummary: formData.workSummary || formData.significantEvents,
+              status: 'Approved'
             };
             addReport(newReport);
             setIsDailyCreating(false);

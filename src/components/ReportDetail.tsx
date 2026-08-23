@@ -457,50 +457,143 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
 
       {/* TAB 2: DAILY ACTIVITIES PROGRESS */}
       {activeTab === 'activities' && (
-        <Card className="w-full">
-          <CardHeader>
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <ActivityIcon className="h-5 w-5 text-[#0B5FFF]" /> Construction Activities Active Today
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase tracking-wider text-xs font-semibold border-b border-slate-200 dark:border-slate-700">
-                  <tr>
-                    <th className="px-4 py-3">Task ID</th>
-                    <th className="px-4 py-3">Activity Name</th>
-                    <th className="px-4 py-3">Discipline</th>
-                    <th className="px-4 py-3">Assigned Team</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Progress</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                  {dayActivities.map(act => (
-                    <tr key={act.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="px-4 py-3 font-mono text-xs font-bold text-[#0B5FFF]">{act.id}</td>
-                      <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">{act.name}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant="outline" className="text-[10px]">{act.discipline}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{act.assignedTo || 'Unassigned'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                          act.status === 'Completed' ? 'bg-green-50 text-green-700' :
-                          act.status === 'In Progress' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {act.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold">{act.progress}%</td>
+        <div className="space-y-6 w-full">
+          {/* Pinned Activities & Specific Daily Output Matrix */}
+          {(report.pinnedSubtaskMap || report.activityProgress || (report.activitiesWorked && report.activitiesWorked.length > 0)) && (
+            <Card className="w-full border-blue-200 dark:border-blue-900 shadow-sm">
+              <CardHeader className="bg-blue-50/40 dark:bg-blue-950/20 border-b border-blue-100 dark:border-blue-900/50">
+                <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                  <CheckSquare className="h-5 w-5 text-[#0B5FFF]" /> Pinned Shift Tasks & Daily Output Execution
+                </CardTitle>
+                <p className="text-xs text-slate-500">Activities and specific subtasks pinned to this daily site diary with physical output quantities.</p>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                {activities
+                  .filter(a => {
+                    if (report.pinnedSubtaskMap && report.pinnedSubtaskMap[a.id]) return true;
+                    if (report.activitiesLogged && report.activitiesLogged.includes(a.id)) return true;
+                    if (report.activitiesWorked && report.activitiesWorked.includes(a.name)) return true;
+                    return false;
+                  })
+                  .map(act => {
+                    const prog = (report.activityProgress && report.activityProgress[act.id]) || {};
+                    const pinnedMap = report.pinnedSubtaskMap ? report.pinnedSubtaskMap[act.id] : 'all';
+                    const allSubtasks = act.subtasks || [];
+                    const focusedSubtasks = !pinnedMap || pinnedMap === 'all'
+                      ? allSubtasks
+                      : allSubtasks.filter(s => Array.isArray(pinnedMap) && pinnedMap.includes(s.id));
+                    const completedSubtaskIds = prog.completedSubtasks || [];
+
+                    return (
+                      <div key={act.id} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-[#0B5FFF] bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded">
+                              {act.code || act.id}
+                            </span>
+                            <span className="font-bold text-sm text-slate-900 dark:text-white">{act.name}</span>
+                            <Badge variant="outline" className="text-[10px]">{act.discipline || 'General'}</Badge>
+                          </div>
+                          {prog.dailyQuantity !== undefined && prog.dailyQuantity > 0 && (
+                            <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-xl">
+                              Daily Output: {prog.dailyQuantity} {prog.unit || act.unit || 'units'}
+                            </span>
+                          )}
+                        </div>
+
+                        {focusedSubtasks.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                              Subtasks ({completedSubtaskIds.length}/{focusedSubtasks.length} Completed):
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                              {focusedSubtasks.map(st => {
+                                const isDone = completedSubtaskIds.includes(st.id) || (report.subtasksCompleted && report.subtasksCompleted.some(s => s.includes(st.title)));
+                                return (
+                                  <div 
+                                    key={st.id}
+                                    className={`flex items-center gap-2 p-2 rounded-xl text-xs border ${
+                                      isDone 
+                                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300 font-semibold' 
+                                        : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    <span className={`h-4 w-4 rounded-full flex items-center justify-center text-[10px] shrink-0 ${
+                                      isDone ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                                    }`}>
+                                      {isDone ? '✓' : '○'}
+                                    </span>
+                                    <span className="truncate">{st.title}</span>
+                                    {st.isHoldPoint && (
+                                      <span className="ml-auto text-[9px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 px-1 py-0.2 rounded">
+                                        Hold Point
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {prog.notes && (
+                          <p className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                            <strong>Shift Notes:</strong> {prog.notes}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* All Project Active Activities Table */}
+          <Card className="w-full">
+            <CardHeader>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <ActivityIcon className="h-5 w-5 text-[#0B5FFF]" /> Construction Activities Active Today
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase tracking-wider text-xs font-semibold border-b border-slate-200 dark:border-slate-700">
+                    <tr>
+                      <th className="px-4 py-3">Task ID</th>
+                      <th className="px-4 py-3">Activity Name</th>
+                      <th className="px-4 py-3">Discipline</th>
+                      <th className="px-4 py-3">Assigned Team</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Progress</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {dayActivities.map(act => (
+                      <tr key={act.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="px-4 py-3 font-mono text-xs font-bold text-[#0B5FFF]">{act.id}</td>
+                        <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">{act.name}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant="outline" className="text-[10px]">{act.discipline}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{act.assignedTo || 'Unassigned'}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                            act.status === 'Completed' ? 'bg-green-50 text-green-700' :
+                            act.status === 'In Progress' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {act.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold">{act.progress}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* TAB 3: MANPOWER & TRADES */}

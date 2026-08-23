@@ -12066,6 +12066,20 @@
       ],
       "photos": [],
       "supervisorNotes": "=== DAILY PROGRESS LOG: PTS-07(Foundation)  (ACT-8158) ===\nDiscipline / Package: Platform Installation | Civil, Electrical, Quality\nOverall Activity Progress: 0% | Output: 0 / 0 m²\nPriority: High | Shift Hours: 24 hrs\n\n--- SUBTASK & METHOD EXECUTION STATUS ---\n[x] #1 Foundation set-out (Surveying & Set-out) - 13/13 Points [Completed]\n[ ] #2 Trench marking (Excavation & Earthworks) - 0/1 done [Not Started]\n[ ] #3 Inspection of Trench marking (Surveying & Set-out) - 0/1 sign-off [Not Started]\n[ ] #4 Trench Excavation (Excavation & Earthworks) - 0/1 done [Not Started]\n[ ] #5 Barricading of Trench (Excavation & Earthworks) - 0/347 m [Not Started]\n[ ] #6 Inspection of Excavation (Quality & Inspection) - 0/1 sign-off [Not Started]\n[ ] #7 Trench Preparation (Excavation & Earthworks) - 0/347 m [Not Started]\n[ ] #8 Installation of Bedding sand - 100mm (Excavation & Earthworks) - 0/347 m [Not Started]\n[ ] #9 Inspection of Bedding Sand (Quality & Inspection) - 0/1 sign-off [Not Started]\n[ ] #10 Installation of Cables (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #11 Cable Joints (Electrical & MEP) - 0/1 done [Not Started]\n[ ] #12 Installation of Fibre optic and Earth Cable (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #13 Inspection of Cable Installation (Quality & Inspection) - 0/1 sign-off [Not Started]\n[ ] #14 Installation of Blanket Sand - 300mm (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #15 Inspection of Blanket Sand (Quality & Inspection) - 0/1 sign-off [Not Started]\n[ ] #16 Installation of Electric Cable Marker (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #17 Inspection of Electric Cable Markers (Quality & Inspection) - 0/1 sign-off [Not Started]\n[ ] #18 Installation of Backfil - 300mm (Level 2) (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #19 Installation of Electric Cable Marker - level 2 (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #20 Installation of Backfil - 300mm (Excavation & Earthworks) - 0/347 m [Not Started]\n[ ] #21 Installation of overfill - 50mm (Excavation & Earthworks) - 0/347 m [Not Started]\n[ ] #22 Final Inspection. (Quality & Inspection) - 0/1 sign-off [Not Started]\n\n--- RESOURCE ALLOCATIONS ON SHIFT ---\nCrew Workforce (3 personnel):\n• Site Worker: McDonald Mtshweni (8 hrs)\n• Site Worker: Dimi Maphanga (8 hrs)\n• Site Worker: Advocate Khoza (8 hrs)\n\nPlant & Machinery (1 active units):\n• CAT (Operator: Assigned Operator)\n\nMaterials Allocated:\nStandard material stock.\n\n--- FIELD REMARKS & OBSERVATIONS ---\nDaily production targets executed in accordance with method statement and QA/QC specifications."
+    },
+    {
+      "id": "RPT-1787482655344",
+      "date": "2026-08-16",
+      "projectId": "PRJ-5401",
+      "weather": "Sunny",
+      "temperature": "25",
+      "siteConditions": "Normal operations, clear access",
+      "significantEvents": "Standard production activities continued as planned. No major delays.",
+      "workersOnSite": 12,
+      "equipmentRunning": 3,
+      "incidents": 0,
+      "ncr": 0,
+      "supervisorNotes": ""
     }
   ],
   "labourLogs": [
@@ -20200,6 +20214,19 @@
       "entityType": "QA",
       "entityId": "QA-621",
       "actionType": "update"
+    },
+    {
+      "id": "AL-mt5p0rxt-ocfr",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Daily Report Created",
+      "details": "Created Daily Site Report for 2026-08-16",
+      "timestamp": "2026-08-23T10:57:35.345Z",
+      "entityType": "Report",
+      "entityId": "RPT-1787482655344",
+      "actionType": "create",
+      "newValue": "Date: 2026-08-16 | Weather: Sunny"
     }
   ],
   "allocations": [],

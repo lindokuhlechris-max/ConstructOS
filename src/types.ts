@@ -262,6 +262,8 @@ export interface Activity {
   supervisor: string;
   targetQuantity: number;
   actualQuantity: number;
+  plannedQuantity?: number;
+  code?: string;
   unit: string;
   status: ActivityStatus;
   startDate: string;
@@ -1056,6 +1058,8 @@ export interface DailyReport {
   equipmentLogged?: { equipmentId: string; hours: number; status: string }[];
   photos?: string[];
   supervisorNotes?: string;
+  pinnedSubtaskMap?: Record<string, 'all' | string[]>;
+  activityProgress?: Record<string, { dailyQuantity?: number; unit?: string; notes?: string; completedSubtasks?: string[] }>;
   createdAt?: string;
   status?: string;
 }
