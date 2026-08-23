@@ -12080,6 +12080,39 @@
       "incidents": 0,
       "ncr": 0,
       "supervisorNotes": ""
+    },
+    {
+      "id": "RPT-1787483584667",
+      "date": "2026-08-23",
+      "projectId": "PRJ-5401",
+      "weather": "Sunny",
+      "temperature": "31",
+      "siteConditions": "Normal operations, clear access",
+      "significantEvents": "Standard production activities continued as planned. No major delays.",
+      "workersOnSite": 0,
+      "equipmentRunning": 0,
+      "incidents": 0,
+      "ncr": 0,
+      "supervisorNotes": "",
+      "activitiesWorked": [
+        "PTS06 - PTS07"
+      ],
+      "activitiesLogged": [
+        "ACT-2779"
+      ],
+      "subtasksCompleted": [],
+      "pinnedSubtaskMap": {
+        "ACT-2779": [
+          "ST-1787144983335-uvjq"
+        ]
+      },
+      "activityProgress": {
+        "ACT-9830": {
+          "completedSubtasks": []
+        }
+      },
+      "workSummary": "Standard production activities continued as planned. No major delays.",
+      "status": "Approved"
     }
   ],
   "labourLogs": [
@@ -20227,6 +20260,19 @@
       "entityId": "RPT-1787482655344",
       "actionType": "create",
       "newValue": "Date: 2026-08-16 | Weather: Sunny"
+    },
+    {
+      "id": "AL-mt5pkp0c-12iu",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Daily Report Created",
+      "details": "Created Daily Site Report for 2026-08-23",
+      "timestamp": "2026-08-23T11:13:04.668Z",
+      "entityType": "Report",
+      "entityId": "RPT-1787483584667",
+      "actionType": "create",
+      "newValue": "Date: 2026-08-23 | Weather: Sunny"
     }
   ],
   "allocations": [],

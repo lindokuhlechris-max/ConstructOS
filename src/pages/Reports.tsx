@@ -105,6 +105,21 @@ export function Reports() {
     return project?.name || 'Unknown Project';
   };
 
+  const formatReportTime = (createdAt?: string, fallbackDate?: string) => {
+    if (createdAt) {
+      try {
+        const d = new Date(createdAt);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+      } catch (e) {}
+      const timeMatch = createdAt.match(/(\d{2}:\d{2})/);
+      if (timeMatch) return timeMatch[1];
+    }
+    // Fallback deterministic time from date
+    return '08:30';
+  };
+
   // Convert daily reports to uniform list items for unified view
   const allUnifiedItems = useMemo(() => {
     const dailyAsUniversal: UniversalReportItem[] = reports.map(d => ({
@@ -117,6 +132,7 @@ export function Reports() {
       revision: 'Rev 0',
       date: d.date,
       submissionDate: d.date,
+      createdAt: d.createdAt || `${d.date}T08:00:00`,
       author: d.submittedBy || d.supervisor || 'Site Supervisor',
       status: (d.status as any) || 'Approved',
       location: 'Site-Wide',
@@ -730,6 +746,10 @@ export function Reports() {
 
                     <div className="flex items-center gap-x-4 gap-y-1 text-xs text-slate-400 flex-wrap">
                       <span>Date: <strong className="text-slate-700 dark:text-slate-300 font-mono">{item.date}</strong></span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5 text-blue-500" />
+                        Time: <strong className="text-slate-700 dark:text-slate-300 font-mono">{formatReportTime(item.createdAt, item.date)}</strong>
+                      </span>
                       <span>Submitted: <strong className="text-blue-600 dark:text-blue-400 font-mono">{item.submissionDate || item.date}</strong></span>
                       <span>Author: <strong className="text-slate-700 dark:text-slate-300">{item.author}</strong></span>
                       <span>Project: <strong className="text-slate-700 dark:text-slate-300">{getProjectName(item.projectId)}</strong></span>
@@ -802,9 +822,14 @@ export function Reports() {
                   </p>
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400 font-mono">
-                  <span>📅 {item.date}</span>
-                  <span className="font-sans font-semibold text-slate-600 dark:text-slate-300">{item.author}</span>
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400 font-mono flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span>📅 {item.date}</span>
+                    <span className="flex items-center gap-1 text-slate-600 dark:text-slate-300 font-semibold">
+                      <Clock className="h-3.5 w-3.5 text-blue-500" /> {formatReportTime(item.createdAt, item.date)}
+                    </span>
+                  </div>
+                  <span className="font-sans font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[130px]">{item.author}</span>
                 </div>
               </div>
             );
