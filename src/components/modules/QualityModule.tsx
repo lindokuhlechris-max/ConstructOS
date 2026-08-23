@@ -29,7 +29,8 @@ import {
   LayoutGrid,
   List as ListIcon,
   Table as TableIcon,
-  Copy
+  Copy,
+  Printer
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { QAInspectionItem, QAMeasurementType } from '../../types';
@@ -38,6 +39,7 @@ import { QAMeasurementModal } from '../QAMeasurementModal';
 import { QualityTotalsAnalytics } from '../QualityTotalsAnalytics';
 import { QAActivityMultiSelectModal } from '../quality/QAActivityMultiSelectModal';
 import { MultiDrawingInput } from '../quality/MultiDrawingInput';
+import { QAPrintRegisterModal } from '../quality/QAPrintRegisterModal';
 
 interface QualityModuleProps {
   onBack: () => void;
@@ -90,6 +92,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Passed' | 'Failed' | 'Pending Approval'>('All');
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'table'>('list');
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   // Form state
   const [title, setTitle] = useState('');
@@ -389,6 +392,15 @@ export function QualityModule({ onBack }: QualityModuleProps) {
           >
             <Layers className="h-4 w-4" />
             {activeView === 'analytics' ? 'Inspections List' : 'Overalls & RFI Totals'}
+          </Button>
+
+          <Button
+            onClick={() => setIsPrintModalOpen(true)}
+            variant="outline"
+            className="gap-1.5 rounded-xl h-10 px-3.5 text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-2xs"
+            title="Print or Export QA/QC Inspection Register"
+          >
+            <Printer className="h-4 w-4 text-slate-600 dark:text-slate-300" /> Print Register
           </Button>
 
           <Button
@@ -1553,6 +1565,15 @@ export function QualityModule({ onBack }: QualityModuleProps) {
         activities={activities}
         projectId={projectId}
         projectName={projects.find(p => p.id === projectId)?.name}
+      />
+
+      {/* QA/QC Print Studio Modal */}
+      <QAPrintRegisterModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        inspections={filteredInspections}
+        allInspections={qaInspections}
+        activeProject={projects.find(p => p.id === projectId) || projects[0]}
       />
     </div>
   );

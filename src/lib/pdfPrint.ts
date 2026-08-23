@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Activity, DocumentItem, MaterialInventory, Project, AuditLog } from '../types';
+import { Activity, DocumentItem, MaterialInventory, Project, AuditLog, QAInspectionItem } from '../types';
 import { saveOrShareFile } from './fileExportService';
 
 export interface PrintActivityAuditOptions {
@@ -699,6 +699,268 @@ export async function printActivityAuditSummary({
     return true;
   } catch (err) {
     console.error('Error generating audit PDF:', err);
+    if (typeof window !== 'undefined' && window.print) {
+      window.print();
+    }
+    return false;
+  }
+}
+
+export interface PrintQAInspectionsOptions {
+  project?: Project;
+  inspections: QAInspectionItem[];
+  filterLabel?: string;
+  totalCount?: number;
+  orientation?: 'landscape' | 'portrait';
+  includeSignoffs?: boolean;
+}
+
+/**
+ * Generates an executive, beautifully formatted PDF document for QA/QC Inspections & ITR register
+ * across Mobile APK, PWA, and Desktop.
+ */
+export async function printQAInspectionRegisterSummary({
+  project,
+  inspections,
+  filterLabel = 'All QA/QC Inspections',
+  totalCount,
+  orientation = 'landscape',
+  includeSignoffs = true,
+}: PrintQAInspectionsOptions): Promise<boolean> {
+  try {
+    const doc = new jsPDF({
+      orientation,
+      unit: 'pt',
+      format: 'a4',
+    });
+
+    const isLandscape = orientation === 'landscape';
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 36;
+
+    const currentDate = new Date().toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Metrics calculation
+    const total = inspections.length;
+    const passedCount = inspections.filter(i => i.status === 'Passed').length;
+    const failedCount = inspections.filter(i => i.status === 'Failed').length;
+    const inReviewCount = inspections.filter(i => i.status === 'Pending Approval').length;
+    
+    let totalTarget = 0;
+    let totalApproved = 0;
+    inspections.forEach(i => {
+      totalTarget += (i.targetQuantity || 0);
+      totalApproved += (i.approvedQuantity || 0);
+    });
+    const overallRate = totalTarget > 0 ? Math.round((totalApproved / totalTarget) * 100) : (total > 0 ? Math.round((passedCount / total) * 100) : 0);
+
+    // Header Background Accent (#059669 - Emerald QC)
+    doc.setFillColor(5, 150, 105);
+    doc.rect(0, 0, pageWidth, 48, 'F');
+
+    // Title
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('SCEDIH — Quality & QA/QC Inspection Register', margin, 30);
+
+    // Subheader
+    doc.setTextColor(51, 65, 85);
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Project: ${project?.name || 'Main Construction Site'}  •  Filter / Scope: ${filterLabel}`, margin, 68);
+    doc.text(`Generated: ${currentDate} at ${currentTime}  •  Showing ${total} of ${totalCount ?? total} inspection records`, margin, 82);
+
+    // KPI Cards
+    const startY = 94;
+    const cardWidth = isLandscape ? (pageWidth - (margin * 2) - 40) / 5 : (pageWidth - (margin * 2) - 30) / 4;
+    const cardHeight = 36;
+    const cards = [
+      { label: 'TOTAL INSPECTIONS', val: `${total}`, color: [11, 95, 255] },
+      { label: 'PASSED & SIGNED OFF', val: `${passedCount}`, color: [5, 150, 105] },
+      { label: 'OPEN NCRS / FAILED', val: `${failedCount}`, color: [220, 38, 38] },
+      { label: 'PENDING APPROVAL', val: `${inReviewCount}`, color: [217, 119, 6] },
+      ...(isLandscape ? [{ label: 'SCOPE APPROVED', val: `${overallRate}%`, color: [16, 185, 129] }] : []),
+    ];
+
+    cards.forEach((c, i) => {
+      const x = margin + i * (cardWidth + 10);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(x, startY, cardWidth, cardHeight, 4, 4, 'FD');
+
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(c.label, x + 8, startY + 14);
+
+      doc.setFontSize(12);
+      doc.setTextColor(c.color[0], c.color[1], c.color[2]);
+      doc.text(c.val, x + 8, startY + 30);
+    });
+
+    // Table Headers
+    const tableHeaders = isLandscape ? [
+      ['Ref & Date', 'Subject & Drawing Ref', 'Discipline & Spec', 'Location & Inspector', 'Scope / Quantities', 'Status', 'Contractors & Sign-off']
+    ] : [
+      ['Ref & Date', 'Subject / Drawing', 'Discipline', 'Location / Inspector', 'Scope & Approved', 'Status']
+    ];
+
+    const tableData = inspections.map(i => {
+      const docNums = (i.documentNumbers && i.documentNumbers.length > 0)
+        ? i.documentNumbers.join(', ')
+        : (i.documentNumber || i.referenceDrawingNumber || '-');
+      
+      const targetQty = i.targetQuantity || 0;
+      const inspectedQty = i.inspectedQuantity || 0;
+      const approvedQty = i.approvedQuantity || 0;
+      const itemUnit = i.unit || 'm';
+      const overallPct = targetQty > 0 ? Math.round((approvedQty / targetQty) * 100) : (inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0);
+
+      const quantitiesStr = targetQty > 0 || inspectedQty > 0
+        ? `Scope: ${targetQty} ${itemUnit}\nInsp: ${inspectedQty} ${itemUnit}\n✓ ${approvedQty} ${itemUnit} (${overallPct}% overall)`
+        : 'Not recorded';
+
+      if (isLandscape) {
+        return [
+          `${i.id}\n${i.date || '-'}`,
+          `${docNums !== '-' ? `[${docNums}]\n` : ''}${i.title}`,
+          `${i.category}\n${i.measurementType || 'Length'} (${itemUnit})${i.toleranceSpec ? `\nSpec: ${i.toleranceSpec}` : ''}`,
+          `${i.location}\nInsp: ${i.inspector}${i.subcontractor ? `\nSub: ${i.subcontractor}` : ''}`,
+          quantitiesStr,
+          i.status,
+          `EPC: ${i.epc || 'Scedih'}\nClient: ${i.client || 'Client QC'}`
+        ];
+      } else {
+        return [
+          `${i.id}\n${i.date || '-'}`,
+          `${docNums !== '-' ? `[${docNums}]\n` : ''}${i.title}`,
+          `${i.category}\n${i.measurementType || 'Length'}`,
+          `${i.location}\n${i.inspector}`,
+          quantitiesStr,
+          i.status
+        ];
+      }
+    });
+
+    autoTable(doc, {
+      head: tableHeaders,
+      body: tableData,
+      startY: startY + cardHeight + 14,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [51, 65, 85],
+        fontSize: 8,
+        fontStyle: 'bold',
+        halign: 'left',
+      },
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 5,
+        textColor: [15, 23, 42],
+        lineColor: [226, 232, 240],
+      },
+      columnStyles: isLandscape ? {
+        0: { cellWidth: 70, fontStyle: 'bold' },
+        1: { cellWidth: 200 },
+        2: { cellWidth: 105 },
+        3: { cellWidth: 125 },
+        4: { cellWidth: 110, fontStyle: 'bold' },
+        5: { cellWidth: 75, halign: 'center' },
+        6: { cellWidth: 85 },
+      } : {
+        0: { cellWidth: 65, fontStyle: 'bold' },
+        1: { cellWidth: 160 },
+        2: { cellWidth: 75 },
+        3: { cellWidth: 95 },
+        4: { cellWidth: 80 },
+        5: { cellWidth: 55, halign: 'center' },
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body') {
+          const statusColIdx = isLandscape ? 5 : 5;
+          if (data.column.index === statusColIdx) {
+            const status = String(data.cell.raw);
+            if (status === 'Passed') {
+              data.cell.styles.textColor = [5, 150, 105];
+              data.cell.styles.fontStyle = 'bold';
+            } else if (status === 'Failed') {
+              data.cell.styles.textColor = [220, 38, 38];
+              data.cell.styles.fontStyle = 'bold';
+            } else {
+              data.cell.styles.textColor = [217, 119, 6];
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+        }
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Scedih QA/QC Inspection Register & Compliance Record  •  Page ${data.pageNumber}`,
+          margin,
+          pageHeight - 16
+        );
+      }
+    });
+
+    // Formal Sign-off Section on last page
+    if (includeSignoffs) {
+      const finalY = (doc as any).lastAutoTable.finalY + 24;
+      if (finalY + 60 < pageHeight - 30) {
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(51, 65, 85);
+        doc.text('OFFICIAL QUALITY COMPLIANCE & SIGN-OFF ENDORSEMENT', margin, finalY);
+
+        const sigWidth = (pageWidth - (margin * 2) - 40) / 3;
+        const signees = [
+          { role: 'QA/QC Lead Inspector', subtitle: 'Site Quality Inspection Lead' },
+          { role: 'EPC Construction Manager', subtitle: 'Contractor Authorized Rep' },
+          { role: 'Client QC Representative', subtitle: 'Client / Consultant Sign-off' },
+        ];
+
+        signees.forEach((s, idx) => {
+          const sigX = margin + idx * (sigWidth + 20);
+          const sigBoxY = finalY + 12;
+          doc.setDrawColor(203, 213, 225);
+          doc.line(sigX, sigBoxY + 30, sigX + sigWidth, sigBoxY + 30);
+          doc.setFontSize(7.5);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(71, 85, 105);
+          doc.text(s.role, sigX, sigBoxY + 42);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(148, 163, 184);
+          doc.text(`Sign & Date: ___________________`, sigX, sigBoxY + 24);
+          doc.text(s.subtitle, sigX, sigBoxY + 52);
+        });
+      }
+    }
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `scedih_qa_qc_inspection_register_${dateStr}.pdf`;
+    const blob = doc.output('blob');
+
+    await saveOrShareFile({
+      filename,
+      blob,
+      title: 'Scedih QA/QC Inspection Register PDF',
+      text: `Scedih QA/QC Inspection Register Report - ${currentDate}`
+    });
+
+    return true;
+  } catch (err) {
+    console.error('Error generating QA PDF:', err);
     if (typeof window !== 'undefined' && window.print) {
       window.print();
     }
