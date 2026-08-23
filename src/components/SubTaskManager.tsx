@@ -10,10 +10,11 @@ import {
   CornerDownRight, CheckSquare, Sparkle, Info, Search, Users, UserCheck,
   Compass, Link2, Unlink, ExternalLink, Scale, Ruler, Square, Box, Hash,
   Percent, ToggleLeft, ToggleRight, ListChecks, ListTodo,
-  LayoutGrid, ListOrdered, List, SlidersHorizontal
+  LayoutGrid, ListOrdered, List, SlidersHorizontal, Zap
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { getPersonInitials, getSubtaskProgressionNumber, inferSubtaskMeasurementType } from '../lib/labourUtils';
+import { calculateSubtaskDailyAverage } from '../lib/subtaskProgressUtils';
 import { MeasurementPresetsModal } from './MeasurementPresetsModal';
 import { WorkflowTemplatesModal } from './WorkflowTemplatesModal';
 
@@ -3350,6 +3351,21 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                                                 </span>
                                               )}
 
+                                              {/* Daily Average & Run-Rate Badge */}
+                                              {(() => {
+                                                const metrics = calculateSubtaskDailyAverage(st);
+                                                if (metrics.dailyAverage <= 0) return null;
+                                                return (
+                                                  <span 
+                                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0"
+                                                    title={`Calculated Daily Output Average: ${metrics.formattedRate}${metrics.projectedDaysLeft !== undefined ? ` • Est. ${metrics.projectedDaysLeft} shift(s) left` : ''}`}
+                                                  >
+                                                    <Zap className="h-2.5 w-2.5 text-emerald-500" />
+                                                    {metrics.formattedRate}
+                                                  </span>
+                                                );
+                                              })()}
+
                                               {/* Assigned Personnel Chips */}
                                               {splitWorkers.length > 0 && (
                                                 <div className="flex items-center gap-1 shrink-0">
@@ -3744,6 +3760,21 @@ if (st.targetQuantity && st.targetQuantity > 0 && currentQty < st.targetQuantity
                                                     </button>
                                                   )
                                                 )}
+
+                                                {/* Daily Average & Run-Rate Badge */}
+                                                {(() => {
+                                                  const metrics = calculateSubtaskDailyAverage(st);
+                                                  if (metrics.dailyAverage <= 0) return null;
+                                                  return (
+                                                    <span 
+                                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-xs shrink-0"
+                                                      title={`Calculated Daily Output Average: ${metrics.formattedRate}${metrics.projectedDaysLeft !== undefined ? ` • Est. ${metrics.projectedDaysLeft} shift(s) left` : ''}`}
+                                                    >
+                                                      <Zap className="h-3 w-3 text-emerald-500" />
+                                                      {metrics.formattedRate}
+                                                    </span>
+                                                  );
+                                                })()}
                                               </div>
 
                                               {/* Milestone & Hold Point Info */}

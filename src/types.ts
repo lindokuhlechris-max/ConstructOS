@@ -135,6 +135,20 @@ export interface SubTaskHoldPointSignOff {
   approved: boolean;
 }
 
+export interface SubTaskProgressEntry {
+  id: string;
+  date: string;
+  outputQuantity: number;
+  cumulativeQuantity: number;
+  status: 'Not Started' | 'In Progress' | 'Completed';
+  notes?: string;
+  loggedBy?: string;
+  weather?: string;
+  hoursSpent?: number;
+  timestamp: string;
+  chainageSpan?: string;
+}
+
 export interface SubTask {
   id: string;
   title: string;
@@ -165,6 +179,12 @@ export interface SubTask {
   predecessorId?: string;
   requiresPhotoEvidence?: boolean;
   requiresSupervisorSignOff?: boolean;
+
+  // Granular Progress & Daily Run-Rate Metrics
+  progressHistory?: SubTaskProgressEntry[];
+  dailyAverage?: number;
+  lastLoggedDate?: string;
+  lastLoggedOutput?: number;
 
   // Link & Survey Discipline Metadata
   linkedActivityId?: string;
