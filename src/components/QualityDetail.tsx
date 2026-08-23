@@ -506,13 +506,30 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   <FolderOpen className="h-3 w-3" /> {attachedDocuments.length} Attached {attachedDocuments.length === 1 ? 'Doc' : 'Docs'}
                 </span>
               )}
-              {comments.length > 0 && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-                  <MessageSquare className="h-3 w-3 text-[#0B5FFF]" /> {comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}
+              {inspection.referenceDrawingNumber && (
+                <span className="text-[10px] font-mono font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 flex items-center gap-1">
+                  <Layers className="h-3 w-3" /> Dwg: {inspection.referenceDrawingNumber}
+                </span>
+              )}
+              {inspection.documentNumber && (
+                <span className="text-[10px] font-mono font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+                  <FileText className="h-3 w-3" /> {inspection.documentNumber}
                 </span>
               )}
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{inspection.title}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+              {(inspection.referenceDrawingNumber || inspection.documentNumber) ? (
+                <>
+                  <span className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-0.5 rounded-xl border border-purple-200 dark:border-purple-800 text-base sm:text-lg font-bold">
+                    {inspection.referenceDrawingNumber || inspection.documentNumber}
+                  </span>
+                  <span className="text-slate-300 dark:text-slate-600 font-normal">|</span>
+                  <span>{inspection.title}</span>
+                </>
+              ) : (
+                <span>{inspection.title}</span>
+              )}
+            </h1>
           </div>
         </div>
 

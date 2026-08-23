@@ -24,7 +24,9 @@ import {
   Check,
   AlertTriangle,
   Clock,
-  Calendar
+  Calendar,
+  LayoutGrid,
+  List as ListIcon
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { QAInspectionItem, QAMeasurementType } from '../../types';
@@ -82,6 +84,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Passed' | 'Failed' | 'Pending Approval'>('All');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   // Form state
   const [title, setTitle] = useState('');
@@ -264,11 +267,39 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search inspections, locations, NCRs..." 
+              placeholder="Search inspections, dwg#, NCRs..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
             />
+          </div>
+
+          {/* View Mode Toggle: List / Grid */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'list' 
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs' 
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+              title="List View"
+            >
+              <ListIcon className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'grid' 
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs' 
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+              title="Grid View"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
           </div>
 
           <Button
@@ -718,15 +749,15 @@ export function QualityModule({ onBack }: QualityModuleProps) {
         </Card>
       </div>
 
-      {/* Inspections List Grid */}
-      <div className="flex flex-col gap-3.5 w-full">
-        {filteredInspections.length === 0 ? (
-          <Card className="p-8 text-center border-slate-200 dark:border-slate-800">
-            <ShieldCheck className="h-10 w-10 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-slate-500">No QA/QC inspections match the active search or filters.</p>
-          </Card>
-        ) : (
-          filteredInspections.map(item => {
+      {/* Inspections List or Grid View */}
+      {filteredInspections.length === 0 ? (
+        <Card className="p-8 text-center border-slate-200 dark:border-slate-800">
+          <ShieldCheck className="h-10 w-10 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
+          <p className="text-sm font-semibold text-slate-500">No QA/QC inspections match the active search or filters.</p>
+        </Card>
+      ) : viewMode === 'list' ? (
+        <div className="flex flex-col gap-3.5 w-full">
+          {filteredInspections.map(item => {
             const attachedDocCount = (documents || []).filter(d => 
               (item.linkedDocumentIds && item.linkedDocumentIds.includes(d.id)) ||
               d.linkedQAInspectionId === item.id ||
@@ -742,6 +773,8 @@ export function QualityModule({ onBack }: QualityModuleProps) {
 
             const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
             const rejectionPercent = inspectedQty > 0 ? Math.round((rejectedQty / inspectedQty) * 100) : 0;
+
+            const subjectDocNumber = item.referenceDrawingNumber || item.documentNumber;
 
             return (
               <Card 
@@ -797,9 +830,19 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                     )}
                   </div>
 
-                  {/* Title */}
-                  <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors">
-                    {item.title}
+                  {/* Primary Subject Heading (Drawing/Doc Number as Subject) */}
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors flex items-center gap-2 flex-wrap">
+                    {subjectDocNumber ? (
+                      <>
+                        <span className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-lg border border-purple-200 dark:border-purple-800 text-sm font-bold shadow-2xs">
+                          {subjectDocNumber}
+                        </span>
+                        <span className="text-slate-300 dark:text-slate-600 font-normal">|</span>
+                        <span>{item.title}</span>
+                      </>
+                    ) : (
+                      <span>{item.title}</span>
+                    )}
                   </h3>
 
                   {/* Metadata: Location, Inspector, Date & Time, Submission Date, Stakeholders */}
@@ -903,9 +946,170 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                 </div>
               </Card>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      ) : (
+        /* Grid / Card View */
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4.5 w-full">
+          {filteredInspections.map(item => {
+            const attachedDocCount = (documents || []).filter(d => 
+              (item.linkedDocumentIds && item.linkedDocumentIds.includes(d.id)) ||
+              d.linkedQAInspectionId === item.id ||
+              (d.tags && d.tags.includes(item.id))
+            ).length;
+
+            const targetQty = item.targetQuantity || 0;
+            const inspectedQty = item.inspectedQuantity || 0;
+            const approvedQty = item.approvedQuantity || 0;
+            const rejectedQty = item.rejectedQuantity || 0;
+            const itemUnit = item.unit || 'm';
+            const mType = item.measurementType || 'Length';
+
+            const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
+            const rejectionPercent = inspectedQty > 0 ? Math.round((rejectedQty / inspectedQty) * 100) : 0;
+
+            const subjectDocNumber = item.referenceDrawingNumber || item.documentNumber;
+
+            return (
+              <Card 
+                key={item.id} 
+                onClick={() => setSelectedInspection(item)}
+                className="p-5 flex flex-col justify-between gap-4 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-md transition-all cursor-pointer group rounded-3xl"
+              >
+                <div className="space-y-3">
+                  {/* Top Bar: ID + Status + Category */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                        {item.id}
+                      </span>
+                      <Badge variant="outline" className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold">
+                        {item.category}
+                      </Badge>
+                    </div>
+
+                    {/* Status badge */}
+                    {item.status === 'Passed' && (
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Passed
+                      </span>
+                    )}
+                    {item.status === 'Failed' && (
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1 rounded-xl border border-rose-200 dark:border-rose-800">
+                        <XCircle className="h-3.5 w-3.5" /> Failed (NCR)
+                      </span>
+                    )}
+                    {item.status === 'Pending Approval' && (
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-xl border border-amber-200 dark:border-amber-800">
+                        <AlertCircle className="h-3.5 w-3.5" /> In Review
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Primary Subject Line */}
+                  <div className="space-y-1">
+                    {subjectDocNumber && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 text-[11px] font-bold">
+                          {item.referenceDrawingNumber ? `Dwg: ${item.referenceDrawingNumber}` : item.documentNumber}
+                        </span>
+                      </div>
+                    )}
+                    <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors line-clamp-2">
+                      {item.title}
+                    </h3>
+                  </div>
+
+                  {/* Measurement Progress Breakdown */}
+                  {(targetQty > 0 || inspectedQty > 0) && (
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-850/80 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1 text-[11px]">
+                          <Ruler className="h-3 w-3 text-emerald-600" />
+                          <span>Scope: {targetQty} {itemUnit}</span>
+                        </span>
+                        <span className="font-mono text-blue-600 text-[11px]">
+                          Inspected: {inspectedQty} {itemUnit}
+                        </span>
+                      </div>
+
+                      {/* Bar */}
+                      <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                        <div 
+                          className="h-full bg-emerald-500 transition-all duration-300"
+                          style={{ width: `${targetQty > 0 ? (approvedQty / targetQty) * 100 : approvalPercent}%` }}
+                          title={`Approved: ${approvedQty} ${itemUnit}`}
+                        />
+                        <div 
+                          className="h-full bg-rose-500 transition-all duration-300"
+                          style={{ width: `${targetQty > 0 ? (rejectedQty / targetQty) * 100 : rejectionPercent}%` }}
+                          title={`Rejected: ${rejectedQty} ${itemUnit}`}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] font-mono font-bold">
+                        <span className="text-emerald-600">✓ {approvedQty} {itemUnit} ({approvalPercent}%)</span>
+                        {rejectedQty > 0 && <span className="text-rose-600">✗ {rejectedQty} {itemUnit}</span>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Metadata Chips */}
+                  <div className="space-y-1 text-xs text-slate-500 pt-1">
+                    <div className="flex items-center justify-between">
+                      <span>Location:</span>
+                      <strong className="text-slate-700 dark:text-slate-300 truncate max-w-[150px]">{item.location}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Inspector:</span>
+                      <strong className="text-slate-700 dark:text-slate-300 truncate max-w-[150px]">{item.inspector}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Date:</span>
+                      <strong className="text-slate-700 dark:text-slate-300 font-mono">{item.date}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Actions */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMeasuringInspection(item);
+                    }}
+                    className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                  >
+                    <Ruler className="h-3.5 w-3.5" /> Measure
+                  </Button>
+
+                  {item.status === 'Pending Approval' && (
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Passed'); }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded-xl h-8 px-2.5 font-bold"
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Failed'); }}
+                        className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs rounded-xl h-8 px-2.5 font-bold"
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
       </>
       )}
 
