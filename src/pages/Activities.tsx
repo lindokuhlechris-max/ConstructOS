@@ -58,11 +58,15 @@ import {
   Zap,
   Package,
   ShieldAlert,
-  Building2
+  Building2,
+  AlertOctagon,
+  AlertTriangle,
+  Clock
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { exportActivitiesToExcel } from '../lib/excelExport';
 import { printActivitiesSummary } from '../lib/pdfPrint';
+import { findActivityResourceConflicts, ActivityResourceVitality } from '../lib/resourceConflictUtils';
 import { WORKSTREAMS, WorkstreamType } from '../types';
 import { ActivityKanbanBoard } from '../components/ActivityKanbanBoard';
 import { ActivityDataTable } from '../components/ActivityDataTable';
@@ -73,9 +77,28 @@ import { ActivityNotesTrackerView } from '../components/ActivityNotesTrackerView
 import { ActivitiesPdfModal } from '../components/ActivitiesPdfModal';
 
 export function Activities() {
-  const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole, currentUserProfile, hasPermission, notes } = useAppContext();
+  const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole, currentUserProfile, hasPermission, notes, equipment, employees } = useAppContext();
   const canEditActivities = hasPermission('activities');
   const [mainScreen, setMainScreen] = useState<'activities' | 'disciplines' | 'daily_logs' | 'notes'>('activities');
+  const [filterConflictOnly, setFilterConflictOnly] = useState(false);
+
+  // Deterministic Living Resource Conflict Map across all activities
+  const activityConflictsMap = React.useMemo(() => {
+    const map = new Map<string, ActivityResourceVitality>();
+    (activities || []).forEach(act => {
+      map.set(act.id, findActivityResourceConflicts(act, activities, equipment || [], employees || []));
+    });
+    return map;
+  }, [activities, equipment, employees]);
+
+  const totalConflictActivities = React.useMemo(() => {
+    let count = 0;
+    activityConflictsMap.forEach(v => {
+      if (v.status === 'CONFLICT' || v.status === 'WARNING') count++;
+    });
+    return count;
+  }, [activityConflictsMap]);
+
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [slideOverActivity, setSlideOverActivity] = useState<Activity | null>(null);
@@ -373,7 +396,15 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
     
     if (!matchesSearch) return false;
 
-    // 2. Timeframe Filter
+    // 2. Resource Conflict Filter
+    if (filterConflictOnly) {
+      const vitality = activityConflictsMap.get(a.id);
+      if (!vitality || (vitality.status !== 'CONFLICT' && vitality.status !== 'WARNING')) {
+        return false;
+      }
+    }
+
+    // 3. Timeframe Filter
     if (timeframe === 'all') return true;
 
     const today = new Date();
@@ -795,6 +826,28 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
                 )}
               </div>
 
+              {/* Conflict Radar Quick Filter Pill */}
+              <button
+                type="button"
+                onClick={() => setFilterConflictOnly(!filterConflictOnly)}
+                className={`h-10 px-3 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs ${
+                  filterConflictOnly
+                    ? 'bg-red-50 dark:bg-red-950/60 border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 ring-2 ring-red-500/30'
+                    : totalConflictActivities > 0
+                    ? 'bg-white dark:bg-slate-900 border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50/50'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50'
+                }`}
+                title="Filter activities with active equipment or resource scheduling clashes"
+              >
+                <AlertOctagon className={`h-3.5 w-3.5 ${filterConflictOnly || totalConflictActivities > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400'}`} />
+                <span>Conflicts</span>
+                {totalConflictActivities > 0 && (
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${filterConflictOnly ? 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100' : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'}`}>
+                    {totalConflictActivities}
+                  </span>
+                )}
+              </button>
+
               {/* View Mode Switcher Toolbar (Icon Only) */}
               <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-0.5 border border-slate-200/80 dark:border-slate-700/80">
                 <button
@@ -944,6 +997,50 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
                             {subtasks.filter(s => s.isHoldPoint && s.holdPointSignOff?.approved).length}/{subtasks.filter(s => s.isHoldPoint).length} Hold Points
                           </span>
                         )}
+
+                        {/* Living Resource Vitality Pill */}
+                        {(() => {
+                          const vitality = activityConflictsMap.get(activity.id);
+                          if (!vitality) return null;
+                          if (vitality.status === 'CONFLICT') {
+                            return (
+                              <span 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedActivity(activity);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+                                title="Click to view and resolve active plant collisions"
+                              >
+                                <AlertTriangle className="h-3 w-3 text-red-600 animate-pulse" />
+                                {vitality.label}
+                              </span>
+                            );
+                          }
+                          if (vitality.status === 'WARNING') {
+                            return (
+                              <span 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedActivity(activity);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition-colors"
+                              >
+                                <Clock className="h-3 w-3 text-amber-600" />
+                                {vitality.label}
+                              </span>
+                            );
+                          }
+                          if (vitality.equipmentCount > 0) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                {vitality.label}
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
 
                         {activity.photos && activity.photos.length > 0 && (
                           <Badge variant="default" className="text-[10px] bg-blue-50 text-[#0B5FFF] border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 font-bold gap-1">

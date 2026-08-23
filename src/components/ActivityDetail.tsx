@@ -15,6 +15,7 @@ import { ActivityDetailPdfModal } from './ActivityDetailPdfModal';
 import { ActivityAuditScreen } from './ActivityAuditScreen';
 import { useAppContext } from '../context/AppContext';
 import { getPersonInitials, normalizeLabourAssignments, isEmployeeAlreadyAssigned, getLoggedHoursForWorker } from '../lib/labourUtils';
+import { findActivityResourceConflicts, getAvailableAlternativeEquipment, ResourceConflict } from '../lib/resourceConflictUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { saveOrShareFile } from '../lib/fileExportService';
@@ -76,7 +77,10 @@ import {
   Compass,
   Zap,
   Link2,
-  ShieldCheck
+  ShieldCheck,
+  Wrench,
+  ArrowRightLeft,
+  AlertOctagon
 } from 'lucide-react';
 
 interface ActivityDetailProps {
@@ -112,6 +116,80 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
   const normalizedLabour = React.useMemo(() => 
     normalizeLabourAssignments(activity.assignedLabour, employees), 
   [activity.assignedLabour, employees]);
+
+  // Deterministic Living Resource Vitality & Conflict Calculation
+  const resourceVitality = React.useMemo(() => 
+    findActivityResourceConflicts(activity, activities, equipment, employees),
+  [activity, activities, equipment, employees]);
+
+  const [swappingConflict, setSwappingConflict] = useState<ResourceConflict | null>(null);
+
+  const availableAlternatives = React.useMemo(() => {
+    if (!swappingConflict) return [];
+    return getAvailableAlternativeEquipment(
+      equipment,
+      activities,
+      activity.startDate || new Date().toISOString().split('T')[0],
+      activity.finishDate || activity.startDate || new Date().toISOString().split('T')[0],
+      swappingConflict.resourceId,
+      swappingConflict.category
+    );
+  }, [swappingConflict, equipment, activities, activity.startDate, activity.finishDate]);
+
+  const handleSwapEquipment = (oldResourceIdOrName: string, newEquip: import('../types').Equipment) => {
+    const oldNorm = oldResourceIdOrName.toLowerCase().trim();
+    const updatedAssigned = (activity.assignedEquipment || []).map(eq => {
+      const isTarget = (eq.equipmentId && eq.equipmentId.toLowerCase() === oldNorm) ||
+                       (eq.name && eq.name.toLowerCase().trim() === oldNorm) ||
+                       (eq.id && eq.id.toLowerCase() === oldNorm);
+      if (isTarget) {
+        return {
+          ...eq,
+          equipmentId: newEquip.id || eq.equipmentId,
+          name: newEquip.name,
+          operator: newEquip.operator || eq.operator || 'Assigned Operator',
+          notes: `Swapped from ${eq.name} to resolve site scheduling conflict.`
+        };
+      }
+      return eq;
+    });
+
+    const updatedSubtasks = (activity.subtasks || []).map(st => {
+      const eqList = (st.assignedEquipmentList || []).map(eqName => 
+        eqName.toLowerCase().trim() === oldNorm ? newEquip.name : eqName
+      );
+      return {
+        ...st,
+        assignedEquipmentList: eqList,
+        assignedEquipment: st.assignedEquipment && st.assignedEquipment.toLowerCase().trim() === oldNorm
+          ? newEquip.name
+          : st.assignedEquipment
+      };
+    });
+
+    const today = new Date().toISOString().split('T')[0];
+    const updated: Activity = {
+      ...activity,
+      assignedEquipment: updatedAssigned,
+      subtasks: updatedSubtasks,
+      updatedAt: today
+    };
+
+    setActivity(updated);
+    if (onSave) onSave(updated, initialActivity.id);
+    else updateActivity(updated, initialActivity.id);
+
+    addAuditLog({
+      id: `AL-${Math.random().toString(36).substr(2, 9)}`,
+      projectId: activity.projectId,
+      userId: currentUserProfile?.name || 'Site Supervisor',
+      action: 'Equipment Swapped (Conflict Resolution)',
+      details: `Swapped "${oldResourceIdOrName}" with "${newEquip.name}" (${newEquip.id || ''}) on "${activity.name}" (${activity.id})`,
+      timestamp: new Date().toISOString()
+    });
+
+    setSwappingConflict(null);
+  };
 
   // Cross-Workstream Multi-Discipline Handshake Data
   const crossDisciplineData = React.useMemo(() => {
@@ -1289,6 +1367,72 @@ ${subtaskSummaryLines}
         </div>
       </div>
 
+      {/* Living Resource Conflict Radar Alert */}
+      {resourceVitality.conflicts.length > 0 && (
+        <div className="p-4 rounded-2xl bg-red-50/95 dark:bg-red-950/40 border border-red-200 dark:border-red-800/80 shadow-xs flex flex-col gap-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+              </span>
+              <div>
+                <div className="text-xs font-black uppercase tracking-wider text-red-900 dark:text-red-200 flex items-center gap-2">
+                  <span>Living Resource Vitality Alert: {resourceVitality.label}</span>
+                </div>
+                <div className="text-[11px] text-red-700/90 dark:text-red-300/90">
+                  Assigned plant or crew allocations on this activity collide with other concurrent work on site.
+                </div>
+              </div>
+            </div>
+            <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800">
+              {resourceVitality.conflicts.length} Active Collision{resourceVitality.conflicts.length > 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="space-y-2 pt-1 border-t border-red-100 dark:border-red-900/40">
+            {resourceVitality.conflicts.map(conf => (
+              <div key={conf.id} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-red-100 dark:border-red-900/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+                <div className="flex items-start gap-2.5">
+                  <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950 text-red-600 shrink-0 mt-0.5 border border-red-100 dark:border-red-900/40">
+                    {conf.type === 'EQUIPMENT_MAINTENANCE' ? <Wrench className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
+                      <span>{conf.resourceName}</span>
+                      {conf.conflictingActivityId && (
+                        <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          vs {conf.conflictingActivityId}
+                        </span>
+                      )}
+                      {conf.overlapDays ? (
+                        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                          ({conf.overlapDays} days overlap)
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                      {conf.message}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSwappingConflict(conf)}
+                    className="h-8 text-xs font-bold gap-1.5 rounded-xl text-[#0B5FFF] border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                  >
+                    <ArrowRightLeft className="h-3.5 w-3.5" /> Swap Plant
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -1872,31 +2016,77 @@ ${subtaskSummaryLines}
 
               {/* Equipment Assigned */}
               <div>
-                <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider mb-2.5 flex items-center gap-1.5">
-                  <Truck className="h-3.5 w-3.5 text-amber-500" /> Allocated Equipment ({activity.assignedEquipment?.length || 0})
-                </h4>
+                <div className="flex items-center justify-between mb-2.5 flex-wrap gap-2">
+                  <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                    <Truck className="h-3.5 w-3.5 text-amber-500" /> Allocated Equipment ({activity.assignedEquipment?.length || 0})
+                  </h4>
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${resourceVitality.badgeClass}`}>
+                    {resourceVitality.status === 'OPTIMAL' && <CheckCircle2 className="h-3 w-3 text-emerald-600" />}
+                    {resourceVitality.status === 'CONFLICT' && <AlertTriangle className="h-3 w-3 text-red-600" />}
+                    {resourceVitality.status === 'WARNING' && <Clock className="h-3 w-3 text-amber-600" />}
+                    {resourceVitality.label}
+                  </span>
+                </div>
+
                 {(!activity.assignedEquipment || activity.assignedEquipment.length === 0) ? (
                   <p className="text-xs text-slate-400 italic bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
                     No heavy equipment allocated to this task. Click "Assign Resources" to assign machinery.
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {activity.assignedEquipment.map(eq => (
-                      <div key={eq.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center shrink-0">
-                            <Truck className="h-4 w-4" />
+                    {activity.assignedEquipment.map(eq => {
+                      const matchedConflict = resourceVitality.conflicts.find(c => 
+                        (c.resourceId && eq.equipmentId && c.resourceId.toLowerCase() === eq.equipmentId.toLowerCase()) ||
+                        (c.resourceName && c.resourceName.toLowerCase().trim() === eq.name.toLowerCase().trim())
+                      );
+
+                      return (
+                        <div 
+                          key={eq.id} 
+                          className={`flex flex-col justify-between p-3 rounded-xl border transition-all ${
+                            matchedConflict 
+                              ? 'bg-red-50/60 dark:bg-red-950/30 border-red-200 dark:border-red-800/60 shadow-xs' 
+                              : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                matchedConflict 
+                                  ? 'bg-red-100 dark:bg-red-900/60 text-red-600' 
+                                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-600'
+                              }`}>
+                                <Truck className="h-4 w-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{eq.name}</p>
+                                <p className="text-[11px] text-slate-500 truncate">Operator: <span className="font-semibold text-amber-600 dark:text-amber-400">{eq.operator || 'Assigned Operator'}</span></p>
+                              </div>
+                            </div>
+                            <Button size="sm" variant="ghost" onClick={() => handleRemoveEquipmentAssignment(eq.id)} className="h-7 w-7 p-0 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg shrink-0">
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
-                          <div>
-                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{eq.name}</p>
-                            <p className="text-[11px] text-slate-500">Operator: <span className="font-semibold text-amber-600 dark:text-amber-400">{eq.operator || 'Assigned Operator'}</span></p>
-                          </div>
+
+                          {matchedConflict && (
+                            <div className="mt-2.5 pt-2 border-t border-red-200/80 dark:border-red-800/60 flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold text-red-700 dark:text-red-300 flex items-center gap-1 truncate">
+                                <AlertOctagon className="h-3 w-3 shrink-0" />
+                                {matchedConflict.type === 'EQUIPMENT_MAINTENANCE' ? 'Plant in Breakdown' : `Clash vs ${matchedConflict.conflictingActivityId || 'other task'}`}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSwappingConflict(matchedConflict)}
+                                className="h-6 text-[10px] font-bold px-2 rounded-lg bg-white dark:bg-slate-900 text-[#0B5FFF] border-blue-200 dark:border-blue-800 hover:bg-blue-50"
+                              >
+                                Swap Plant
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                        <Button size="sm" variant="ghost" onClick={() => handleRemoveEquipmentAssignment(eq.id)} className="h-7 w-7 p-0 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg">
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -3724,6 +3914,124 @@ ${subtaskSummaryLines}
               projectId={activity.projectId}
               onBack={() => setIsAuditModalOpen(false)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Plant Swap Modal (Conflict Resolution) */}
+      {swappingConflict && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+          onClick={() => setSwappingConflict(null)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-900/80">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF]">
+                  <ArrowRightLeft className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Swap Plant Unit</h3>
+                  <p className="text-xs text-slate-500">Resolve site contention on {activity.id}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSwappingConflict(null)}
+                className="h-8 w-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex flex-col gap-4">
+              {/* Conflict Context Summary */}
+              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-xs">
+                <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5 mb-1">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  Currently Assigned: {swappingConflict.resourceName}
+                </div>
+                <div className="text-[11px] text-amber-800/90 dark:text-amber-300/90">
+                  {swappingConflict.message}
+                </div>
+                <div className="mt-2 text-[10px] font-mono text-amber-700 dark:text-amber-400">
+                  Required Window: {activity.startDate || 'N/A'} → {activity.finishDate || activity.startDate || 'N/A'}
+                </div>
+              </div>
+
+              {/* Available Fleet Alternatives */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Available Plant in Fleet ({availableAlternatives.length})
+                  </span>
+                  <span className="text-[10px] text-emerald-600 font-bold">
+                    ✓ Verified 0 Date Clashes
+                  </span>
+                </div>
+
+                {availableAlternatives.length === 0 ? (
+                  <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-500">
+                    <p className="font-semibold text-slate-700 dark:text-slate-300">No alternate machinery available</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      All other fleet units in this category are currently booked or undergoing maintenance during this window. Consider shifting activity schedule dates.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                    {availableAlternatives.map(({ equipment: altEq, isSameCategory }) => (
+                      <div 
+                        key={altEq.id}
+                        className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 hover:border-[#0B5FFF] dark:hover:border-blue-500 transition-all flex items-center justify-between gap-3 group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-[#0B5FFF] flex items-center justify-center shrink-0">
+                            <Truck className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                {altEq.name}
+                              </span>
+                              {isSameCategory && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                  Same Category
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5">
+                              <span>ID: {altEq.id}</span>
+                              <span>•</span>
+                              <span>Operator: {altEq.operator || 'Assigned Operator'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <Button
+                          size="sm"
+                          onClick={() => handleSwapEquipment(swappingConflict.resourceId, altEq)}
+                          className="h-8 px-3 rounded-xl bg-[#0B5FFF] hover:bg-blue-600 text-white text-xs font-bold shrink-0"
+                        >
+                          Select & Swap
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setSwappingConflict(null)}
+                className="rounded-xl text-xs"
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
         </div>
       )}
