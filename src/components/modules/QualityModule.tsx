@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, CustomSelect } from '../ui';
 import { 
@@ -30,7 +30,10 @@ import {
   List as ListIcon,
   Table as TableIcon,
   Copy,
-  Printer
+  Printer,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { QAInspectionItem, QAMeasurementType } from '../../types';
@@ -127,20 +130,81 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   const [rejectedQuantity, setRejectedQuantity] = useState<string>('0');
   const [toleranceSpec, setToleranceSpec] = useState<string>('±10mm / SANS 1200');
 
-  const filteredInspections = qaInspections.filter(item => {
-    const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.inspector.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.documentNumber && item.documentNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (item.referenceDrawingNumber && item.referenceDrawingNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (item.client && item.client.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (item.epc && item.epc.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (item.subcontractor && item.subcontractor.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (item.location && item.location.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    if (statusFilter === 'All') return matchesSearch;
-    return matchesSearch && item.status === statusFilter;
-  });
+  // Sorting state for QA/QC Register Table
+  type QASortField = 'id' | 'date' | 'title' | 'category' | 'location' | 'inspector' | 'quantity' | 'status';
+  type SortDirection = 'asc' | 'desc';
+
+  const [sortField, setSortField] = useState<QASortField>('date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (field: QASortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'date' || field === 'quantity' ? 'desc' : 'asc');
+    }
+  };
+
+  const filteredInspections = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    const filtered = qaInspections.filter(item => {
+      const matchesSearch = item.title.toLowerCase().includes(searchLower) ||
+        item.category.toLowerCase().includes(searchLower) ||
+        item.inspector.toLowerCase().includes(searchLower) ||
+        (item.id && item.id.toLowerCase().includes(searchLower)) ||
+        (item.documentNumber && item.documentNumber.toLowerCase().includes(searchLower)) ||
+        (item.referenceDrawingNumber && item.referenceDrawingNumber.toLowerCase().includes(searchLower)) ||
+        (item.documentNumbers && item.documentNumbers.some(d => d.toLowerCase().includes(searchLower))) ||
+        (item.referenceDrawingNumbers && item.referenceDrawingNumbers.some(d => d.toLowerCase().includes(searchLower))) ||
+        (item.client && item.client.toLowerCase().includes(searchLower)) ||
+        (item.epc && item.epc.toLowerCase().includes(searchLower)) ||
+        (item.subcontractor && item.subcontractor.toLowerCase().includes(searchLower)) ||
+        (item.location && item.location.toLowerCase().includes(searchLower));
+      
+      if (statusFilter === 'All') return matchesSearch;
+      return matchesSearch && item.status === statusFilter;
+    });
+
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'id':
+          comparison = (a.id || '').localeCompare(b.id || '', undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        case 'date': {
+          const dateA = new Date(`${a.date || '1970-01-01'}T${a.inspectionTime || '00:00'}`).getTime();
+          const dateB = new Date(`${b.date || '1970-01-01'}T${b.inspectionTime || '00:00'}`).getTime();
+          comparison = dateA - dateB;
+          break;
+        }
+        case 'title':
+          comparison = (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+          break;
+        case 'category':
+          comparison = (a.category || '').localeCompare(b.category || '', undefined, { sensitivity: 'base' });
+          break;
+        case 'location':
+          comparison = (a.location || '').localeCompare(b.location || '', undefined, { sensitivity: 'base' });
+          break;
+        case 'inspector':
+          comparison = (a.inspector || '').localeCompare(b.inspector || '', undefined, { sensitivity: 'base' });
+          break;
+        case 'quantity': {
+          const qtyA = a.targetQuantity || a.inspectedQuantity || 0;
+          const qtyB = b.targetQuantity || b.inspectedQuantity || 0;
+          comparison = qtyA - qtyB;
+          break;
+        }
+        case 'status':
+          comparison = (a.status || '').localeCompare(b.status || '');
+          break;
+        default:
+          comparison = 0;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [qaInspections, searchTerm, statusFilter, sortField, sortDirection]);
 
   // Calculate Overall Quality Scope and Clearance Stats
   const totalTrackedTarget = qaInspections.reduce((acc, curr) => acc + (curr.targetQuantity || 0), 0);
@@ -1311,12 +1375,98 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             <table className="w-full text-left border-collapse text-xs min-w-[950px]">
               <thead>
                 <tr className="bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="py-3.5 px-4 whitespace-nowrap">Inspection ID & Date</th>
-                  <th className="py-3.5 px-4 min-w-[280px]">Subject & Reference Drawings</th>
-                  <th className="py-3.5 px-4 min-w-[140px]">Discipline & Spec</th>
-                  <th className="py-3.5 px-4 min-w-[160px]">Location & Inspector</th>
-                  <th className="py-3.5 px-4 min-w-[220px]">Physical Scope & Quantities</th>
-                  <th className="py-3.5 px-4 text-center min-w-[120px]">Status</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('id')}
+                      className={`inline-flex items-center gap-1.5 font-bold uppercase tracking-wider transition-colors select-none group text-left hover:text-slate-900 dark:hover:text-white ${
+                        sortField === 'id' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'
+                      }`}
+                      title="Sort by Inspection ID & Date"
+                    >
+                      <span>Inspection ID & Date</span>
+                      <span className={`${sortField === 'id' ? 'opacity-100 text-emerald-600 dark:text-emerald-400' : 'opacity-40 group-hover:opacity-80'}`}>
+                        {sortField === 'id' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5" />}
+                      </span>
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4 min-w-[280px]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('title')}
+                      className={`inline-flex items-center gap-1.5 font-bold uppercase tracking-wider transition-colors select-none group text-left hover:text-slate-900 dark:hover:text-white ${
+                        sortField === 'title' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'
+                      }`}
+                      title="Sort by Subject & Reference Drawings"
+                    >
+                      <span>Subject & Reference Drawings</span>
+                      <span className={`${sortField === 'title' ? 'opacity-100 text-emerald-600 dark:text-emerald-400' : 'opacity-40 group-hover:opacity-80'}`}>
+                        {sortField === 'title' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5" />}
+                      </span>
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4 min-w-[140px]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('category')}
+                      className={`inline-flex items-center gap-1.5 font-bold uppercase tracking-wider transition-colors select-none group text-left hover:text-slate-900 dark:hover:text-white ${
+                        sortField === 'category' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'
+                      }`}
+                      title="Sort by Discipline & Spec"
+                    >
+                      <span>Discipline & Spec</span>
+                      <span className={`${sortField === 'category' ? 'opacity-100 text-emerald-600 dark:text-emerald-400' : 'opacity-40 group-hover:opacity-80'}`}>
+                        {sortField === 'category' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5" />}
+                      </span>
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4 min-w-[160px]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('location')}
+                      className={`inline-flex items-center gap-1.5 font-bold uppercase tracking-wider transition-colors select-none group text-left hover:text-slate-900 dark:hover:text-white ${
+                        sortField === 'location' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'
+                      }`}
+                      title="Sort by Location & Inspector"
+                    >
+                      <span>Location & Inspector</span>
+                      <span className={`${sortField === 'location' ? 'opacity-100 text-emerald-600 dark:text-emerald-400' : 'opacity-40 group-hover:opacity-80'}`}>
+                        {sortField === 'location' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5" />}
+                      </span>
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4 min-w-[220px]">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('quantity')}
+                      className={`inline-flex items-center gap-1.5 font-bold uppercase tracking-wider transition-colors select-none group text-left hover:text-slate-900 dark:hover:text-white ${
+                        sortField === 'quantity' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'
+                      }`}
+                      title="Sort by Physical Scope & Quantities"
+                    >
+                      <span>Physical Scope & Quantities</span>
+                      <span className={`${sortField === 'quantity' ? 'opacity-100 text-emerald-600 dark:text-emerald-400' : 'opacity-40 group-hover:opacity-80'}`}>
+                        {sortField === 'quantity' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5" />}
+                      </span>
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4 text-center min-w-[120px]">
+                    <div className="flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => handleSort('status')}
+                        className={`inline-flex items-center gap-1.5 font-bold uppercase tracking-wider transition-colors select-none group hover:text-slate-900 dark:hover:text-white ${
+                          sortField === 'status' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'
+                        }`}
+                        title="Sort by Status"
+                      >
+                        <span>Status</span>
+                        <span className={`${sortField === 'status' ? 'opacity-100 text-emerald-600 dark:text-emerald-400' : 'opacity-40 group-hover:opacity-80'}`}>
+                          {sortField === 'status' ? (sortDirection === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5" />}
+                        </span>
+                      </button>
+                    </div>
+                  </th>
                   <th className="py-3.5 px-4 text-right min-w-[160px]">Actions</th>
                 </tr>
               </thead>
