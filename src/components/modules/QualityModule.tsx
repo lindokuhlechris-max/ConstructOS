@@ -35,6 +35,7 @@ import { QualityDetail } from '../QualityDetail';
 import { QAMeasurementModal } from '../QAMeasurementModal';
 import { QualityTotalsAnalytics } from '../QualityTotalsAnalytics';
 import { QAActivityMultiSelectModal } from '../quality/QAActivityMultiSelectModal';
+import { MultiDrawingInput } from '../quality/MultiDrawingInput';
 
 interface QualityModuleProps {
   onBack: () => void;
@@ -102,11 +103,11 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   const [client, setClient] = useState('');
   const [epc, setEpc] = useState('Scedih Engineering (EPC)');
   const [subcontractor, setSubcontractor] = useState('');
-  const [documentNumber, setDocumentNumber] = useState(`QA-ITR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
+  const [documentNumbers, setDocumentNumbers] = useState<string[]>([`QA-ITR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`]);
   const [inspectionDate, setInspectionDate] = useState(new Date().toISOString().split('T')[0]);
   const [inspectionTime, setInspectionTime] = useState(new Date().toTimeString().substring(0, 5));
   const [submissionDate, setSubmissionDate] = useState(new Date().toISOString().split('T')[0]);
-  const [referenceDrawingNumber, setReferenceDrawingNumber] = useState('');
+  const [referenceDrawingNumbers, setReferenceDrawingNumbers] = useState<string[]>([]);
 
   const [clientQCRepresentative, setClientQCRepresentative] = useState('');
   const [clientQCStatus, setClientQCStatus] = useState<'Approved' | 'Rejected' | 'Pending Client Review'>('Pending Client Review');
@@ -175,8 +176,10 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       client: client.trim() || undefined,
       epc: epc.trim() || undefined,
       subcontractor: subcontractor.trim() || undefined,
-      documentNumber: documentNumber.trim() || undefined,
-      referenceDrawingNumber: referenceDrawingNumber.trim() || undefined,
+      documentNumber: documentNumbers.join(', ') || undefined,
+      documentNumbers: documentNumbers.length > 0 ? documentNumbers : undefined,
+      referenceDrawingNumber: referenceDrawingNumbers.join(', ') || undefined,
+      referenceDrawingNumbers: referenceDrawingNumbers.length > 0 ? referenceDrawingNumbers : undefined,
 
       clientQCRepresentative,
       clientQCStatus,
@@ -204,7 +207,8 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     setLocation('');
     setClient('');
     setSubcontractor('');
-    setReferenceDrawingNumber('');
+    setDocumentNumbers([`QA-ITR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`]);
+    setReferenceDrawingNumbers([]);
     setClientQCRepresentative('');
     setSelectedActivityIds(activities[0]?.id ? [activities[0].id] : []);
     setTargetQuantity('100');
@@ -542,17 +546,15 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   />
                 </div>
 
-                {/* 4. Drawing / RFI / Document Number */}
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                    4. Drawing / RFI / Document Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. MVT-HDEC-MBEU-RFI-002 / QA-ITR-042"
-                    value={documentNumber}
-                    onChange={e => setDocumentNumber(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                {/* 4. Drawing / RFI / Document Numbers */}
+                <div className="md:col-span-2 lg:col-span-3">
+                  <MultiDrawingInput
+                    label="4. Drawing / RFI / Document Numbers"
+                    icon="document"
+                    colorTheme="blue"
+                    values={documentNumbers}
+                    onChange={setDocumentNumbers}
+                    placeholder="e.g. MVT-HDEC-MBEU-RFI-002, QA-ITR-042 (Press Enter to add multiple)"
                   />
                 </div>
 
@@ -590,17 +592,15 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   />
                 </div>
 
-                {/* 7. Reference Drawing Number */}
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                    7. Reference Plan / Layout Drawing
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. DWG-MV-201-REV-04 / SEC-B-B"
-                    value={referenceDrawingNumber}
-                    onChange={e => setReferenceDrawingNumber(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                {/* 7. Reference Drawing Numbers */}
+                <div className="md:col-span-2 lg:col-span-3">
+                  <MultiDrawingInput
+                    label="7. Reference Plan / Layout Drawings"
+                    icon="drawing"
+                    colorTheme="purple"
+                    values={referenceDrawingNumbers}
+                    onChange={setReferenceDrawingNumbers}
+                    placeholder="e.g. DWG-MV-201-REV-04, DWG-MV-202-REV-02, SEC-B-B"
                   />
                 </div>
               </div>
@@ -832,7 +832,13 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
             const rejectionPercent = inspectedQty > 0 ? Math.round((rejectedQty / inspectedQty) * 100) : 0;
 
-            const subjectDocNumber = item.documentNumber || item.referenceDrawingNumber;
+            const docNumbers = (item.documentNumbers && item.documentNumbers.length > 0)
+              ? item.documentNumbers
+              : (item.documentNumber ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+            const dwgNumbers = (item.referenceDrawingNumbers && item.referenceDrawingNumbers.length > 0)
+              ? item.referenceDrawingNumbers
+              : (item.referenceDrawingNumber ? item.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+            const allSubjectNumbers = Array.from(new Set([...docNumbers, ...dwgNumbers]));
 
             return (
               <Card 
@@ -844,18 +850,6 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   {/* Tags line */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-mono font-bold text-emerald-600">{item.id}</span>
-                    
-                    {item.documentNumber && (
-                      <span className="text-[10px] font-mono font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 flex items-center gap-1">
-                        <FileText className="h-3 w-3" /> {item.documentNumber}
-                      </span>
-                    )}
-
-                    {item.referenceDrawingNumber && (
-                      <span className="text-[10px] font-mono font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 flex items-center gap-1">
-                        <Layers className="h-3 w-3" /> Dwg: {item.referenceDrawingNumber}
-                      </span>
-                    )}
 
                     {item.submissionDate && (
                       <span className="text-[10px] font-mono font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 flex items-center gap-1">
@@ -888,13 +882,17 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                     )}
                   </div>
 
-                  {/* Primary Subject Heading (Drawing/Doc Number as Subject) */}
+                  {/* Primary Subject Heading (Drawing/Doc Numbers as Subject) */}
                   <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors flex items-center gap-2 flex-wrap">
-                    {subjectDocNumber ? (
+                    {allSubjectNumbers.length > 0 ? (
                       <>
-                        <span className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 text-sm font-bold shadow-2xs">
-                          {subjectDocNumber}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {allSubjectNumbers.map((num, i) => (
+                            <span key={i} className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 text-sm font-bold shadow-2xs">
+                              {num}
+                            </span>
+                          ))}
+                        </div>
                         <span className="text-slate-300 dark:text-slate-600 font-normal">|</span>
                         <span>{item.title}</span>
                       </>
@@ -1026,7 +1024,13 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
             const rejectionPercent = inspectedQty > 0 ? Math.round((rejectedQty / inspectedQty) * 100) : 0;
 
-            const subjectDocNumber = item.documentNumber || item.referenceDrawingNumber;
+            const docNumbers = (item.documentNumbers && item.documentNumbers.length > 0)
+              ? item.documentNumbers
+              : (item.documentNumber ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+            const dwgNumbers = (item.referenceDrawingNumbers && item.referenceDrawingNumbers.length > 0)
+              ? item.referenceDrawingNumbers
+              : (item.referenceDrawingNumber ? item.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+            const allSubjectNumbers = Array.from(new Set([...docNumbers, ...dwgNumbers]));
 
             return (
               <Card 
@@ -1065,12 +1069,14 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   </div>
 
                   {/* Primary Subject Line */}
-                  <div className="space-y-1">
-                    {subjectDocNumber && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 text-xs font-bold">
-                          {subjectDocNumber}
-                        </span>
+                  <div className="space-y-1.5">
+                    {allSubjectNumbers.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {allSubjectNumbers.map((num, i) => (
+                          <span key={i} className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 text-xs font-bold shadow-2xs">
+                            {num}
+                          </span>
+                        ))}
                       </div>
                     )}
                     <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors line-clamp-2">

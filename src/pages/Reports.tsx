@@ -758,19 +758,35 @@ export function Reports() {
                       </span>
                     </div>
 
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-[#0B5FFF] transition-colors flex items-center gap-2 flex-wrap">
-                      {(item.documentNumber || item.referenceDrawingNumber) ? (
-                        <>
-                          <span className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 text-xs font-bold shadow-2xs">
-                            {item.documentNumber || item.referenceDrawingNumber}
-                          </span>
-                          <span className="text-slate-300 dark:text-slate-600 font-normal">|</span>
-                          <span className="truncate">{item.title}</span>
-                        </>
-                      ) : (
-                        <span className="truncate">{item.title}</span>
-                      )}
-                    </h3>
+                    {(() => {
+                      const docs = (item.documentNumbers && item.documentNumbers.length > 0)
+                        ? item.documentNumbers
+                        : (item.documentNumber ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+                      const dwgs = (item.referenceDrawingNumbers && item.referenceDrawingNumbers.length > 0)
+                        ? item.referenceDrawingNumbers
+                        : (item.referenceDrawingNumber ? item.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+                      const allSubjectNumbers = Array.from(new Set([...docs, ...dwgs]));
+
+                      return (
+                        <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-[#0B5FFF] transition-colors flex items-center gap-2 flex-wrap">
+                          {allSubjectNumbers.length > 0 ? (
+                            <>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {allSubjectNumbers.map((num, i) => (
+                                  <span key={i} className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 text-xs font-bold shadow-2xs">
+                                    {num}
+                                  </span>
+                                ))}
+                              </div>
+                              <span className="text-slate-300 dark:text-slate-600 font-normal">|</span>
+                              <span className="truncate">{item.title}</span>
+                            </>
+                          ) : (
+                            <span className="truncate">{item.title}</span>
+                          )}
+                        </h3>
+                      );
+                    })()}
 
                     <div className="flex items-center gap-x-4 gap-y-1 text-xs text-slate-400 flex-wrap">
                       <span>Date: <strong className="text-slate-700 dark:text-slate-300 font-mono">{item.date}</strong></span>
@@ -854,13 +870,25 @@ export function Reports() {
                   </div>
 
                   <div className="space-y-1">
-                    {(item.documentNumber || item.referenceDrawingNumber) && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 text-[11px] font-bold">
-                          {item.referenceDrawingNumber ? `Dwg: ${item.referenceDrawingNumber}` : item.documentNumber}
-                        </span>
-                      </div>
-                    )}
+                    {(() => {
+                      const docs = (item.documentNumbers && item.documentNumbers.length > 0)
+                        ? item.documentNumbers
+                        : (item.documentNumber ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+                      const dwgs = (item.referenceDrawingNumbers && item.referenceDrawingNumbers.length > 0)
+                        ? item.referenceDrawingNumbers
+                        : (item.referenceDrawingNumber ? item.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+                      const allSubjectNumbers = Array.from(new Set([...docs, ...dwgs]));
+
+                      return allSubjectNumbers.length > 0 ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {allSubjectNumbers.map((num, i) => (
+                            <span key={i} className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 text-[11px] font-bold">
+                              {num}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null;
+                    })()}
                     <h3 className="font-bold text-base text-slate-900 dark:text-white group-hover:text-[#0B5FFF] transition-colors line-clamp-2">
                       {item.title}
                     </h3>

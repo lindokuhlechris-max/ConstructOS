@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, CustomSelect } from './ui';
 import { QAActivityMultiSelectModal } from './quality/QAActivityMultiSelectModal';
+import { MultiDrawingInput } from './quality/MultiDrawingInput';
 import { 
   ArrowLeft, 
   CheckCircle2, 
@@ -153,7 +154,9 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     epc: inspection.epc || '',
     subcontractor: inspection.subcontractor || '',
     documentNumber: inspection.documentNumber || '',
+    documentNumbers: inspection.documentNumbers || (inspection.documentNumber ? inspection.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []),
     referenceDrawingNumber: inspection.referenceDrawingNumber || '',
+    referenceDrawingNumbers: inspection.referenceDrawingNumbers || (inspection.referenceDrawingNumber ? inspection.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []),
     activityId: inspection?.activityId,
     linkedActivityId: inspection?.linkedActivityId || inspection?.activityId,
     linkedActivityIds: inspection.linkedActivityIds || (inspection.activityId ? [inspection.activityId] : []),
@@ -354,6 +357,9 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
 
   const handleSaveEditInspection = (e: React.FormEvent) => {
     e.preventDefault();
+    const docNums = editForm.documentNumbers || (editForm.documentNumber ? editForm.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : inspection.documentNumbers);
+    const dwgNums = editForm.referenceDrawingNumbers || (editForm.referenceDrawingNumber ? editForm.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : inspection.referenceDrawingNumbers);
+
     onSave({
       ...inspection,
       title: editForm.title || inspection.title,
@@ -367,8 +373,10 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       client: editForm.client !== undefined ? editForm.client : inspection.client,
       epc: editForm.epc !== undefined ? editForm.epc : inspection.epc,
       subcontractor: editForm.subcontractor !== undefined ? editForm.subcontractor : inspection.subcontractor,
-      documentNumber: editForm.documentNumber !== undefined ? editForm.documentNumber : inspection.documentNumber,
-      referenceDrawingNumber: editForm.referenceDrawingNumber !== undefined ? editForm.referenceDrawingNumber : inspection.referenceDrawingNumber,
+      documentNumber: docNums && docNums.length > 0 ? docNums.join(', ') : (editForm.documentNumber !== undefined ? editForm.documentNumber : inspection.documentNumber),
+      documentNumbers: docNums,
+      referenceDrawingNumber: dwgNums && dwgNums.length > 0 ? dwgNums.join(', ') : (editForm.referenceDrawingNumber !== undefined ? editForm.referenceDrawingNumber : inspection.referenceDrawingNumber),
+      referenceDrawingNumbers: dwgNums,
       linkedActivityIds: editForm.linkedActivityIds !== undefined ? editForm.linkedActivityIds : inspection.linkedActivityIds,
       linkedActivityId: editForm.linkedActivityIds?.[0] || editForm.activityId || inspection.linkedActivityId,
       activityId: editForm.linkedActivityIds?.[0] || editForm.activityId || inspection.activityId,
@@ -527,30 +535,38 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   <FolderOpen className="h-3 w-3" /> {attachedDocuments.length} Attached {attachedDocuments.length === 1 ? 'Doc' : 'Docs'}
                 </span>
               )}
-              {inspection.referenceDrawingNumber && (
-                <span className="text-[10px] font-mono font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 flex items-center gap-1">
-                  <Layers className="h-3 w-3" /> Dwg: {inspection.referenceDrawingNumber}
-                </span>
-              )}
-              {inspection.documentNumber && (
-                <span className="text-[10px] font-mono font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 flex items-center gap-1">
-                  <FileText className="h-3 w-3" /> {inspection.documentNumber}
-                </span>
-              )}
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-              {(inspection.documentNumber || inspection.referenceDrawingNumber) ? (
-                <>
-                  <span className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-xl border border-blue-200 dark:border-blue-800 text-base sm:text-lg font-bold">
-                    {inspection.documentNumber || inspection.referenceDrawingNumber}
-                  </span>
-                  <span className="text-slate-300 dark:text-slate-600 font-normal">|</span>
-                  <span>{inspection.title}</span>
-                </>
-              ) : (
-                <span>{inspection.title}</span>
-              )}
-            </h1>
+            
+            {/* Primary Subject Line */}
+            {(() => {
+              const detailDocNumbers = (inspection.documentNumbers && inspection.documentNumbers.length > 0)
+                ? inspection.documentNumbers
+                : (inspection.documentNumber ? inspection.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+              const detailDwgNumbers = (inspection.referenceDrawingNumbers && inspection.referenceDrawingNumbers.length > 0)
+                ? inspection.referenceDrawingNumbers
+                : (inspection.referenceDrawingNumber ? inspection.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+              const allDetailSubjectNumbers = Array.from(new Set([...detailDocNumbers, ...detailDwgNumbers]));
+
+              return (
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                  {allDetailSubjectNumbers.length > 0 ? (
+                    <>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {allDetailSubjectNumbers.map((num, i) => (
+                          <span key={i} className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-xl border border-blue-200 dark:border-blue-800 text-base sm:text-lg font-bold shadow-2xs">
+                            {num}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-slate-300 dark:text-slate-600 font-normal">|</span>
+                      <span>{inspection.title}</span>
+                    </>
+                  ) : (
+                    <span>{inspection.title}</span>
+                  )}
+                </h1>
+              );
+            })()}
           </div>
         </div>
 
@@ -850,10 +866,23 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">4. Drawing / RFI / Doc Number</span>
-                    <strong className="font-mono text-[#0B5FFF] font-bold">
-                      {inspection.documentNumber || 'QA-ITR-2026-042'}
-                    </strong>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">4. Drawing / RFI / Doc Numbers</span>
+                    {(() => {
+                      const docs = (inspection.documentNumbers && inspection.documentNumbers.length > 0)
+                        ? inspection.documentNumbers
+                        : (inspection.documentNumber ? inspection.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+                      return docs.length > 0 ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {docs.map((doc, idx) => (
+                            <span key={idx} className="font-mono text-[#0B5FFF] dark:text-blue-300 font-bold bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 text-xs flex items-center gap-1">
+                              <FileText className="h-3 w-3" /> {doc}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <strong className="font-mono text-[#0B5FFF] font-bold text-xs">None Specified</strong>
+                      );
+                    })()}
                   </div>
 
                   <div>
@@ -869,10 +898,23 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">6. Reference Plan / Layout Drawing</span>
-                    <strong className="font-mono text-purple-600 dark:text-purple-400 font-bold">
-                      {inspection.referenceDrawingNumber || 'DWG-MV-201-REV-04'}
-                    </strong>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">6. Reference Plan / Layout Drawings</span>
+                    {(() => {
+                      const dwgs = (inspection.referenceDrawingNumbers && inspection.referenceDrawingNumbers.length > 0)
+                        ? inspection.referenceDrawingNumbers
+                        : (inspection.referenceDrawingNumber ? inspection.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+                      return dwgs.length > 0 ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {dwgs.map((dwg, idx) => (
+                            <span key={idx} className="font-mono text-purple-700 dark:text-purple-300 font-bold bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-lg border border-purple-200 dark:border-purple-800 text-xs flex items-center gap-1">
+                              <Layers className="h-3 w-3" /> {dwg}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <strong className="font-mono text-purple-600 dark:text-purple-400 font-bold text-xs">None Specified</strong>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -2266,7 +2308,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Inspector (QC/QA) *</label>
                   <CustomSelect
@@ -2280,13 +2322,17 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">4. Drawing / RFI / Document Number</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. MVT-HDEC-MBEU-RFI-002 / QA-ITR-042"
-                    value={editForm.documentNumber}
-                    onChange={e => setEditForm({ ...editForm, documentNumber: e.target.value })}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm font-mono font-bold"
+                  <MultiDrawingInput
+                    label="4. Drawing / RFI / Document Numbers"
+                    icon="document"
+                    colorTheme="blue"
+                    values={editForm.documentNumbers || []}
+                    onChange={nums => setEditForm(prev => ({ 
+                      ...prev, 
+                      documentNumbers: nums, 
+                      documentNumber: nums.join(', ') 
+                    }))}
+                    placeholder="e.g. MVT-HDEC-MBEU-RFI-002, QA-ITR-042"
                   />
                 </div>
               </div>
@@ -2328,7 +2374,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
               </div>
 
               {/* Date & Time, Due Date + Drawing Reference */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">5. Inspection Date & Time</label>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -2357,14 +2403,18 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">6. Reference Plan / Layout Drawing</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. DWG-MV-201-REV-04"
-                    value={editForm.referenceDrawingNumber}
-                    onChange={e => setEditForm({ ...editForm, referenceDrawingNumber: e.target.value })}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-mono font-bold"
+                <div className="md:col-span-2 space-y-1.5">
+                  <MultiDrawingInput
+                    label="6. Reference Plan / Layout Drawings"
+                    icon="drawing"
+                    colorTheme="purple"
+                    values={editForm.referenceDrawingNumbers || []}
+                    onChange={nums => setEditForm(prev => ({ 
+                      ...prev, 
+                      referenceDrawingNumbers: nums, 
+                      referenceDrawingNumber: nums.join(', ') 
+                    }))}
+                    placeholder="e.g. DWG-MV-201-REV-04, DWG-MV-202-REV-02, SEC-B-B"
                   />
                 </div>
               </div>

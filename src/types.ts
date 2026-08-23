@@ -760,7 +760,9 @@ export interface QAInspectionItem {
   epc?: string;
   subcontractor?: string;
   documentNumber?: string;
+  documentNumbers?: string[];
   referenceDrawingNumber?: string;
+  referenceDrawingNumbers?: string[];
 
   // Measurement & Quality Inspection Scope
   measurementType?: QAMeasurementType;
@@ -1726,8 +1728,11 @@ export interface UniversalReportItem<TData = any> {
   subcontractor?: string;
   location?: string;
   chainage?: string;
+  documentNumbers?: string[];
   referenceDrawingNumber?: string;
+  referenceDrawingNumbers?: string[];
   linkedActivityId?: string;
+  linkedActivityIds?: string[];
 
   // Domain Specific Typed Payload
   data: TData;
