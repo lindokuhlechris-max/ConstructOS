@@ -20128,6 +20128,18 @@
       "entityType": "QA",
       "entityId": "QA-621",
       "actionType": "update"
+    },
+    {
+      "id": "AL-mt5eou0w-jl07",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T06:08:22.016Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
     }
   ],
   "allocations": [],
@@ -21141,7 +21153,15 @@
       "clientQCStatus": "Pending Client Review",
       "clientQCSignoffDate": "2026-08-23",
       "linkedDocumentIds": [],
-      "clientQCNotes": ""
+      "clientQCNotes": "",
+      "measurementType": "Length",
+      "unit": "m",
+      "targetQuantity": 150,
+      "inspectedQuantity": 140,
+      "approvedQuantity": 0,
+      "rejectedQuantity": 0,
+      "toleranceSpec": "",
+      "measurementItems": []
     }
   ],
   "userProfiles": [

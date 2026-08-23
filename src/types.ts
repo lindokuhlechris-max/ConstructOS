@@ -691,6 +691,54 @@ export interface QAMeasurementRecord {
   testedBy?: string;
 }
 
+export type QARFIType = 
+  | 'Request For Inspection (WIR)' 
+  | 'Request For Information (Technical Query)' 
+  | 'Hold Point Clearance' 
+  | 'Material Approval Request'
+  | 'Method Statement Sign-off';
+
+export type QARFIStatus = 
+  | 'Draft' 
+  | 'Submitted' 
+  | 'Under Review' 
+  | 'Approved' 
+  | 'Approved with Comments' 
+  | 'Rejected / Revise' 
+  | 'Closed';
+
+export type QARFIPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export interface QARFIItem {
+  id: string;
+  rfiNumber: string; // e.g. RFI-2026-001 or WIR-042
+  projectId: string;
+  activityId?: string;
+  title: string;
+  rfiType: QARFIType;
+  discipline: string; // e.g. Earthworks, Concrete, Structural Steel, MEP
+  location: string; // e.g. Block 20 to 21, Chainage 0+150
+  requestedBy: string; // Contractor / Site Engineer
+  assignedReviewer: string; // Consultant / QA Lead / Client Rep
+  dateSubmitted: string;
+  targetResponseDate: string;
+  dateClosed?: string;
+  status: QARFIStatus;
+  priority: QARFIPriority;
+  
+  // Scope & Quantities requested for inspection/clarification
+  measurementType?: QAMeasurementType;
+  unit?: string;
+  quantity?: number;
+  toleranceSpec?: string;
+  
+  description: string;
+  responseClarification?: string;
+  linkedQAInspectionId?: string;
+  linkedDocumentIds?: string[];
+  attachments?: string[];
+}
+
 export interface QAInspectionItem {
   id: string;
   projectId: string;

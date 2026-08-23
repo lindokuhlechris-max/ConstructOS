@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, QARFIItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -30,6 +30,10 @@ interface AppContextType {
   siteInspectionPhotos: SiteInspectionPhoto[];
   ppeItems: PPEMaterialItem[];
   qaInspections: QAInspectionItem[];
+  rfis: QARFIItem[];
+  addRFI: (rfi: QARFIItem) => void;
+  updateRFI: (rfi: QARFIItem) => void;
+  deleteRFI: (id: string) => void;
   userProfiles: UserProfile[];
   currentUserProfile: UserProfile;
   hasPermission: (section: keyof ProjectSectionPermissions) => boolean;
@@ -451,6 +455,100 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [siteInspectionPhotos, setSiteInspectionPhotos] = useState<SiteInspectionPhoto[]>([]);
   const [ppeItems, setPPEItems] = useState<PPEMaterialItem[]>([]);
   const [qaInspections, setQAInspections] = useState<QAInspectionItem[]>([]);
+  const [rfis, setRFIs] = useState<QARFIItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('constructos_rfis');
+      return saved ? JSON.parse(saved) : [
+        {
+          id: 'RFI-001',
+          rfiNumber: 'WIR-2026-041',
+          projectId: 'PRJ-001',
+          activityId: 'ACT-001',
+          title: 'Work Inspection Request: Trench Depth & Bedding for MV Cable Block 20-21',
+          rfiType: 'Request For Inspection (WIR)',
+          discipline: 'Earthworks',
+          location: 'Block 20 to 21, Chainage 0+000 to 0+150',
+          requestedBy: 'Advocate (Site Engineer)',
+          assignedReviewer: 'David Smith (Lead QA Consultant)',
+          dateSubmitted: '2026-08-20',
+          targetResponseDate: '2026-08-22',
+          status: 'Approved',
+          priority: 'High',
+          measurementType: 'Length',
+          unit: 'm',
+          quantity: 150,
+          toleranceSpec: '±10mm / SANS 1200',
+          description: 'Formal inspection request for MV Cable trench excavation, level survey, and bedding sand layer thickness prior to cable laying.',
+          responseClarification: 'Levels and bedding sand thickness verified on site. Cleared to proceed with cable pull.'
+        },
+        {
+          id: 'RFI-002',
+          rfiNumber: 'WIR-2026-042',
+          projectId: 'PRJ-001',
+          activityId: 'ACT-002',
+          title: 'Hold Point Clearance: Substation Foundation Rebar & Pre-Pour Embedment',
+          rfiType: 'Hold Point Clearance',
+          discipline: 'Concrete',
+          location: 'Substation Building Grid A1-D4 Level 0',
+          requestedBy: 'Michael Moyo (Civil Foreman)',
+          assignedReviewer: 'David Smith (Lead QA Consultant)',
+          dateSubmitted: '2026-08-21',
+          targetResponseDate: '2026-08-23',
+          status: 'Under Review',
+          priority: 'Critical',
+          measurementType: 'Volume',
+          unit: 'm³',
+          quantity: 85,
+          toleranceSpec: 'Min 35 MPa / BS EN 12390',
+          description: 'Mandatory Quality Hold Point: Inspection of bottom & top reinforcement mats, starter bars, and earth bonding before 85 m³ pour.',
+          responseClarification: 'Cover blocks and tie wire inspected. Awaiting final earth bar continuity test certificate.'
+        },
+        {
+          id: 'RFI-003',
+          rfiNumber: 'RFI-2026-018',
+          projectId: 'PRJ-001',
+          title: 'Technical Query: Conflict between Trench Route & Existing Water Main at Ch 0+320',
+          rfiType: 'Request For Information (Technical Query)',
+          discipline: 'Civil Utilities',
+          location: 'Access Road Ch 0+320',
+          requestedBy: 'Thabo Ndlovu (Site Engineer)',
+          assignedReviewer: 'Sipho Zulu (Consulting Civil Engineer)',
+          dateSubmitted: '2026-08-22',
+          targetResponseDate: '2026-08-24',
+          status: 'Submitted',
+          priority: 'High',
+          measurementType: 'Length',
+          unit: 'm',
+          quantity: 40,
+          toleranceSpec: 'Min 500mm vertical clearance',
+          description: 'Discovered an unmapped 150mm municipal water pipe crossing the proposed trench alignment at 1.1m depth. Requesting engineered sleeve detail or detour route.'
+        },
+        {
+          id: 'RFI-004',
+          rfiNumber: 'WIR-2026-043',
+          projectId: 'PRJ-001',
+          title: 'Material Approval: Structural Steel Girders & Anchor Bolts Batch #4',
+          rfiType: 'Material Approval Request',
+          discipline: 'Structural Steel',
+          location: 'Fabrication Yard / Laydown Area B',
+          requestedBy: 'Lerato Khumalo (QC Inspector)',
+          assignedReviewer: 'David Smith (Lead QA Consultant)',
+          dateSubmitted: '2026-08-19',
+          targetResponseDate: '2026-08-21',
+          dateClosed: '2026-08-21',
+          status: 'Approved',
+          priority: 'Medium',
+          measurementType: 'Weight',
+          unit: 'tonnes',
+          quantity: 28.5,
+          toleranceSpec: 'S355JR / ISO 9001 Mill Certificate',
+          description: 'Verification of mill test certificates, galvanizing thickness (min 85 microns), and ultrasonic test reports for 28.5 tonnes of steel girders.'
+        }
+      ];
+    } catch {
+      return [];
+    }
+  });
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [accommodations, setAccommodations] = useState<AccommodationUnit[]>([]);
   const [accommodationUtilities, setAccommodationUtilities] = useState<AccommodationUtilityLog[]>([]);
@@ -990,6 +1088,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   React.useEffect(() => { handleLocalChange('siteInspectionPhotos', siteInspectionPhotos); }, [siteInspectionPhotos, handleLocalChange]);
   React.useEffect(() => { handleLocalChange('ppeItems', ppeItems); }, [ppeItems, handleLocalChange]);
   React.useEffect(() => { handleLocalChange('qaInspections', qaInspections); }, [qaInspections, handleLocalChange]);
+  React.useEffect(() => { handleLocalChange('constructos_rfis', rfis); }, [rfis, handleLocalChange]);
   React.useEffect(() => { handleLocalChange('documents', documents); }, [documents, handleLocalChange]);
   React.useEffect(() => { handleLocalChange('reports', reports); }, [reports, handleLocalChange]);
   React.useEffect(() => { handleLocalChange('weatherLogs', weatherLogs); }, [weatherLogs, handleLocalChange]);
@@ -2149,6 +2248,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
       actionType: 'delete',
       previousValue: qaToDelete ? `Title: ${qaToDelete.title}` : undefined,
       newValue: 'Inspection Record Removed'
+    });
+  };
+
+  const addRFI = (rfi: QARFIItem) => {
+    setRFIs(prev => [rfi, ...prev]);
+    syncToServer('add_rfi', rfi);
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: rfi.projectId || projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: 'RFI / Inspection Request Created',
+      details: `Created ${rfi.rfiType} "${rfi.rfiNumber}: ${rfi.title}" (${rfi.discipline})`,
+      timestamp: new Date().toISOString(),
+      entityType: 'QA',
+      entityId: rfi.id,
+      actionType: 'create'
+    });
+  };
+
+  const updateRFI = (rfi: QARFIItem) => {
+    setRFIs(prev => prev.map(r => r.id === rfi.id ? r : r));
+    syncToServer('update_rfi', rfi);
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: rfi.projectId || projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: 'RFI / Inspection Request Updated',
+      details: `Updated ${rfi.rfiNumber} status to "${rfi.status}"`,
+      timestamp: new Date().toISOString(),
+      entityType: 'QA',
+      entityId: rfi.id,
+      actionType: 'update'
+    });
+  };
+
+  const deleteRFI = (id: string) => {
+    const rfiToDelete = rfis.find(r => r.id === id);
+    setRFIs(prev => prev.filter(r => r.id !== id));
+    syncToServer('delete_rfi', { id });
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: rfiToDelete?.projectId || projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: 'RFI Deleted',
+      details: rfiToDelete ? `Deleted ${rfiToDelete.rfiNumber} (${rfiToDelete.title})` : `Deleted RFI #${id}`,
+      timestamp: new Date().toISOString(),
+      entityType: 'QA',
+      entityId: id,
+      actionType: 'delete'
     });
   };
 
@@ -3320,6 +3480,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addActivityInspection, updateActivityInspection, deleteActivityInspection, addSiteInspectionPhoto, deleteSiteInspectionPhoto,
       addPPEItem, updatePPEItem, deletePPEItem,
       addQAInspection, updateQAInspection, deleteQAInspection,
+      rfis, addRFI, updateRFI, deleteRFI,
       addReminder, updateReminder, deleteReminder,
       addWeatherLog, updateWeatherLog, deleteWeatherLog,
       addDocument, updateDocument, deleteDocument, assignDocumentToActivity,

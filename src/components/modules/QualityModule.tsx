@@ -28,6 +28,7 @@ import { useAppContext } from '../../context/AppContext';
 import { QAInspectionItem, QAMeasurementType } from '../../types';
 import { QualityDetail } from '../QualityDetail';
 import { QAMeasurementModal } from '../QAMeasurementModal';
+import { QualityTotalsAnalytics } from '../QualityTotalsAnalytics';
 
 interface QualityModuleProps {
   onBack: () => void;
@@ -60,6 +61,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
 
   const canEditQuality = hasPermission('quality');
 
+  const [activeView, setActiveView] = useState<'inspections' | 'analytics'>('inspections');
   const [selectedInspection, setSelectedInspection] = useState<QAInspectionItem | null>(null);
   const [measuringInspection, setMeasuringInspection] = useState<QAInspectionItem | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -226,6 +228,19 @@ export function QualityModule({ onBack }: QualityModuleProps) {
           </div>
 
           <Button
+            onClick={() => setActiveView(activeView === 'analytics' ? 'inspections' : 'analytics')}
+            variant={activeView === 'analytics' ? 'default' : 'outline'}
+            className={`gap-1.5 rounded-xl h-10 px-3.5 text-xs font-bold transition-all ${
+              activeView === 'analytics'
+                ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-xs'
+                : 'border-purple-200 dark:border-purple-900/50 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30'
+            }`}
+          >
+            <Layers className="h-4 w-4" />
+            {activeView === 'analytics' ? 'Inspections List' : 'Overalls & RFI Totals'}
+          </Button>
+
+          <Button
             onClick={() => navigate('/documents?category=QA/QC%20Inspections')}
             variant="outline"
             className="gap-1.5 rounded-xl h-10 px-3.5 text-xs font-semibold border-blue-200 dark:border-blue-900/50 text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-950/30"
@@ -240,6 +255,14 @@ export function QualityModule({ onBack }: QualityModuleProps) {
           )}
         </div>
       </div>
+
+      {activeView === 'analytics' ? (
+        <QualityTotalsAnalytics
+          onBackToInspections={() => setActiveView('inspections')}
+          onSelectInspection={(item) => setSelectedInspection(item)}
+        />
+      ) : (
+        <>
 
       {/* Log Inspection Form Modal/Drawer */}
       {isAdding && (
@@ -512,7 +535,10 @@ export function QualityModule({ onBack }: QualityModuleProps) {
           </div>
         </Card>
 
-        <Card className="p-4 flex items-center gap-3 border-slate-200 dark:border-slate-800 bg-blue-50/20 dark:bg-blue-950/20">
+        <Card 
+          onClick={() => setActiveView('analytics')}
+          className="p-4 flex items-center gap-3 border-slate-200 dark:border-slate-800 bg-blue-50/20 dark:bg-blue-950/20 hover:border-blue-400 cursor-pointer transition-all hover:bg-blue-50/40"
+        >
           <div className="p-3 rounded-xl bg-blue-100 text-[#0B5FFF] dark:bg-blue-900/40">
             <Ruler className="h-6 w-6" />
           </div>
@@ -695,6 +721,8 @@ export function QualityModule({ onBack }: QualityModuleProps) {
           })
         )}
       </div>
+      </>
+      )}
 
       {/* Measurement Modal for Card Actions */}
       {measuringInspection && (
