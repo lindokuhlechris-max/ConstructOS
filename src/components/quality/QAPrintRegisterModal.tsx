@@ -27,6 +27,8 @@ import {
   List as ListIcon,
   Table as TableIcon
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { Card, Button, Badge } from '../ui';
 import { QAInspectionItem, Project } from '../../types';
 import { printQAInspectionRegisterSummary } from '../../lib/pdfPrint';
@@ -65,6 +67,7 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
   const [includeScopeQuantities, setIncludeScopeQuantities] = useState<boolean>(true);
   const [includeSignoffs, setIncludeSignoffs] = useState<boolean>(true);
   const [includeContractors, setIncludeContractors] = useState<boolean>(true);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
 
   const printAreaRef = useRef<HTMLDivElement>(null);
 
@@ -183,15 +186,83 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
     window.print();
   };
 
+  // 1:1 High-Fidelity PDF Generation (Captures exact Live Preview DOM layout)
   const handleDownloadPDF = async () => {
-    await printQAInspectionRegisterSummary({
-      project: activeProject,
-      inspections: filteredData,
-      filterLabel: `${statusFilter !== 'All' ? statusFilter : 'All Statuses'} • ${categoryFilter !== 'All' ? categoryFilter : 'All Disciplines'} (${printLayoutMode.toUpperCase()} Layout)`,
-      totalCount: (allInspections || inspections).length,
-      orientation,
-      includeSignoffs
-    });
+    if (!printAreaRef.current) return;
+    setIsGeneratingPdf(true);
+
+    try {
+      const element = printAreaRef.current;
+
+      // Temporarily reset transform for clean high-DPI rasterization
+      const currentTransform = element.style.transform;
+      element.style.transform = 'none';
+
+      const canvas = await html2canvas(element, {
+        scale: 2, // 2x high resolution
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+      });
+
+      // Restore transform
+      element.style.transform = currentTransform;
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const isLandscape = orientation === 'landscape';
+
+      const pdf = new jsPDF({
+        orientation: isLandscape ? 'landscape' : 'portrait',
+        unit: 'pt',
+        format: 'a4',
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pdfWidth;
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // First page
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= pdfHeight;
+
+      // Multi-page splitting if content extends beyond page height
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+        heightLeft -= pdfHeight;
+      }
+
+      const dateStr = new Date().toISOString().split('T')[0];
+      const filename = `scedih_qa_inspection_register_${printLayoutMode}_${dateStr}.pdf`;
+      const blob = pdf.output('blob');
+
+      await saveOrShareFile({
+        filename,
+        blob,
+        title: 'Scedih QA/QC Inspection Register PDF',
+        text: `Scedih QA/QC Inspection Register (${printLayoutMode.toUpperCase()} Layout) - ${currentDateFormatted}`
+      });
+    } catch (e) {
+      console.warn('html2canvas rendering failed, fallback to vector jsPDF:', e);
+      // Fallback
+      await printQAInspectionRegisterSummary({
+        project: activeProject,
+        inspections: filteredData,
+        filterLabel: `${statusFilter !== 'All' ? statusFilter : 'All Statuses'} • ${categoryFilter !== 'All' ? categoryFilter : 'All Disciplines'} (${printLayoutMode.toUpperCase()} Layout)`,
+        totalCount: (allInspections || inspections).length,
+        orientation,
+        includeSignoffs
+      });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const handleExportCSV = async () => {
@@ -293,7 +364,7 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
                 </Badge>
               </div>
               <p className="text-xs text-slate-500">
-                Official contractor & client compliance sign-off printout in Table, Grid, or List formats.
+                1:1 High-Fidelity printout in Table, Grid, or List formats matching the application view.
               </p>
             </div>
           </div>
@@ -311,11 +382,12 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
             <Button
               size="sm"
               variant="outline"
+              disabled={isGeneratingPdf}
               onClick={handleDownloadPDF}
               className="h-9 px-3 rounded-xl text-xs font-bold gap-1.5 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100"
-              title="Download Executive Vector PDF"
+              title="Download 1:1 High-Fidelity PDF"
             >
-              <Download className="h-4 w-4" /> Download PDF
+              <Download className="h-4 w-4" /> {isGeneratingPdf ? 'Generating PDF...' : 'Download PDF'}
             </Button>
             <Button
               size="sm"
@@ -673,20 +745,20 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
               )}
 
               {/* ==================================================================== */}
-              {/* PRINT FORMAT 1: TABLE VIEW */}
+              {/* PRINT FORMAT 1: TABLE VIEW (1:1 Match to App Table) */}
               {/* ==================================================================== */}
               {printLayoutMode === 'table' && (
-                <div className="overflow-x-auto border border-slate-200 rounded-xl mb-6">
+                <div className="overflow-x-auto border border-slate-200 rounded-xl mb-6 shadow-2xs">
                   <table className="w-full text-left border-collapse text-[11px]">
                     <thead>
-                      <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px] tracking-wider">
-                        <th className="py-2.5 px-3 whitespace-nowrap">ID & Date</th>
-                        <th className="py-2.5 px-3 min-w-[200px]">Subject & Reference Drawings</th>
-                        <th className="py-2.5 px-3">Discipline & Spec</th>
-                        <th className="py-2.5 px-3">Location & Inspector</th>
-                        {includeScopeQuantities && <th className="py-2.5 px-3 min-w-[170px]">Scope & Measured Clearance</th>}
-                        <th className="py-2.5 px-3 text-center">Status</th>
-                        {includeContractors && <th className="py-2.5 px-3">Contractors</th>}
+                      <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px] tracking-wider">
+                        <th className="py-3 px-3.5 whitespace-nowrap">INSPECTION ID & DATE</th>
+                        <th className="py-3 px-3.5 min-w-[240px]">SUBJECT & REFERENCE DRAWINGS</th>
+                        <th className="py-3 px-3.5 min-w-[130px]">DISCIPLINE & SPEC</th>
+                        <th className="py-3 px-3.5 min-w-[150px]">LOCATION & INSPECTOR</th>
+                        {includeScopeQuantities && <th className="py-3 px-3.5 min-w-[200px]">PHYSICAL SCOPE & QUANTITIES</th>}
+                        <th className="py-3 px-3.5 text-center min-w-[110px]">STATUS</th>
+                        {includeContractors && <th className="py-3 px-3.5 min-w-[140px]">CONTRACTORS & SIGN-OFF</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
@@ -704,66 +776,82 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
                           : (item.documentNumber ? [item.documentNumber] : (item.referenceDrawingNumber ? [item.referenceDrawingNumber] : []));
 
                         return (
-                          <tr key={item.id} className="hover:bg-slate-50 break-inside-avoid">
+                          <tr key={item.id} className="hover:bg-slate-50/80 break-inside-avoid">
                             {/* 1. ID & Date */}
-                            <td className="py-2.5 px-3 align-top">
-                              <div className="font-mono font-bold text-emerald-700">{item.id}</div>
-                              <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.date}</div>
+                            <td className="py-3 px-3.5 align-top">
+                              <div className="font-mono font-bold text-emerald-700 text-xs">{item.id}</div>
+                              <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-1">
+                                <Calendar className="h-3 w-3 text-slate-400 shrink-0" />
+                                {item.date}
+                              </div>
                               {item.submissionDate && (
-                                <div className="text-[9px] text-blue-600 font-mono">Sub: {item.submissionDate}</div>
+                                <div className="text-[9px] text-blue-600 font-mono mt-0.5">Sub: {item.submissionDate}</div>
                               )}
                             </td>
 
                             {/* 2. Subject & Drawing */}
-                            <td className="py-2.5 px-3 align-top">
+                            <td className="py-3 px-3.5 align-top">
                               {docNumbers.length > 0 && (
-                                <div className="flex items-center gap-1 flex-wrap mb-0.5">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
                                   {docNumbers.map((num, idx) => (
-                                    <span key={idx} className="font-mono text-blue-800 bg-blue-50 px-1 py-0.2 rounded border border-blue-200 text-[9px] font-bold">
+                                    <span key={idx} className="font-mono text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 text-[10px] font-bold shadow-2xs">
                                       {num}
                                     </span>
                                   ))}
                                 </div>
                               )}
-                              <div className="font-bold text-slate-900 leading-snug">
+                              <div className="font-bold text-slate-900 leading-snug text-xs">
                                 {item.title}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
+                                {item.client && <span>Client: <strong className="text-slate-700">{item.client}</strong></span>}
+                                {item.epc && <span>• EPC: <strong className="text-slate-700">{item.epc}</strong></span>}
                               </div>
                             </td>
 
                             {/* 3. Discipline */}
-                            <td className="py-2.5 px-3 align-top">
-                              <span className="font-semibold text-slate-700 block">{item.category}</span>
-                              <span className="text-[10px] text-emerald-700 font-mono">
-                                {item.measurementType || 'Length'} ({itemUnit})
+                            <td className="py-3 px-3.5 align-top">
+                              <span className="inline-block px-2 py-0.5 rounded bg-slate-100 border border-slate-200 font-bold text-[10px] text-slate-700 mb-1">
+                                {item.category}
                               </span>
+                              <div className="text-[10px] text-emerald-700 font-mono font-semibold flex items-center gap-1">
+                                <Ruler className="h-3 w-3 text-emerald-600 shrink-0" />
+                                {item.measurementType || 'Length'} ({itemUnit})
+                              </div>
                               {item.toleranceSpec && (
                                 <div className="text-[9px] text-slate-500 font-mono mt-0.5">
                                   Spec: {item.toleranceSpec}
                                 </div>
                               )}
                               {item.ncrCode && (
-                                <span className="inline-block mt-0.5 px-1 bg-rose-100 text-rose-800 font-mono font-bold rounded text-[9px]">
+                                <span className="inline-block mt-1 px-1.5 py-0.2 bg-rose-100 text-rose-800 font-mono font-bold rounded text-[9px] border border-rose-200">
                                   {item.ncrCode}
                                 </span>
                               )}
                             </td>
 
                             {/* 4. Location & Inspector */}
-                            <td className="py-2.5 px-3 align-top">
-                              <div className="font-medium text-slate-800">{item.location}</div>
-                              <div className="text-[10px] text-slate-500 mt-0.5">{item.inspector}</div>
+                            <td className="py-3 px-3.5 align-top">
+                              <div className="font-bold text-slate-800 text-xs">{item.location}</div>
+                              <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                <User className="h-3 w-3 text-slate-400 shrink-0" />
+                                {item.inspector}
+                              </div>
+                              {item.subcontractor && (
+                                <div className="text-[9px] text-slate-400 mt-0.5">Sub: {item.subcontractor}</div>
+                              )}
                             </td>
 
                             {/* 5. Physical Scope & Quantities */}
                             {includeScopeQuantities && (
-                              <td className="py-2.5 px-3 align-top font-mono">
+                              <td className="py-3 px-3.5 align-top font-mono">
                                 {(targetQty > 0 || inspectedQty > 0) ? (
-                                  <div className="space-y-0.5 text-[10px]">
-                                    <div className="flex justify-between text-slate-600">
+                                  <div className="space-y-1 bg-slate-50/80 p-2 rounded-xl border border-slate-200">
+                                    <div className="flex justify-between text-[10px] text-slate-600 font-bold">
                                       <span>Scope: {targetQty} {itemUnit}</span>
                                       <span className="text-blue-600">Insp: {inspectedQty} {itemUnit}</span>
                                     </div>
-                                    <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden flex my-0.5">
+                                    <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex my-0.5">
                                       <div 
                                         className="h-full bg-emerald-500" 
                                         style={{ width: `${targetQty > 0 ? (approvedQty / targetQty) * 100 : approvalPercent}%` }}
@@ -773,33 +861,38 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
                                         style={{ width: `${targetQty > 0 ? (rejectedQty / targetQty) * 100 : 0}%` }}
                                       />
                                     </div>
-                                    <div className="font-bold text-emerald-700 flex items-center justify-between">
+                                    <div className="font-bold text-emerald-700 flex items-center justify-between text-[9px]">
                                       <span>✓ {approvedQty} {itemUnit}</span>
-                                      <span>{overallPercent}% overall ({approvalPercent}% insp.)</span>
+                                      <span className="bg-emerald-100 text-emerald-800 px-1 py-0.2 rounded border border-emerald-300">
+                                        {overallPercent}% overall ({approvalPercent}% insp.)
+                                      </span>
                                     </div>
                                   </div>
                                 ) : (
-                                  <span className="text-slate-400 italic text-[10px]">No quantity</span>
+                                  <span className="text-slate-400 italic text-[10px]">No quantity recorded</span>
                                 )}
                               </td>
                             )}
 
                             {/* 6. Status */}
-                            <td className="py-2.5 px-3 align-top text-center">
-                              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            <td className="py-3.5 px-3.5 align-top text-center">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
                                 item.status === 'Passed'
                                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                   : item.status === 'Failed'
                                   ? 'bg-rose-100 text-rose-800 border border-rose-200'
                                   : 'bg-amber-100 text-amber-800 border border-amber-200'
                               }`}>
+                                {item.status === 'Passed' && <CheckCircle2 className="h-3 w-3" />}
+                                {item.status === 'Failed' && <XCircle className="h-3 w-3" />}
+                                {item.status === 'Pending Approval' && <Clock className="h-3 w-3" />}
                                 {item.status}
                               </span>
                             </td>
 
                             {/* 7. Contractors */}
                             {includeContractors && (
-                              <td className="py-2.5 px-3 align-top text-[10px] text-slate-600">
+                              <td className="py-3 px-3.5 align-top text-[10px] text-slate-600 space-y-0.5">
                                 {item.epc && <div>EPC: <strong>{item.epc}</strong></div>}
                                 {item.subcontractor && <div>Sub: {item.subcontractor}</div>}
                                 {item.client && <div>Client: {item.client}</div>}
@@ -822,7 +915,7 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
               )}
 
               {/* ==================================================================== */}
-              {/* PRINT FORMAT 2: GRID / CARD VIEW */}
+              {/* PRINT FORMAT 2: GRID / CARD VIEW (1:1 Match to App Grid) */}
               {/* ==================================================================== */}
               {printLayoutMode === 'grid' && (
                 <div className={`grid gap-4 mb-6 ${orientation === 'landscape' ? 'grid-cols-3' : 'grid-cols-2'}`}>
@@ -845,10 +938,13 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
                           <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                             {item.id}
                           </span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.status === 'Passed' ? 'bg-emerald-100 text-emerald-800' :
-                            item.status === 'Failed' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            item.status === 'Passed' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                            item.status === 'Failed' ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
                           }`}>
+                            {item.status === 'Passed' && <CheckCircle2 className="h-3 w-3" />}
+                            {item.status === 'Failed' && <XCircle className="h-3 w-3" />}
+                            {item.status === 'Pending Approval' && <Clock className="h-3 w-3" />}
                             {item.status}
                           </span>
                         </div>
@@ -857,7 +953,7 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
                         {docNumbers.length > 0 && (
                           <div className="flex items-center gap-1 flex-wrap">
                             {docNumbers.map((num, idx) => (
-                              <span key={idx} className="font-mono text-blue-800 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200 text-[10px] font-bold">
+                              <span key={idx} className="font-mono text-blue-800 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200 text-[10px] font-bold shadow-2xs">
                                 {num}
                               </span>
                             ))}
@@ -928,7 +1024,7 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
               )}
 
               {/* ==================================================================== */}
-              {/* PRINT FORMAT 3: LIST / WIDE BANNER VIEW */}
+              {/* PRINT FORMAT 3: LIST / WIDE BANNER VIEW (1:1 Match to App List) */}
               {/* ==================================================================== */}
               {printLayoutMode === 'list' && (
                 <div className="space-y-3 mb-6">
@@ -1000,10 +1096,13 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
                         <div className="shrink-0 w-full md:w-64 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-semibold text-slate-500">Inspection Status:</span>
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                              item.status === 'Passed' ? 'bg-emerald-100 text-emerald-800' :
-                              item.status === 'Failed' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                              item.status === 'Passed' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                              item.status === 'Failed' ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
                             }`}>
+                              {item.status === 'Passed' && <CheckCircle2 className="h-3 w-3" />}
+                              {item.status === 'Failed' && <XCircle className="h-3 w-3" />}
+                              {item.status === 'Pending Approval' && <Clock className="h-3 w-3" />}
                               {item.status}
                             </span>
                           </div>
