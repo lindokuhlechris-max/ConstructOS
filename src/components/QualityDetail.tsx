@@ -88,6 +88,23 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
         { value: 'Michael Moyo', label: 'Michael Moyo (Civil QC Foreman)' },
         { value: 'Lerato Khumalo', label: 'Lerato Khumalo (QC Inspector)' }
       ];
+
+  const categoryOptions = [
+    'Survey',
+    'Survey & Setting Out',
+    'Earthworks',
+    'Civil Utilities',
+    'Concrete',
+    'Structural Steel',
+    'Drainage',
+    'Roadworks',
+    'Piling',
+    'MEP Clearance',
+    'Electrical',
+    'Mechanical',
+    'Finishes'
+  ];
+
   const [activeTab, setActiveTab] = useState<'overview' | 'measurements' | 'ncr' | 'tests' | 'documents' | 'photos'>('overview');
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [isMeasurementModalOpen, setIsMeasurementModalOpen] = useState(false);
@@ -2418,10 +2435,12 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Category</label>
-                  <input
-                    type="text"
+                  <CustomSelect
                     value={editForm.category || ''}
-                    onChange={e => setEditForm({ ...editForm, category: e.target.value })}
+                    onChange={val => setEditForm({ ...editForm, category: val })}
+                    options={categoryOptions}
+                    placeholder="Select Category..."
+                    customPlaceholder="Enter custom category..."
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
                   />
                 </div>
