@@ -55,15 +55,82 @@ import {
   Scale,
   Percent,
   Sliders,
-  CheckSquare
+  CheckSquare,
+  ListChecks,
+  MinusCircle,
+  RefreshCw,
+  ChevronDown
 } from 'lucide-react';
-import { QAInspectionItem, DocumentItem, DocumentCategory, canManage, canUserEditSection, Comment } from '../types';
+import { QAInspectionItem, QAChecksheetItem, DocumentItem, DocumentCategory, canManage, canUserEditSection, Comment } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { DocumentUploadModal } from './documents/DocumentUploadModal';
 import { DocumentPreviewModal } from './documents/DocumentPreviewModal';
 import { downloadDocument } from '../lib/documentStorage';
 import { formatFileSize } from '../lib/documentUtils';
 import { QAMeasurementModal } from './QAMeasurementModal';
+import { navigateToPreviousRoute } from '../lib/navigationHistory';
+
+const DEFAULT_CATEGORY_CHECKSHEETS: Record<string, { item: string; specification?: string }[]> = {
+  'Earthworks': [
+    { item: 'Trench excavation depth, alignment & invert level verified against approved drawing', specification: 'DWG-MV-201 / SANS 1200' },
+    { item: 'Trench bed cleared of sharp rocks, loose debris, tree roots and standing water', specification: 'SANS 1200 DB' },
+    { item: 'Thermal bedding sand / soft selected bedding placed (100mm min compacted thickness)', specification: 'SANS 1200 LB (100mm)' },
+    { item: 'Cable laying depth, spacing & minimum bending radius verified', specification: 'Manufacturer Specs' },
+    { item: 'Underground hazard warning tape installed 300mm above top of cable / duct', specification: 'Standard Specs' },
+    { item: 'Layered backfilling & dynamic compaction testing (≥93% Mod AASHTO achieved)', specification: '≥93% Mod AASHTO' }
+  ],
+  'Concrete': [
+    { item: 'Formwork dimensions, line, plumb, level and bracing stability verified', specification: 'SANS 1200 G (±5mm)' },
+    { item: 'Rebar size, spacing, lap length, tying and concrete cover blocks checked', specification: 'Rebar Schedule' },
+    { item: 'Holding down bolts, embedment plates and conduit sleeves secured to template', specification: 'Bolt Template' },
+    { item: 'Formwork cleanliness, release agent application & debris washout completed', specification: 'SANS 1200 G' },
+    { item: 'Concrete slump test performed & sample test cubes (6 per pour) cast and tagged', specification: 'SANS 5861-1 / 5861-2' },
+    { item: 'Post-pour curing compound / wet hessian applied & stripping time monitored', specification: '7-Day Curing' }
+  ],
+  'Survey': [
+    { item: 'Primary survey benchmark datum and control points verified with GPS / Total Station', specification: 'Lo29 / WGS84 Datum' },
+    { item: 'Setting out coordinates (Easting/Northing) checked against master plan (±10mm)', specification: '±10mm Tolerance' },
+    { item: 'Invert levels, finished grade and slope gradients verified against design', specification: 'Approved IFC Drawings' },
+    { item: 'As-built point cloud / DTM survey data logged for clearance documentation', specification: 'Survey Protocol' }
+  ],
+  'Structural Steel': [
+    { item: 'Foundation pedestal elevation, anchor bolt projection & center-to-center checked', specification: 'SANS 1200 H' },
+    { item: 'Steel member orientation, plumb and alignment aligned to general arrangement', specification: 'Structural GA DWGs' },
+    { item: 'High-strength friction grip (HSFG) bolts torqued and marked with torque seal', specification: 'Torque Calibrated' },
+    { item: 'Visual weld quality inspection (100% visual, zero cracks, undercut or porosity)', specification: 'AWS D1.1 / ISO 5817' },
+    { item: 'Galvanizing / paint touch-up on cut ends and bolt connections complete', specification: 'Corrosion Protection' }
+  ],
+  'Electrical': [
+    { item: 'Cable insulation resistance test (Megger 1kV/5kV) verified prior to pulling', specification: '≥100 MΩ' },
+    { item: 'Cable pulling tension, rollers setup and minimum bending radius observed', specification: 'Manufacturer Specs' },
+    { item: 'Conductor phase identification, core numbering and ferrule labeling installed', specification: 'SANS 10142-1' },
+    { item: 'Earthing & bonding resistance measurement verified (≤1.0 Ω)', specification: 'SANS 10142-1 (≤1.0 Ω)' },
+    { item: 'Cable glanding, termination torque, shrouds and cold-shrink boots sealed', specification: 'IP66 / Ex Standard' }
+  ]
+};
+
+function getDefaultChecksheet(category: string, title: string): QAChecksheetItem[] {
+  const catKey = Object.keys(DEFAULT_CATEGORY_CHECKSHEETS).find(k => 
+    (category || '').toLowerCase().includes(k.toLowerCase()) || (title || '').toLowerCase().includes(k.toLowerCase())
+  );
+  const items = catKey ? DEFAULT_CATEGORY_CHECKSHEETS[catKey] : [
+    { item: 'Work execution complies with approved Method Statement and Inspection & Test Plan (ITP)', specification: 'Approved ITP' },
+    { item: 'Material quality, origin and test certificates (MTC/COA) verified on site', specification: 'Project Specs' },
+    { item: 'Dimensional, level and alignment checks verified within tolerance', specification: '±10mm / SANS' },
+    { item: 'Site housekeeping, environmental protection & safety hold points respected', specification: 'HSE Protocol' },
+    { item: 'Joint inspection witness with EPC / Client QC representative executed', specification: 'Client Clearance' }
+  ];
+
+  return items.map((it, idx) => ({
+    id: `CHK-${idx + 1}`,
+    item: it.item,
+    specification: it.specification,
+    status: (idx < 2) ? 'Pass' : 'Pending',
+    remarks: '',
+    checkedBy: '',
+    checkedAt: ''
+  }));
+}
 
 interface QualityDetailProps {
   inspection: QAInspectionItem;
@@ -141,6 +208,29 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       }
     ];
   });
+
+  // Checksheet & Hold-Points State
+  const [checksheetItems, setChecksheetItems] = useState<QAChecksheetItem[]>(() => {
+    if (inspection.checksheetItems && inspection.checksheetItems.length > 0) {
+      return inspection.checksheetItems;
+    }
+    try {
+      const saved = localStorage.getItem(`constructos_qa_checksheet_${inspection.id}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return getDefaultChecksheet(inspection.category || '', inspection.title || '');
+  });
+
+  const [newCheckItemText, setNewCheckItemText] = useState('');
+  const [newCheckItemSpec, setNewCheckItemSpec] = useState('');
+  const [isAddingCheckItem, setIsAddingCheckItem] = useState(false);
+  const [editingCheckItemId, setEditingCheckItemId] = useState<string | null>(null);
+  const [editingCheckItemText, setEditingCheckItemText] = useState('');
+  const [editingCheckItemSpec, setEditingCheckItemSpec] = useState('');
+  const [checksheetFilter, setChecksheetFilter] = useState<'all' | 'Pass' | 'Fail' | 'Pending' | 'N/A'>('all');
+  const [activeRemarkItemId, setActiveRemarkItemId] = useState<string | null>(null);
+  const [remarkDraftText, setRemarkDraftText] = useState('');
+  const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
 
   // Modals state
   const [isSignoffModalOpen, setIsSignoffModalOpen] = useState(false);
@@ -305,6 +395,143 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
   const handleInsertTagToNotes = (tag: string) => {
     setQuickNoteText(prev => prev ? `${prev} ${tag} ` : `${tag} `);
   };
+
+  // Checksheet Action Handlers
+  const saveChecksheetState = (updated: QAChecksheetItem[]) => {
+    setChecksheetItems(updated);
+    try {
+      localStorage.setItem(`constructos_qa_checksheet_${inspection.id}`, JSON.stringify(updated));
+    } catch {}
+    if (onSave) {
+      onSave({
+        ...inspection,
+        checksheetItems: updated
+      });
+    }
+  };
+
+  const handleUpdateCheckItemStatus = (itemId: string, newStatus: 'Pass' | 'Fail' | 'N/A' | 'Pending') => {
+    const currentInspector = currentUserProfile?.name || inspection.inspector || 'QA Inspector';
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date().toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+    const updated = checksheetItems.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          status: item.status === newStatus ? 'Pending' as const : newStatus,
+          checkedBy: newStatus !== 'Pending' ? currentInspector : undefined,
+          checkedAt: newStatus !== 'Pending' ? now : undefined
+        };
+      }
+      return item;
+    });
+
+    saveChecksheetState(updated);
+  };
+
+  const handlePassAllPending = () => {
+    const currentInspector = currentUserProfile?.name || inspection.inspector || 'QA Inspector';
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date().toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+    const updated = checksheetItems.map(item => {
+      if (item.status === 'Pending') {
+        return {
+          ...item,
+          status: 'Pass' as const,
+          checkedBy: currentInspector,
+          checkedAt: now
+        };
+      }
+      return item;
+    });
+
+    saveChecksheetState(updated);
+  };
+
+  const handleResetAllCheckItems = () => {
+    const updated = checksheetItems.map(item => ({
+      ...item,
+      status: 'Pending' as const,
+      checkedBy: undefined,
+      checkedAt: undefined
+    }));
+    saveChecksheetState(updated);
+  };
+
+  const handleLoadChecksheetTemplate = (templateCategory: string) => {
+    const templateItems = getDefaultChecksheet(templateCategory, '');
+    saveChecksheetState(templateItems);
+    setIsTemplateMenuOpen(false);
+  };
+
+  const handleAddNewCheckItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCheckItemText.trim()) return;
+
+    const newItem: QAChecksheetItem = {
+      id: `CHK-${Date.now()}`,
+      item: newCheckItemText.trim(),
+      specification: newCheckItemSpec.trim() || undefined,
+      status: 'Pending',
+      remarks: '',
+      checkedBy: '',
+      checkedAt: ''
+    };
+
+    const updated = [...checksheetItems, newItem];
+    saveChecksheetState(updated);
+    setNewCheckItemText('');
+    setNewCheckItemSpec('');
+    setIsAddingCheckItem(false);
+  };
+
+  const handleDeleteCheckItem = (itemId: string) => {
+    const updated = checksheetItems.filter(i => i.id !== itemId);
+    saveChecksheetState(updated);
+  };
+
+  const handleSaveEditCheckItem = (itemId: string) => {
+    if (!editingCheckItemText.trim()) return;
+    const updated = checksheetItems.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          item: editingCheckItemText.trim(),
+          specification: editingCheckItemSpec.trim() || undefined
+        };
+      }
+      return item;
+    });
+    saveChecksheetState(updated);
+    setEditingCheckItemId(null);
+  };
+
+  const handleSaveRemark = (itemId: string) => {
+    const updated = checksheetItems.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          remarks: remarkDraftText.trim() || undefined
+        };
+      }
+      return item;
+    });
+    saveChecksheetState(updated);
+    setActiveRemarkItemId(null);
+    setRemarkDraftText('');
+  };
+
+  const totalCheckItems = checksheetItems.length;
+  const passedCheckItems = checksheetItems.filter(i => i.status === 'Pass').length;
+  const failedCheckItems = checksheetItems.filter(i => i.status === 'Fail').length;
+  const pendingCheckItems = checksheetItems.filter(i => i.status === 'Pending').length;
+  const naCheckItems = checksheetItems.filter(i => i.status === 'N/A').length;
+  const checksheetPassPercentage = totalCheckItems > 0 ? Math.round((passedCheckItems / totalCheckItems) * 100) : 0;
+
+  const filteredChecksheetItems = checksheetItems.filter(item => {
+    if (checksheetFilter === 'all') return true;
+    return item.status === checksheetFilter;
+  });
 
   // Signoff Form state
   const [signoffNotes, setSignoffNotes] = useState(inspection.signoffNotes || '');
@@ -544,7 +771,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       {/* Top Navigation & Status Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full">
         <div className="flex items-center gap-3.5">
-          <Button variant="ghost" size="icon" onClick={() => onClose ? onClose() : (window.history.length > 1 ? navigate(-1) : navigate('/quality'))} className="h-9 w-9 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200" title="Go back to previous page">
+          <Button variant="ghost" size="icon" onClick={() => onClose ? onClose() : navigateToPreviousRoute(navigate, '/quality')} className="h-9 w-9 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200" title="Go back to previous page">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -1626,6 +1853,405 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   </div>
                 </div>
               )}
+            </Card>
+
+            {/* QA/QC INSPECTION CHECKSHEET & HOLD POINTS PANEL */}
+            <Card className="border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden bg-white dark:bg-slate-900 rounded-2xl">
+              {/* Header */}
+              <div className="p-4 bg-slate-50/90 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                    <ListChecks className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                      Inspection Checksheet
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono ${
+                        checksheetPassPercentage === 100 
+                          ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' 
+                          : 'bg-blue-100 dark:bg-blue-950 text-[#0B5FFF]'
+                      }`}>
+                        {passedCheckItems}/{totalCheckItems} ({checksheetPassPercentage}%)
+                      </span>
+                    </h3>
+                    <p className="text-[10px] text-slate-400">Hold points & technical compliance verifications</p>
+                  </div>
+                </div>
+
+                {/* Header Action Buttons */}
+                <div className="flex items-center gap-1.5">
+                  {canEditQuality && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsTemplateMenuOpen(!isTemplateMenuOpen)}
+                        className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center gap-1 transition-colors"
+                        title="Load standard discipline template"
+                      >
+                        <Layers className="h-3 w-3" />
+                        <span>Templates</span>
+                        <ChevronDown className="h-2.5 w-2.5" />
+                      </button>
+
+                      {isTemplateMenuOpen && (
+                        <div className="absolute right-0 top-7 w-48 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-100">
+                          <div className="px-2 py-1 text-[9px] font-bold uppercase text-slate-400 tracking-wider">
+                            Load Preset Checksheet
+                          </div>
+                          {Object.keys(DEFAULT_CATEGORY_CHECKSHEETS).map(catKey => (
+                            <button
+                              key={catKey}
+                              type="button"
+                              onClick={() => handleLoadChecksheetTemplate(catKey)}
+                              className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between"
+                            >
+                              <span>{catKey}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">({DEFAULT_CATEGORY_CHECKSHEETS[catKey].length})</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {canEditQuality && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCheckItem(!isAddingCheckItem)}
+                      className="px-2 py-1 rounded-lg text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] border border-blue-200 dark:border-blue-800 hover:bg-blue-100 flex items-center gap-1 transition-colors"
+                    >
+                      <Plus className="h-3 w-3" />
+                      <span>Add Item</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Progress Gauge */}
+              <div className="px-4 pt-3">
+                <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex border border-slate-200/70 dark:border-slate-700">
+                  <div
+                    className="h-full bg-emerald-500 transition-all duration-300"
+                    style={{ width: `${totalCheckItems > 0 ? (passedCheckItems / totalCheckItems) * 100 : 0}%` }}
+                    title={`Passed: ${passedCheckItems}`}
+                  />
+                  <div
+                    className="h-full bg-rose-500 transition-all duration-300"
+                    style={{ width: `${totalCheckItems > 0 ? (failedCheckItems / totalCheckItems) * 100 : 0}%` }}
+                    title={`Failed: ${failedCheckItems}`}
+                  />
+                  <div
+                    className="h-full bg-slate-400 transition-all duration-300"
+                    style={{ width: `${totalCheckItems > 0 ? (naCheckItems / totalCheckItems) * 100 : 0}%` }}
+                    title={`N/A: ${naCheckItems}`}
+                  />
+                </div>
+              </div>
+
+              {/* Filter Tabs & Quick Actions Bar */}
+              <div className="px-4 pt-2.5 pb-2 flex items-center justify-between gap-1 flex-wrap border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+                  {[
+                    { key: 'all', label: 'All', count: totalCheckItems },
+                    { key: 'Pass', label: 'Pass', count: passedCheckItems, color: 'text-emerald-600' },
+                    { key: 'Fail', label: 'Fail', count: failedCheckItems, color: 'text-rose-600' },
+                    { key: 'Pending', label: 'Pending', count: pendingCheckItems, color: 'text-amber-600' },
+                    { key: 'N/A', label: 'N/A', count: naCheckItems, color: 'text-slate-500' }
+                  ].map(tab => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setChecksheetFilter(tab.key as any)}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                        checksheetFilter === tab.key
+                          ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-2xs'
+                          : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      <span className="ml-1 opacity-80 font-mono">({tab.count})</span>
+                    </button>
+                  ))}
+                </div>
+
+                {canEditQuality && (
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    {pendingCheckItems > 0 && (
+                      <button
+                        type="button"
+                        onClick={handlePassAllPending}
+                        className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+                        title="Mark all pending items as Passed"
+                      >
+                        <Check className="h-3 w-3" /> Pass All
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleResetAllCheckItems}
+                      className="text-[10px] font-medium text-slate-400 hover:text-slate-600 flex items-center gap-0.5"
+                      title="Reset all check items to Pending"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" /> Reset
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Add New Item Inline Form */}
+              {isAddingCheckItem && (
+                <form onSubmit={handleAddNewCheckItem} className="p-3 bg-blue-50/40 dark:bg-blue-950/20 border-b border-blue-100 dark:border-blue-900/40 space-y-2 animate-in fade-in duration-150">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                      Check Item Requirement *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Invert level & trench compaction density verified"
+                      value={newCheckItemText}
+                      onChange={e => setNewCheckItemText(e.target.value)}
+                      className="w-full h-8 px-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-1 focus:ring-[#0B5FFF]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                      Specification / Standard (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. SANS 1200 / DWG-MV-201 / ±10mm"
+                      value={newCheckItemSpec}
+                      onChange={e => setNewCheckItemSpec(e.target.value)}
+                      className="w-full h-8 px-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-1 focus:ring-[#0B5FFF]"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-1.5 pt-1">
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setIsAddingCheckItem(false)} className="h-7 text-xs px-2.5">
+                      Cancel
+                    </Button>
+                    <Button type="submit" size="sm" className="h-7 text-xs px-3 bg-[#0B5FFF] hover:bg-blue-600 text-white font-bold">
+                      Add to Checksheet
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {/* Items List */}
+              <div className="p-3 flex flex-col gap-2.5 max-h-[460px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
+                {filteredChecksheetItems.length > 0 ? (
+                  filteredChecksheetItems.map(item => {
+                    const isEditing = editingCheckItemId === item.id;
+                    const isRemarkOpen = activeRemarkItemId === item.id;
+
+                    return (
+                      <div key={item.id} className="pt-2.5 first:pt-0 group flex flex-col gap-2">
+                        {isEditing ? (
+                          <div className="space-y-2 bg-slate-50 dark:bg-slate-850 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                            <input
+                              type="text"
+                              value={editingCheckItemText}
+                              onChange={e => setEditingCheckItemText(e.target.value)}
+                              className="w-full h-8 px-2 rounded-lg border border-slate-300 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Specification reference..."
+                              value={editingCheckItemSpec}
+                              onChange={e => setEditingCheckItemSpec(e.target.value)}
+                              className="w-full h-8 px-2 rounded-lg border border-slate-300 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+                            />
+                            <div className="flex justify-end gap-1.5">
+                              <Button size="sm" variant="ghost" onClick={() => setEditingCheckItemId(null)} className="h-6 text-[10px] px-2">Cancel</Button>
+                              <Button size="sm" onClick={() => handleSaveEditCheckItem(item.id)} className="h-6 text-[10px] px-2.5 bg-[#0B5FFF] text-white">Save</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Main Item Row */}
+                            <div className="flex items-start justify-between gap-2.5">
+                              <div className="flex items-start gap-2 flex-1 min-w-0">
+                                {/* Status Indicator Badge */}
+                                <div className="mt-0.5 shrink-0">
+                                  {item.status === 'Pass' && (
+                                    <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold text-xs">
+                                      ✓
+                                    </span>
+                                  )}
+                                  {item.status === 'Fail' && (
+                                    <span className="w-5 h-5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-600 flex items-center justify-center font-bold text-xs">
+                                      ✕
+                                    </span>
+                                  )}
+                                  {item.status === 'N/A' && (
+                                    <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center font-bold text-xs">
+                                      –
+                                    </span>
+                                  )}
+                                  {item.status === 'Pending' && (
+                                    <span className="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-600 flex items-center justify-center font-bold text-[10px]">
+                                      ⏰
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <p className={`text-xs font-semibold leading-relaxed ${
+                                    item.status === 'Pass' ? 'text-slate-800 dark:text-slate-200' :
+                                    item.status === 'Fail' ? 'text-rose-700 dark:text-rose-300 font-bold' :
+                                    item.status === 'N/A' ? 'text-slate-400 line-through' :
+                                    'text-slate-700 dark:text-slate-300'
+                                  }`}>
+                                    {item.item}
+                                  </p>
+
+                                  <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                    {item.specification && (
+                                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                        Spec: {item.specification}
+                                      </span>
+                                    )}
+
+                                    {item.checkedBy && (
+                                      <span className="text-[9px] text-slate-400 flex items-center gap-0.5">
+                                        <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
+                                        {item.checkedBy} {item.checkedAt && `(${item.checkedAt})`}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Punch Observation / Remarks Badge */}
+                                  {item.remarks && (
+                                    <div className="mt-1.5 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-1.5">
+                                      <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                      <span className="flex-1">{item.remarks}</span>
+                                      {canEditQuality && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveRemarkItemId(item.id);
+                                            setRemarkDraftText(item.remarks || '');
+                                          }}
+                                          className="text-[9px] text-amber-700 font-bold hover:underline"
+                                        >
+                                          Edit
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Item Action Buttons */}
+                              {canEditQuality && (
+                                <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingCheckItemId(item.id);
+                                      setEditingCheckItemText(item.item);
+                                      setEditingCheckItemSpec(item.specification || '');
+                                    }}
+                                    className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700"
+                                    title="Edit item"
+                                  >
+                                    <Edit3 className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCheckItem(item.id)}
+                                    className="p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600"
+                                    title="Delete item"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Status Quick Switcher Buttons */}
+                            {canEditQuality && (
+                              <div className="flex items-center justify-between gap-1.5 pl-7 pt-1 flex-wrap">
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateCheckItemStatus(item.id, 'Pass')}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors flex items-center gap-1 ${
+                                      item.status === 'Pass'
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                                    }`}
+                                  >
+                                    <Check className="h-3 w-3" /> Pass
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateCheckItemStatus(item.id, 'Fail')}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors flex items-center gap-1 ${
+                                      item.status === 'Fail'
+                                        ? 'bg-rose-600 text-white shadow-xs'
+                                        : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 hover:bg-rose-100'
+                                    }`}
+                                  >
+                                    <X className="h-3 w-3" /> Fail
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateCheckItemStatus(item.id, 'N/A')}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                      item.status === 'N/A'
+                                        ? 'bg-slate-700 text-white'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                                    }`}
+                                  >
+                                    N/A
+                                  </button>
+                                </div>
+
+                                {!item.remarks && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveRemarkItemId(item.id);
+                                      setRemarkDraftText('');
+                                    }}
+                                    className="text-[10px] text-slate-400 hover:text-[#0B5FFF] font-semibold"
+                                  >
+                                    + Remark
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Remark Input Form */}
+                            {isRemarkOpen && (
+                              <div className="pl-7 pt-1.5 space-y-1.5 animate-in fade-in duration-100">
+                                <textarea
+                                  value={remarkDraftText}
+                                  onChange={e => setRemarkDraftText(e.target.value)}
+                                  placeholder="Enter punch observation, site note, or deficiency remark..."
+                                  rows={2}
+                                  className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 focus:ring-1 focus:ring-[#0B5FFF]"
+                                />
+                                <div className="flex justify-end gap-1.5">
+                                  <Button size="sm" variant="ghost" onClick={() => setActiveRemarkItemId(null)} className="h-6 text-[10px] px-2">Cancel</Button>
+                                  <Button size="sm" onClick={() => handleSaveRemark(item.id)} className="h-6 text-[10px] px-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold">Save Remark</Button>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-6 text-center text-xs text-slate-400 italic bg-slate-50/50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700/60">
+                    No check items found for this filter.
+                  </div>
+                )}
+              </div>
             </Card>
           </div>
         </div>

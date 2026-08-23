@@ -799,6 +799,17 @@ export interface QAInspectionItem {
   linkedActivityIds?: string[];
   comments?: Comment[];
   notes?: string;
+  checksheetItems?: QAChecksheetItem[];
+}
+
+export interface QAChecksheetItem {
+  id: string;
+  item: string;
+  specification?: string;
+  status: 'Pass' | 'Fail' | 'N/A' | 'Pending';
+  remarks?: string;
+  checkedBy?: string;
+  checkedAt?: string;
 }
 
 export interface ProjectSectionPermissions {
