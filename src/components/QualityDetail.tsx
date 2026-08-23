@@ -28,6 +28,7 @@ import {
   Edit3,
   UserCheck,
   Printer,
+  Copy,
   FolderOpen,
   UploadCloud,
   FileSpreadsheet,
@@ -73,7 +74,7 @@ interface QualityDetailProps {
 
 export function QualityDetail({ inspection, onSave, onClose, onDelete }: QualityDetailProps) {
   const navigate = useNavigate();
-  const { activities, projects, documents, employees, addDocument, updateDocument, userRole, currentUserProfile } = useAppContext();
+  const { activities, projects, documents, employees, addDocument, updateDocument, addQAInspection, userRole, currentUserProfile } = useAppContext();
   const canEditQuality = canUserEditSection(currentUserProfile, 'quality');
 
   const employeeInspectorOptions = (employees && employees.length > 0)
@@ -630,8 +631,12 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   epc: inspection.epc || '',
                   subcontractor: inspection.subcontractor || '',
                   documentNumber: inspection.documentNumber || '',
+                  documentNumbers: inspection.documentNumbers || (inspection.documentNumber ? inspection.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []),
                   referenceDrawingNumber: inspection.referenceDrawingNumber || '',
+                  referenceDrawingNumbers: inspection.referenceDrawingNumbers || (inspection.referenceDrawingNumber ? inspection.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []),
                   activityId: inspection?.activityId,
+                  linkedActivityId: inspection?.linkedActivityId || inspection?.activityId,
+                  linkedActivityIds: inspection.linkedActivityIds || (inspection.activityId ? [inspection.activityId] : []),
                   clientQCRepresentative: inspection.clientQCRepresentative || '',
                   clientQCStatus: inspection.clientQCStatus || 'Pending Client Review',
                   clientQCNotes: inspection.clientQCNotes || '',
@@ -645,6 +650,97 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
               <Edit3 className="h-4 w-4 shrink-0 text-[#0B5FFF]" />
               <span className="max-w-0 opacity-0 group-hover:max-w-[120px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
                 Edit Inspection
+              </span>
+            </button>
+          )}
+
+          {/* Copy & Edit Inspection - Expandable Icon */}
+          {canEditQuality && (
+            <button
+              onClick={() => {
+                const incrementDocNumber = (num: string) => {
+                  const match = num.match(/^(.*?)(\d+)$/);
+                  if (match) {
+                    const prefix = match[1];
+                    const digits = match[2];
+                    const nextVal = String(parseInt(digits, 10) + 1).padStart(digits.length, '0');
+                    return `${prefix}${nextVal}`;
+                  }
+                  return `${num}-02`;
+                };
+
+                const rawDocNums = (inspection.documentNumbers && inspection.documentNumbers.length > 0)
+                  ? inspection.documentNumbers
+                  : (inspection.documentNumber ? inspection.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+                
+                const newDocNums = rawDocNums.length > 0
+                  ? rawDocNums.map(incrementDocNumber)
+                  : [`QA-ITR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`];
+
+                const rawDwgNums = (inspection.referenceDrawingNumbers && inspection.referenceDrawingNumbers.length > 0)
+                  ? inspection.referenceDrawingNumbers
+                  : (inspection.referenceDrawingNumber ? inspection.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+
+                const newId = `QA-${Date.now().toString().slice(-4)}`;
+                const newInspectionItem: QAInspectionItem = {
+                  ...inspection,
+                  id: newId,
+                  title: `${inspection.title} (Copy)`,
+                  status: 'Pending Approval',
+                  documentNumber: newDocNums.join(', '),
+                  documentNumbers: newDocNums,
+                  referenceDrawingNumber: rawDwgNums.join(', '),
+                  referenceDrawingNumbers: rawDwgNums,
+                  date: new Date().toISOString().split('T')[0],
+                  submissionDate: new Date().toISOString().split('T')[0],
+                  inspectionTime: new Date().toTimeString().substring(0, 5),
+                  inspectedQuantity: 0,
+                  approvedQuantity: 0,
+                  rejectedQuantity: 0,
+                  clientQCStatus: 'Pending Client Review',
+                  clientQCNotes: undefined,
+                  clientQCSignoffDate: undefined,
+                  ncrCode: undefined,
+                  ncrDetails: undefined,
+                  signoffNotes: undefined,
+                  approvedBy: undefined,
+                  comments: []
+                };
+
+                addQAInspection(newInspectionItem);
+                onSave(newInspectionItem);
+                setEditForm({
+                  title: newInspectionItem.title,
+                  category: newInspectionItem.category,
+                  location: newInspectionItem.location,
+                  inspector: newInspectionItem.inspector,
+                  date: newInspectionItem.date,
+                  inspectionTime: newInspectionItem.inspectionTime || '',
+                  submissionDate: newInspectionItem.submissionDate,
+                  dueDate: newInspectionItem.dueDate || '',
+                  client: newInspectionItem.client || '',
+                  epc: newInspectionItem.epc || '',
+                  subcontractor: newInspectionItem.subcontractor || '',
+                  documentNumber: newInspectionItem.documentNumber || '',
+                  documentNumbers: newInspectionItem.documentNumbers || [],
+                  referenceDrawingNumber: newInspectionItem.referenceDrawingNumber || '',
+                  referenceDrawingNumbers: newInspectionItem.referenceDrawingNumbers || [],
+                  activityId: newInspectionItem.activityId,
+                  linkedActivityId: newInspectionItem.linkedActivityId,
+                  linkedActivityIds: newInspectionItem.linkedActivityIds || [],
+                  clientQCRepresentative: newInspectionItem.clientQCRepresentative || '',
+                  clientQCStatus: 'Pending Client Review',
+                  clientQCNotes: '',
+                  clientQCSignoffDate: new Date().toISOString().split('T')[0]
+                });
+                setIsEditModalOpen(true);
+              }}
+              className="group h-9 px-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 transition-all duration-300 flex items-center shadow-2xs overflow-hidden"
+              title="Duplicate & Edit Inspection"
+            >
+              <Copy className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[130px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
+                Copy & Edit
               </span>
             </button>
           )}

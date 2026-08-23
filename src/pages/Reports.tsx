@@ -50,10 +50,12 @@ import {
   Package,
   Home,
   ShieldCheck,
+  FileCheck,
   Sparkles,
   Layers,
   ChevronDown,
-  Bookmark
+  Bookmark,
+  Copy
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { exportReportsToCSV, exportFullProjectCSV } from '../lib/csvExport';
@@ -230,6 +232,34 @@ export function Reports() {
     setIsNewReportDropdownOpen(false);
     setEditingReport(null);
     setModalInitialCategory(cat);
+    setIsUniversalModalOpen(true);
+  };
+
+  const handleCopyReport = (item: UniversalReportItem) => {
+    const incrementDocNumber = (num: string) => {
+      const match = num.match(/^(.*?)(\d+)$/);
+      if (match) {
+        const prefix = match[1];
+        const digits = match[2];
+        const nextVal = String(parseInt(digits, 10) + 1).padStart(digits.length, '0');
+        return `${prefix}${nextVal}`;
+      }
+      return `${num}-02`;
+    };
+
+    const newDocNumber = item.documentNumber ? incrementDocNumber(item.documentNumber) : `RPT-${Date.now().toString().slice(-4)}`;
+    const newReport: UniversalReportItem = {
+      ...item,
+      id: `RPT-UNI-${Date.now()}`,
+      documentNumber: newDocNumber,
+      title: `${item.title} (Copy)`,
+      date: new Date().toISOString().split('T')[0],
+      submissionDate: new Date().toISOString().split('T')[0],
+      status: 'Draft',
+      signoffs: []
+    };
+    setEditingReport(newReport);
+    setModalInitialCategory(item.category);
     setIsUniversalModalOpen(true);
   };
 
@@ -902,8 +932,19 @@ export function Reports() {
                       <Clock className="h-3.5 w-3.5 text-blue-500" /> {formatReportTime(item.createdAt, item.date)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <span className="font-sans font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[110px]">{item.author}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyReport(item);
+                      }}
+                      className="p-1 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-[#0B5FFF] dark:bg-slate-800 dark:hover:bg-blue-950/60 text-slate-500 transition-colors"
+                      title="Copy and Edit this report"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => {

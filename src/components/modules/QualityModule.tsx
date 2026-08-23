@@ -27,7 +27,8 @@ import {
   Clock,
   Calendar,
   LayoutGrid,
-  List as ListIcon
+  List as ListIcon,
+  Copy
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { QAInspectionItem, QAMeasurementType } from '../../types';
@@ -236,6 +237,57 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     };
 
     updateQAInspection(updated);
+  };
+
+  const handleCopyInspection = (item: QAInspectionItem) => {
+    const incrementDocNumber = (num: string) => {
+      const match = num.match(/^(.*?)(\d+)$/);
+      if (match) {
+        const prefix = match[1];
+        const digits = match[2];
+        const nextVal = String(parseInt(digits, 10) + 1).padStart(digits.length, '0');
+        return `${prefix}${nextVal}`;
+      }
+      return `${num}-02`;
+    };
+
+    const rawDocNums = (item.documentNumbers && item.documentNumbers.length > 0)
+      ? item.documentNumbers
+      : (item.documentNumber ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+    
+    const newDocNums = rawDocNums.length > 0
+      ? rawDocNums.map(incrementDocNumber)
+      : [`QA-ITR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`];
+
+    const rawDwgNums = (item.referenceDrawingNumbers && item.referenceDrawingNumbers.length > 0)
+      ? item.referenceDrawingNumbers
+      : (item.referenceDrawingNumber ? item.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
+
+    setTitle(item.title ? `${item.title} (Copy)` : '');
+    setCategory(item.category || 'Earthworks');
+    setLocation(item.location || '');
+    setInspector(item.inspector || 'David Smith (QA Engineer)');
+    setClient(item.client || '');
+    setEpc(item.epc || 'Scedih Engineering (EPC)');
+    setSubcontractor(item.subcontractor || '');
+    setDocumentNumbers(newDocNums);
+    setReferenceDrawingNumbers(rawDwgNums);
+    setInspectionDate(new Date().toISOString().split('T')[0]);
+    setInspectionTime(new Date().toTimeString().substring(0, 5));
+    setSubmissionDate(new Date().toISOString().split('T')[0]);
+    setClientQCRepresentative(item.clientQCRepresentative || '');
+    setClientQCStatus('Pending Client Review');
+    setSelectedActivityIds(item.linkedActivityIds || (item.activityId ? [item.activityId] : []));
+    setMeasurementType(item.measurementType || 'Length');
+    setUnit(item.unit || 'm');
+    setTargetQuantity(String(item.targetQuantity || '100'));
+    setInspectedQuantity('0');
+    setApprovedQuantity('0');
+    setRejectedQuantity('0');
+    setToleranceSpec(item.toleranceSpec || '±10mm / SANS 1200');
+
+    setIsAdding(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (selectedInspection) {
@@ -968,6 +1020,20 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                     <Ruler className="h-3.5 w-3.5" /> Measure / Quantities
                   </Button>
 
+                  {/* Copy & Edit Inspection Button */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopyInspection(item);
+                    }}
+                    className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1 border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                    title="Copy and Edit this inspection"
+                  >
+                    <Copy className="h-3.5 w-3.5" /> Copy & Edit
+                  </Button>
+
                   {/* Status Pills or Direct Buttons */}
                   {item.status === 'Passed' && (
                     <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
@@ -1135,17 +1201,31 @@ export function QualityModule({ onBack }: QualityModuleProps) {
 
                 {/* Bottom Actions */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMeasuringInspection(item);
-                    }}
-                    className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                  >
-                    <Ruler className="h-3.5 w-3.5" /> Measure
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMeasuringInspection(item);
+                      }}
+                      className="h-8 px-2 rounded-xl text-xs font-bold gap-1 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                    >
+                      <Ruler className="h-3.5 w-3.5" /> Measure
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyInspection(item);
+                      }}
+                      className="h-8 px-2 rounded-xl text-xs font-bold gap-1 border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                      title="Copy and Edit this inspection"
+                    >
+                      <Copy className="h-3.5 w-3.5" /> Copy
+                    </Button>
+                  </div>
 
                   {item.status === 'Pending Approval' && (
                     <div className="flex items-center gap-1.5">
