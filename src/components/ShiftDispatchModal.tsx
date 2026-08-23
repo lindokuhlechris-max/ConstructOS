@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Activity, Project } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Activity, Project, SubTask } from '../types';
 import { Button, Badge } from './ui';
 import { 
   X, 
@@ -18,7 +18,13 @@ import {
   MessageSquare,
   Send,
   Zap,
-  Info
+  Info,
+  CheckSquare,
+  Square,
+  Search,
+  Filter,
+  CheckCircle2,
+  ShieldCheck
 } from 'lucide-react';
 import { 
   generateWhatsAppDispatchText, 
@@ -45,20 +51,57 @@ export function ShiftDispatchModal({
 }: ShiftDispatchModalProps) {
   if (!isOpen || !activity) return null;
 
+  const allSubtasks: SubTask[] = activity.subtasks || [];
+
   const [activeTab, setActiveTab] = useState<'whatsapp' | 'pdf' | 'offline_html' | 'return_template'>('whatsapp');
   const [supervisorName, setSupervisorName] = useState<string>('');
   const [supervisorPhone, setSupervisorPhone] = useState<string>('');
   const [shiftDate, setShiftDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [customInstructions, setCustomInstructions] = useState<string>('');
+  const [selectedSubtaskIds, setSelectedSubtaskIds] = useState<string[]>(() => allSubtasks.map(s => s.id));
+  const [subtaskSearchQuery, setSubtaskSearchQuery] = useState<string>('');
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+
+  // Sync selected subtasks when activity changes
+  useEffect(() => {
+    if (activity?.subtasks) {
+      setSelectedSubtaskIds(activity.subtasks.map(s => s.id));
+    }
+  }, [activity?.id]);
+
+  const incompleteSubtasks = allSubtasks.filter(s => s.status !== 'Completed');
+  const holdPointSubtasks = allSubtasks.filter(s => s.isHoldPoint);
+
+  const toggleSubtaskId = (id: string) => {
+    setSelectedSubtaskIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllSubtasks = () => {
+    setSelectedSubtaskIds(allSubtasks.map(s => s.id));
+  };
+
+  const selectIncompleteSubtasks = () => {
+    setSelectedSubtaskIds(incompleteSubtasks.map(s => s.id));
+  };
+
+  const selectHoldPointsOnly = () => {
+    setSelectedSubtaskIds(holdPointSubtasks.map(s => s.id));
+  };
+
+  const deselectAllSubtasks = () => {
+    setSelectedSubtaskIds([]);
+  };
 
   const dispatchOptions = {
     supervisorName: supervisorName.trim() || undefined,
     supervisorPhone: supervisorPhone.trim() || undefined,
     shiftDate,
     customInstructions: customInstructions.trim() || undefined,
-    projectName: project?.name
+    projectName: project?.name,
+    selectedSubtaskIds
   };
 
   const whatsAppText = generateWhatsAppDispatchText(activity, dispatchOptions);
@@ -89,7 +132,8 @@ export function ShiftDispatchModal({
         activity,
         supervisorName: supervisorName || 'Site Supervisor',
         shiftDate,
-        customInstructions
+        customInstructions,
+        selectedSubtaskIds
       });
     } finally {
       setIsGeneratingPdf(false);
@@ -99,6 +143,12 @@ export function ShiftDispatchModal({
   const handleDownloadHtml = () => {
     downloadStandaloneMobileHtml(activity, dispatchOptions);
   };
+
+  const filteredSubtasks = allSubtasks.filter(st => {
+    if (!subtaskSearchQuery.trim()) return true;
+    const q = subtaskSearchQuery.toLowerCase();
+    return st.title.toLowerCase().includes(q) || (st.category || '').toLowerCase().includes(q);
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in">
@@ -267,9 +317,25 @@ export function ShiftDispatchModal({
             <div className="space-y-4">
               <div className="p-3.5 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 rounded-2xl flex items-start gap-2.5 text-xs text-emerald-900 dark:text-emerald-200">
                 <Info className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                <p className="leading-relaxed text-[11px]">
-                  Copies a structured work order with checkboxes, subtask targets, allocated plant, and QA hold point warnings directly into WhatsApp. The supervisor replies with their outputs at shift end.
-                </p>
+                <div className="space-y-1">
+                  <p className="leading-relaxed text-[11px]">
+                    Copies a structured work order with checkboxes, subtask targets, allocated plant, and QA hold point warnings directly into WhatsApp. The supervisor replies with their outputs at shift end.
+                  </p>
+                  {allSubtasks.length > 0 && (
+                    <div className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 pt-0.5">
+                      <span>Including {selectedSubtaskIds.length} of {allSubtasks.length} subtasks</span>
+                      {selectedSubtaskIds.length < allSubtasks.length && (
+                        <button
+                          type="button"
+                          onClick={selectAllSubtasks}
+                          className="underline hover:text-emerald-900 dark:hover:text-emerald-100 cursor-pointer"
+                        >
+                          (Include All)
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -319,9 +385,25 @@ export function ShiftDispatchModal({
             <div className="space-y-4">
               <div className="p-3.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-2xl flex items-start gap-2.5 text-xs text-blue-900 dark:text-blue-200">
                 <FileText className="h-4 w-4 text-[#0B5FFF] shrink-0 mt-0.5" />
-                <p className="leading-relaxed text-[11px]">
-                  Generates an executive 1-Page A4 PDF Daily Shift Ticket. Includes full method subtasks, target vs prior log, fill-in boxes, QA Hold Point verification lines, workforce rosters, and supervisor signature blocks.
-                </p>
+                <div className="space-y-1">
+                  <p className="leading-relaxed text-[11px]">
+                    Generates an executive 1-Page A4 PDF Daily Shift Ticket. Includes full method subtasks, target vs prior log, fill-in boxes, QA Hold Point verification lines, workforce rosters, and supervisor signature blocks.
+                  </p>
+                  {allSubtasks.length > 0 && (
+                    <div className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5 pt-0.5">
+                      <span>Including {selectedSubtaskIds.length} of {allSubtasks.length} subtasks</span>
+                      {selectedSubtaskIds.length < allSubtasks.length && (
+                        <button
+                          type="button"
+                          onClick={selectAllSubtasks}
+                          className="underline hover:text-blue-900 dark:hover:text-blue-100 cursor-pointer"
+                        >
+                          (Include All)
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-3">
@@ -336,7 +418,7 @@ export function ShiftDispatchModal({
                   </div>
                   <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700/60">
                     <span className="font-bold block text-slate-900 dark:text-white">✅ Subtask Checklist Table</span>
-                    <span>{activity.subtasks?.length || 0} subtasks with fill-in blanks & QA sign-offs.</span>
+                    <span>{selectedSubtaskIds.length} selected subtask(s) with fill-in blanks & QA sign-offs.</span>
                   </div>
                   <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700/60">
                     <span className="font-bold block text-slate-900 dark:text-white">👷 Crew & Plant Allocation</span>
@@ -352,12 +434,12 @@ export function ShiftDispatchModal({
               <div className="flex items-center justify-end gap-3 pt-2">
                 <Button
                   type="button"
-                  disabled={isGeneratingPdf}
+                  disabled={isGeneratingPdf || (allSubtasks.length > 0 && selectedSubtaskIds.length === 0)}
                   onClick={handlePrintPdf}
-                  className="rounded-xl px-6 text-xs font-bold bg-[#0B5FFF] hover:bg-blue-700 text-white gap-2 shadow-sm cursor-pointer"
+                  className="rounded-xl px-6 text-xs font-bold bg-[#0B5FFF] hover:bg-blue-700 text-white gap-2 shadow-sm cursor-pointer disabled:opacity-50"
                 >
                   <Printer className="h-4 w-4" />
-                  <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download / Print Shift Ticket PDF'}</span>
+                  <span>{isGeneratingPdf ? 'Generating PDF...' : `Download / Print Shift Ticket PDF (${selectedSubtaskIds.length} Subtasks)`}</span>
                 </Button>
               </div>
             </div>
@@ -373,6 +455,146 @@ export function ShiftDispatchModal({
                 </p>
               </div>
 
+              {/* SUBTASK SELECTION CARD FOR OFFLINE MOBILE FORM */}
+              {allSubtasks.length > 0 && (
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border-2 border-purple-200 dark:border-purple-900/70 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                        <CheckSquare className="h-4 w-4 text-purple-600" />
+                        Select Subtasks for Mobile Form
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                        selectedSubtaskIds.length === 0
+                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                          : 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                      }`}>
+                        {selectedSubtaskIds.length} of {allSubtasks.length} Selected
+                      </span>
+                    </div>
+
+                    {/* Quick Selection Buttons */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={selectAllSubtasks}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 hover:bg-purple-200 transition-colors cursor-pointer"
+                      >
+                        Select All ({allSubtasks.length})
+                      </button>
+                      {incompleteSubtasks.length > 0 && incompleteSubtasks.length < allSubtasks.length && (
+                        <button
+                          type="button"
+                          onClick={selectIncompleteSubtasks}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"
+                        >
+                          Incomplete Only ({incompleteSubtasks.length})
+                        </button>
+                      )}
+                      {holdPointSubtasks.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={selectHoldPointsOnly}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-100 transition-colors cursor-pointer border border-rose-200 dark:border-rose-900"
+                        >
+                          QA Hold ({holdPointSubtasks.length})
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={deselectAllSubtasks}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-500 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Subtask Search Filter if more than 3 */}
+                  {allSubtasks.length > 3 && (
+                    <div className="relative">
+                      <Search className="h-3.5 w-3.5 absolute left-3 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search subtasks by title or category..."
+                        value={subtaskSearchQuery}
+                        onChange={(e) => setSubtaskSearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                  )}
+
+                  {/* Subtasks Checkbox List */}
+                  <div className="space-y-1.5 max-h-[260px] overflow-y-auto custom-scrollbar p-1">
+                    {filteredSubtasks.map((st) => {
+                      const isSelected = selectedSubtaskIds.includes(st.id);
+                      const originalIdx = allSubtasks.findIndex(s => s.id === st.id);
+                      return (
+                        <div
+                          key={st.id}
+                          onClick={() => toggleSubtaskId(st.id)}
+                          className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer select-none ${
+                            isSelected
+                              ? 'bg-purple-50/80 dark:bg-purple-950/40 border-purple-300 dark:border-purple-800/80 shadow-2xs'
+                              : 'bg-slate-50/60 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700 opacity-60 hover:opacity-100'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="shrink-0 text-purple-600 dark:text-purple-400">
+                              {isSelected ? (
+                                <CheckSquare className="h-4 w-4 text-purple-600" />
+                              ) : (
+                                <Square className="h-4 w-4 text-slate-400" />
+                              )}
+                            </div>
+                            <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200 shrink-0">
+                              #{originalIdx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <span className={`text-xs font-bold truncate block ${
+                                isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'
+                              }`}>
+                                {st.title}
+                              </span>
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                                <span>{st.category || 'General'}</span>
+                                <span>•</span>
+                                <span>Target: {st.targetQuantity || 0} {st.unit || 'units'}</span>
+                                {st.completedQuantity ? <span>(Done: {st.completedQuantity})</span> : null}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {st.isHoldPoint && (
+                              <span className="text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900 flex items-center gap-1">
+                                <ShieldAlert className="h-3 w-3" /> QA Hold
+                              </span>
+                            )}
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              st.status === 'Completed'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : st.status === 'In Progress'
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                            }`}>
+                              {st.status || 'Not Started'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {selectedSubtaskIds.length === 0 && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs text-amber-900 dark:text-amber-300 flex items-center gap-2">
+                      <Info className="h-4 w-4 text-amber-600 shrink-0" />
+                      <span>Please select at least 1 subtask to generate the offline mobile form.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Mobile Offline Features</span>
@@ -387,11 +609,11 @@ export function ShiftDispatchModal({
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-3.5 w-3.5 text-purple-600" />
-                    <span>Includes +/- output buttons, chainage notes, and QA hold point quality sign-offs.</span>
+                    <span>Includes +/- output steppers, chainage notes, and QA hold point quality sign-offs.</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-3.5 w-3.5 text-purple-600" />
-                    <span>One-tap WhatsApp response generation encodes all subtask output to send back to office.</span>
+                    <span>One-tap WhatsApp response generation encodes selected subtask output to send back to office.</span>
                   </li>
                 </ul>
               </div>
@@ -399,11 +621,15 @@ export function ShiftDispatchModal({
               <div className="flex items-center justify-end gap-3 pt-2">
                 <Button
                   type="button"
+                  disabled={allSubtasks.length > 0 && selectedSubtaskIds.length === 0}
                   onClick={handleDownloadHtml}
-                  className="rounded-xl px-6 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white gap-2 shadow-sm cursor-pointer"
+                  className="rounded-xl px-6 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white gap-2 shadow-sm cursor-pointer disabled:opacity-50"
                 >
                   <Download className="h-4 w-4" />
-                  <span>Download Standalone Mobile Form (.html)</span>
+                  <span>
+                    Download Standalone Mobile Form (.html)
+                    {allSubtasks.length > 0 ? ` • (${selectedSubtaskIds.length} Subtask${selectedSubtaskIds.length === 1 ? '' : 's'})` : ''}
+                  </span>
                 </Button>
               </div>
             </div>

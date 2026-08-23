@@ -6,6 +6,7 @@ export interface DispatchOptions {
   shiftDate?: string;
   customInstructions?: string;
   projectName?: string;
+  selectedSubtaskIds?: string[];
 }
 
 export interface ParsedSupervisorReport {
@@ -34,15 +35,20 @@ export interface ParsedSupervisorReport {
  */
 export function generateWhatsAppDispatchText(activity: Activity, options: DispatchOptions = {}): string {
   const dateStr = options.shiftDate || new Date().toISOString().split('T')[0];
-  const subtasks = activity.subtasks || [];
+  const allSubtasks = activity.subtasks || [];
+  const subtasks = options.selectedSubtaskIds && options.selectedSubtaskIds.length > 0
+    ? allSubtasks.filter(st => options.selectedSubtaskIds!.includes(st.id))
+    : allSubtasks;
   
   const subtasksText = subtasks.length > 0
     ? subtasks.map((st, idx) => {
+        const originalIdx = allSubtasks.findIndex(s => s.id === st.id);
+        const num = originalIdx >= 0 ? originalIdx + 1 : idx + 1;
         const holdTag = st.isHoldPoint ? ' 🔒 [QA HOLD POINT]' : '';
         const msTag = st.isMilestone ? ' 🎯 [MILESTONE]' : '';
         const qtyStr = st.targetQuantity ? ` (Target: ${st.targetQuantity} ${st.unit || 'units'})` : '';
         const priorStr = (st.completedQuantity || 0) > 0 ? ` [Prior: ${st.completedQuantity} ${st.unit || ''}]` : '';
-        return `${idx + 1}. [ ] *${st.title}*${qtyStr}${priorStr}${holdTag}${msTag}`;
+        return `${num}. [ ] *${st.title}*${qtyStr}${priorStr}${holdTag}${msTag}`;
       }).join('\n')
     : '• No detailed subtasks configured. Record master activity volume.';
 
@@ -83,12 +89,17 @@ Reply to this message with:
  */
 export function generateSupervisorReturnTemplate(activity: Activity, options: DispatchOptions = {}): string {
   const dateStr = options.shiftDate || new Date().toISOString().split('T')[0];
-  const subtasks = activity.subtasks || [];
+  const allSubtasks = activity.subtasks || [];
+  const subtasks = options.selectedSubtaskIds && options.selectedSubtaskIds.length > 0
+    ? allSubtasks.filter(st => options.selectedSubtaskIds!.includes(st.id))
+    : allSubtasks;
 
   const subtaskLines = subtasks.length > 0
     ? subtasks.map((st, idx) => {
+        const originalIdx = allSubtasks.findIndex(s => s.id === st.id);
+        const num = originalIdx >= 0 ? originalIdx + 1 : idx + 1;
         const holdNotice = st.isHoldPoint ? ' [QA Inspector Name: ________]' : '';
-        return `#${idx + 1} ${st.title}: [ +___ ${st.unit || 'units'} ] Status: [Completed / In Progress]${holdNotice}`;
+        return `#${num} ${st.title}: [ +___ ${st.unit || 'units'} ] Status: [Completed / In Progress]${holdNotice}`;
       }).join('\n')
     : `Master Output: [ +___ ${activity.unit || 'units'} ]`;
 
@@ -110,8 +121,23 @@ ${subtaskLines}
  */
 export function generateStandaloneMobileHtml(activity: Activity, options: DispatchOptions = {}): string {
   const dateStr = options.shiftDate || new Date().toISOString().split('T')[0];
-  const subtasks = activity.subtasks || [];
-  const escapedActivity = JSON.stringify(activity);
+  const allSubtasks = activity.subtasks || [];
+  const subtasks = options.selectedSubtaskIds && options.selectedSubtaskIds.length > 0
+    ? allSubtasks.filter(st => options.selectedSubtaskIds!.includes(st.id))
+    : allSubtasks;
+  
+  const subtasksForScript = subtasks.map(st => {
+    const originalIdx = allSubtasks.findIndex(s => s.id === st.id);
+    return {
+      ...st,
+      seqIndex: originalIdx >= 0 ? originalIdx + 1 : 1
+    };
+  });
+
+  const escapedActivity = JSON.stringify({
+    ...activity,
+    subtasks: subtasksForScript
+  });
   const escapedOptions = JSON.stringify(options);
 
   return `<!DOCTYPE html>
@@ -155,7 +181,7 @@ export function generateStandaloneMobileHtml(activity: Activity, options: Dispat
     .section-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin: 18px 0 10px; display: flex; justify-content: space-between; align-items: center; }
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
     .subtask-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
-    .subtask-num { width: 26px; height: 26px; border-radius: 8px; background: var(--primary); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; flex-shrink: 0; }
+    .subtask-num { width: 28px; height: 28px; border-radius: 8px; background: var(--primary); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; flex-shrink: 0; font-family: monospace; }
     .subtask-title { font-size: 14px; font-weight: 700; line-height: 1.3; }
     .qty-box { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
     .qty-input { flex: 1; height: 44px; padding: 0 12px; border-radius: 12px; border: 2px solid var(--border); background: var(--bg); color: var(--text); font-size: 16px; font-weight: bold; }
@@ -178,6 +204,7 @@ export function generateStandaloneMobileHtml(activity: Activity, options: Dispat
     <div>
       <span class="badge">${activity.id}</span>
       <span class="badge" style="background:#ECFDF5; color:#065F46;">Offline Shift Form</span>
+      ${options.selectedSubtaskIds && options.selectedSubtaskIds.length < allSubtasks.length ? `<span class="badge" style="background:#F3E8FF; color:#7E22CE;">${subtasks.length} of ${allSubtasks.length} Subtasks</span>` : ''}
     </div>
     <div class="title">${activity.name}</div>
     <div class="meta">
@@ -215,15 +242,22 @@ export function generateStandaloneMobileHtml(activity: Activity, options: Dispat
 
   <div class="section-title">
     <span>Subtask Shift Quantities</span>
-    <span>${subtasks.length} Subtasks</span>
+    <span>${subtasks.length} Subtask${subtasks.length === 1 ? '' : 's'} Included</span>
   </div>
 
   <div id="subtasksContainer">
-    ${subtasks.map((st, idx) => `
+    ${subtasks.length === 0 ? `
+      <div class="card" style="text-align:center; padding:24px; color:var(--text-muted);">
+        No subtasks selected. Enter overall shift remarks below.
+      </div>
+    ` : subtasks.map((st, idx) => {
+      const originalIdx = allSubtasks.findIndex(s => s.id === st.id);
+      const num = originalIdx >= 0 ? originalIdx + 1 : idx + 1;
+      return `
       <div class="card" id="st_card_${st.id || idx}">
         <div class="subtask-header">
           <div style="display:flex; gap:10px; align-items:flex-start;">
-            <div class="subtask-num">${idx + 1}</div>
+            <div class="subtask-num">#${num}</div>
             <div>
               <div class="subtask-title">${st.title}</div>
               <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
@@ -262,7 +296,8 @@ export function generateStandaloneMobileHtml(activity: Activity, options: Dispat
 
         <input type="text" id="notes_${st.id || idx}" class="input" placeholder="Subtask remarks (e.g. Chainage CH 0+150 to 0+250)...">
       </div>
-    `).join('')}
+    `;
+    }).join('')}
   </div>
 
   <div class="section-title">Overall Shift Remarks & Blockers</div>
@@ -308,6 +343,7 @@ export function generateStandaloneMobileHtml(activity: Activity, options: Dispat
 
       subtasks.forEach((st, idx) => {
         const id = st.id || idx;
+        const seqNum = st.seqIndex || (idx + 1);
         const qty = parseFloat(document.getElementById('qty_' + id)?.value) || 0;
         const status = document.getElementById('status_' + id)?.value || st.status;
         const notes = document.getElementById('notes_' + id)?.value || '';
@@ -315,7 +351,7 @@ export function generateStandaloneMobileHtml(activity: Activity, options: Dispat
         const inspector = document.getElementById('inspector_' + id)?.value;
 
         if (qty > 0 || status !== st.status || notes || holdChecked) {
-          let line = '#' + (idx + 1) + ' ' + st.title + ': [+' + qty + ' ' + (st.unit || 'units') + '] Status: ' + status;
+          let line = '#' + seqNum + ' ' + st.title + ': [+' + qty + ' ' + (st.unit || 'units') + '] Status: ' + status;
           if (holdChecked) {
             line += ' (🔒 QA Cleared by ' + (inspector || 'Site Engineer') + ')';
           }

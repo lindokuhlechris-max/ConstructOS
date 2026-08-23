@@ -974,6 +974,7 @@ export interface PrintShiftTicketOptions {
   supervisorName?: string;
   shiftDate?: string;
   customInstructions?: string;
+  selectedSubtaskIds?: string[];
 }
 
 /**
@@ -984,7 +985,8 @@ export async function printShiftTicketPdf({
   activity,
   supervisorName = 'Site Supervisor',
   shiftDate = new Date().toISOString().split('T')[0],
-  customInstructions = ''
+  customInstructions = '',
+  selectedSubtaskIds
 }: PrintShiftTicketOptions): Promise<boolean> {
   try {
     const doc = new jsPDF({
@@ -1042,14 +1044,19 @@ export async function printShiftTicketPdf({
     yPos += 74;
 
     // Method Subtasks Table
-    const subtasks = activity.subtasks || [];
+    const allSubtasks = activity.subtasks || [];
+    const subtasks = selectedSubtaskIds && selectedSubtaskIds.length > 0
+      ? allSubtasks.filter(st => selectedSubtaskIds.includes(st.id))
+      : allSubtasks;
     const subtaskRows = subtasks.length > 0
       ? subtasks.map((st, idx) => {
+          const originalIdx = allSubtasks.findIndex(s => s.id === st.id);
+          const num = originalIdx >= 0 ? originalIdx + 1 : idx + 1;
           const holdStr = st.isHoldPoint ? ' [🔒 QA HOLD POINT]' : '';
           const targetStr = st.targetQuantity ? `${st.targetQuantity} ${st.unit || ''}` : '-';
           const priorStr = `${st.completedQuantity || 0} ${st.unit || ''}`;
           return [
-            `#${idx + 1}`,
+            `#${num}`,
             `${st.title}${holdStr}\nCategory: ${st.category || 'General'}`,
             targetStr,
             priorStr,
