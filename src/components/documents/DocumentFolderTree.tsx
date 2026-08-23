@@ -5,6 +5,8 @@ import {
   FolderPlus, 
   ChevronRight, 
   ChevronDown, 
+  ChevronLeft,
+  ChevronsUpDown,
   MoreVertical, 
   Edit3, 
   Trash2, 
@@ -14,7 +16,8 @@ import {
   X, 
   Check,
   Building2,
-  HardHat
+  HardHat,
+  Sidebar
 } from 'lucide-react';
 import { DocumentFolder, DocumentItem } from '../../types';
 import { Button } from '../ui';
@@ -30,6 +33,8 @@ interface DocumentFolderTreeProps {
   canEdit: boolean;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function DocumentFolderTree({
@@ -42,11 +47,23 @@ export function DocumentFolderTree({
   onDeleteFolder,
   canEdit,
   isOpenMobile,
-  onCloseMobile
+  onCloseMobile,
+  isCollapsed: controlledCollapsed,
+  onToggleCollapse
 }: DocumentFolderTreeProps) {
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(() => {
     return new Set(['FLD-02']); // expand drawings by default
   });
+
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
+  const toggleCollapse = () => {
+    if (onToggleCollapse) {
+      onToggleCollapse();
+    } else {
+      setInternalCollapsed(prev => !prev);
+    }
+  };
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<DocumentFolder | null>(null);
@@ -67,6 +84,14 @@ export function DocumentFolderTree({
       }
       return next;
     });
+  };
+
+  const handleToggleExpandAll = () => {
+    if (expandedFolderIds.size > 0) {
+      setExpandedFolderIds(new Set());
+    } else {
+      setExpandedFolderIds(new Set(folders.map(f => f.id)));
+    }
   };
 
   // Group folders by parentId
@@ -97,6 +122,7 @@ export function DocumentFolderTree({
     return counts;
   }, [documents]);
 
+  // Open Create Modal
   const handleOpenCreate = (parentId: string | null = null) => {
     setCreateParentId(parentId);
     setEditingFolder(null);
@@ -106,6 +132,7 @@ export function DocumentFolderTree({
     setIsCreateModalOpen(true);
   };
 
+  // Open Edit Modal
   const handleOpenEdit = (folder: DocumentFolder) => {
     setEditingFolder(folder);
     setCreateParentId(folder.parentId || null);
@@ -115,7 +142,8 @@ export function DocumentFolderTree({
     setIsCreateModalOpen(true);
   };
 
-  const handleSaveModal = (e: React.FormEvent) => {
+  // Save Folder
+  const handleSaveFolder = (e: React.FormEvent) => {
     e.preventDefault();
     if (!folderName.trim()) return;
 
@@ -124,8 +152,7 @@ export function DocumentFolderTree({
         ...editingFolder,
         name: folderName.trim(),
         code: folderCode.trim() || undefined,
-        color: folderColor,
-        parentId: createParentId
+        color: folderColor
       });
     } else {
       const newFolder: DocumentFolder = {
@@ -134,45 +161,46 @@ export function DocumentFolderTree({
         name: folderName.trim(),
         code: folderCode.trim() || undefined,
         color: folderColor,
-        parentId: createParentId,
+        parentId: createParentId || undefined,
         createdAt: new Date().toISOString()
       };
       onAddFolder(newFolder);
       if (createParentId) {
-        setExpandedFolderIds(prev => new Set(prev).add(createParentId));
+        setExpandedFolderIds(prev => new Set([...prev, createParentId]));
       }
     }
 
     setIsCreateModalOpen(false);
   };
 
+  // Render a Single Folder Row (Recursive)
   const renderFolderItem = (folder: DocumentFolder, depth: number = 0) => {
+    const isSelected = selectedFolderId === folder.id;
+    const isExpanded = expandedFolderIds.has(folder.id);
     const children = childFoldersMap.get(folder.id) || [];
     const hasChildren = children.length > 0;
-    const isExpanded = expandedFolderIds.has(folder.id);
-    const isSelected = selectedFolderId === folder.id;
     const docCount = folderDocCounts.get(folder.id) || 0;
 
     return (
-      <div key={folder.id} className="space-y-1">
-        <div
+      <div key={folder.id} className="space-y-0.5 select-none">
+        <div 
           onClick={() => {
             onSelectFolder(folder.id);
             if (onCloseMobile) onCloseMobile();
           }}
-          style={{ paddingLeft: `${depth * 14 + 8}px` }}
-          className={`group flex items-center justify-between py-2 px-2.5 rounded-xl cursor-pointer transition-all text-xs font-semibold select-none ${
-            isSelected
-              ? 'bg-blue-50 dark:bg-blue-950/50 text-[#0B5FFF] font-bold shadow-2xs'
+          className={`group flex items-center justify-between py-1.5 px-2.5 rounded-xl cursor-pointer transition-all text-xs font-medium ${
+            isSelected 
+              ? 'bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] font-bold shadow-2xs' 
               : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
           }`}
+          style={{ paddingLeft: `${Math.max(10, depth * 16 + 10)}px` }}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
             {hasChildren ? (
               <button
                 type="button"
                 onClick={(e) => toggleExpand(folder.id, e)}
-                className="p-0.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               >
                 {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               </button>
@@ -238,9 +266,78 @@ export function DocumentFolderTree({
     );
   };
 
+  // Minimized Compact Render View
+  if (isCollapsed) {
+    return (
+      <div className="w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-3 shadow-xs flex flex-col items-center gap-2.5 animate-in fade-in duration-150">
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors shadow-2xs flex items-center justify-center w-full"
+          title="Expand Directory Folders"
+        >
+          <Sidebar className="h-4 w-4" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelectFolder(null)}
+          className={`p-2 rounded-xl text-xs flex flex-col items-center justify-center gap-1 w-full transition-all ${
+            selectedFolderId === null 
+              ? 'bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] font-bold shadow-2xs' 
+              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+          title="All Project Documents"
+        >
+          <FileText className="h-4 w-4" />
+          <span className="text-[9px] font-mono font-bold">{documents.length}</span>
+        </button>
+
+        <div className="w-full border-t border-slate-100 dark:border-slate-800 my-0.5" />
+
+        <div className="flex flex-col gap-1.5 w-full items-center max-h-[380px] overflow-y-auto py-1">
+          {rootFolders.map(f => {
+            const isSelected = selectedFolderId === f.id;
+            const count = folderDocCounts.get(f.id) || 0;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => onSelectFolder(f.id)}
+                className={`p-2 rounded-xl flex items-center justify-center relative transition-all ${
+                  isSelected 
+                    ? 'bg-blue-50 dark:bg-blue-950/60 text-[#0B5FFF] ring-2 ring-[#0B5FFF]/40' 
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+                style={{ color: f.color }}
+                title={`${f.name} (${count} docs)`}
+              >
+                {isSelected ? <FolderOpen className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                {count > 0 && (
+                  <span className="absolute -top-1 -right-1 h-3.5 min-w-[14px] px-0.5 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-[8px] font-mono font-bold flex items-center justify-center">
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          className="mt-1 text-[10px] font-bold text-slate-400 hover:text-blue-600 flex items-center gap-1 py-1"
+          title="Expand Directory Tree"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <>
-      <div className="w-full h-full flex flex-col justify-between bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs">
+      <div className="w-full h-full flex flex-col justify-between bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs animate-in fade-in duration-150">
         
         <div className="space-y-3 overflow-y-auto pr-1">
           
@@ -253,16 +350,39 @@ export function DocumentFolderTree({
               </h3>
             </div>
 
-            {canEdit && (
+            <div className="flex items-center gap-1">
+              {/* Expand / Collapse All Subfolders */}
               <button
                 type="button"
-                onClick={() => handleOpenCreate(null)}
-                className="p-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#0B5FFF] hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                title="Create New Root Folder"
+                onClick={handleToggleExpandAll}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title={expandedFolderIds.size > 0 ? "Collapse all subfolders" : "Expand all subfolders"}
               >
-                <FolderPlus className="h-4 w-4" />
+                <ChevronsUpDown className="h-3.5 w-3.5" />
               </button>
-            )}
+
+              {/* Create New Root Folder */}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenCreate(null)}
+                  className="p-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#0B5FFF] hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                  title="Create New Root Folder"
+                >
+                  <FolderPlus className="h-4 w-4" />
+                </button>
+              )}
+
+              {/* Collapse Directory */}
+              <button
+                type="button"
+                onClick={toggleCollapse}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Collapse Directory Sidebar"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Root All Documents Button */}
@@ -330,7 +450,7 @@ export function DocumentFolderTree({
               </button>
             </div>
 
-            <form onSubmit={handleSaveModal} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSaveFolder} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
                   Folder Name <span className="text-red-500">*</span>

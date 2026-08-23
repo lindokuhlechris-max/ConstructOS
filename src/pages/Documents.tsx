@@ -574,10 +574,12 @@ export function Documents() {
       </div>
 
       {/* Main Multi-Column Workstation Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
         
         {/* Left Column: Hierarchical Folder Tree Sidebar */}
-        <div className={`lg:col-span-1 ${isFolderSidebarOpen ? 'block' : 'hidden lg:block'}`}>
+        <div className={`transition-all duration-200 shrink-0 ${
+          isFolderSidebarOpen ? 'w-full lg:w-72 xl:w-80' : 'w-full lg:w-16'
+        }`}>
           <DocumentFolderTree
             folders={documentFolders}
             documents={documents}
@@ -587,11 +589,13 @@ export function Documents() {
             onUpdateFolder={(updatedFolder) => updateDocumentFolder(updatedFolder)}
             onDeleteFolder={(folderId) => deleteDocumentFolder(folderId)}
             canEdit={canEditDocuments}
+            isCollapsed={!isFolderSidebarOpen}
+            onToggleCollapse={() => setIsFolderSidebarOpen(!isFolderSidebarOpen)}
           />
         </div>
 
         {/* Right Column: File Explorer, Filter Bar & Document Grids */}
-        <div className={`space-y-4 ${isFolderSidebarOpen ? 'lg:col-span-3' : 'lg:col-span-4'}`}>
+        <div className="flex-1 min-w-0 space-y-4 w-full">
           
           {/* Breadcrumbs & Folder Header Bar */}
           <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between flex-wrap gap-2 text-xs">
