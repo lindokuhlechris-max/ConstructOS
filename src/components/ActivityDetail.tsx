@@ -13,6 +13,7 @@ import { RecordActivityForTaskModal } from './RecordActivityForTaskModal';
 import { PlanningCalendar } from './PlanningCalendar';
 import { ActivityDetailPdfModal } from './ActivityDetailPdfModal';
 import { ActivityAuditScreen } from './ActivityAuditScreen';
+import { ShiftDispatchModal } from './ShiftDispatchModal';
 import { useAppContext } from '../context/AppContext';
 import { getPersonInitials, normalizeLabourAssignments, isEmployeeAlreadyAssigned, getLoggedHoursForWorker } from '../lib/labourUtils';
 import { findActivityResourceConflicts, getAvailableAlternativeEquipment, ResourceConflict } from '../lib/resourceConflictUtils';
@@ -23,6 +24,7 @@ import { saveOrShareFile } from '../lib/fileExportService';
 import {
   MapPin,
   QrCode,
+  Share2,
   Barcode,
   FileText,
   Calendar,
@@ -116,6 +118,7 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
   const [isEditing, setIsEditing] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [isShiftDispatchModalOpen, setIsShiftDispatchModalOpen] = useState(false);
   const [copiedGps, setCopiedGps] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
@@ -1493,6 +1496,17 @@ ${subtaskSummaryLines}
             >
               <History className="h-4 w-4 text-[#0B5FFF]" />
               <span>Audit Trail</span>
+            </Button>
+          )}
+          {!isEditing && (
+            <Button 
+              variant="outline" 
+              onClick={() => setIsShiftDispatchModalOpen(true)} 
+              className="gap-2 rounded-xl text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/50 cursor-pointer"
+              title="Dispatch Work Order & Shift Ticket (WhatsApp / PDF / Offline HTML)"
+            >
+              <Share2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Dispatch Shift Ticket</span>
             </Button>
           )}
           {!isEditing && (
@@ -4961,6 +4975,17 @@ ${subtaskSummaryLines}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Field Shift Dispatch & Offline Work Orders Modal */}
+      {isShiftDispatchModalOpen && (
+        <ShiftDispatchModal
+          activity={activity}
+          isOpen={isShiftDispatchModalOpen}
+          onClose={() => setIsShiftDispatchModalOpen(false)}
+          project={projects.find(p => p.id === activity.projectId) || projects[0]}
+          employees={employees}
+        />
       )}
     </div>
   );

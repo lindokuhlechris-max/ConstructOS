@@ -16,6 +16,7 @@ import {
   Building2,
   Package,
   ShieldAlert,
+  Share2,
   Zap
 } from 'lucide-react';
 
@@ -24,6 +25,7 @@ interface ActivityKanbanBoardProps {
   onSelectActivity: (activity: Activity) => void;
   onOpenSlideOver: (activity: Activity) => void;
   onOpenLogProgress: (activity: Activity) => void;
+  onDispatchShiftTicket?: (activity: Activity) => void;
   onUpdateStatus: (activityId: string, newStatus: ActivityStatus) => void;
   onAddNewInStatus?: (status: ActivityStatus) => void;
 }
@@ -72,6 +74,7 @@ export function ActivityKanbanBoard({
   onSelectActivity,
   onOpenSlideOver,
   onOpenLogProgress,
+  onDispatchShiftTicket,
   onUpdateStatus
 }: ActivityKanbanBoardProps) {
 
@@ -223,6 +226,17 @@ export function ActivityKanbanBoard({
                           >
                             Inspect
                           </button>
+                          {onDispatchShiftTicket && (
+                            <button
+                              type="button"
+                              onClick={() => onDispatchShiftTicket(activity)}
+                              className="px-2 py-1 rounded text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 transition-colors flex items-center gap-1"
+                              title="Dispatch Shift Ticket (WhatsApp / PDF / Offline HTML)"
+                            >
+                              <Share2 className="h-3 w-3" />
+                              <span>Dispatch</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => onOpenLogProgress(activity)}

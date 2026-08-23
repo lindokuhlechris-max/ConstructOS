@@ -62,13 +62,17 @@ import {
   Building2,
   AlertOctagon,
   AlertTriangle,
-  Clock
+  Clock,
+  Share2,
+  MessageSquare,
+  Download
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { exportActivitiesToExcel } from '../lib/excelExport';
 import { printActivitiesSummary } from '../lib/pdfPrint';
 import { findActivityResourceConflicts, ActivityResourceVitality } from '../lib/resourceConflictUtils';
 import { calculateSubtaskDailyAverage, recordSubtaskProgress, calculateActivityRollupFromSubtasks } from '../lib/subtaskProgressUtils';
+import { parseSupervisorProgressReply } from '../lib/shiftDispatchUtils';
 import { WORKSTREAMS, WorkstreamType } from '../types';
 import { ActivityKanbanBoard } from '../components/ActivityKanbanBoard';
 import { ActivityDataTable } from '../components/ActivityDataTable';
@@ -77,6 +81,7 @@ import { DisciplineTrackerView } from '../components/DisciplineTrackerView';
 import { DailyLogsTrackerView } from '../components/DailyLogsTrackerView';
 import { ActivityNotesTrackerView } from '../components/ActivityNotesTrackerView';
 import { ActivitiesPdfModal } from '../components/ActivitiesPdfModal';
+import { ShiftDispatchModal } from '../components/ShiftDispatchModal';
 
 export function Activities() {
   const { activities, projects, updateActivity, addActivity, deleteActivity, addReport, addAuditLog, userRole, currentUserProfile, hasPermission, notes, equipment, employees } = useAppContext();
@@ -189,8 +194,12 @@ export function Activities() {
   const [logProgressTemp, setLogProgressTemp] = useState<string>('24°C');
   const [logProgressSiteConditions, setLogProgressSiteConditions] = useState<string>('Site dry and fully accessible');
   const [logProgressSubtasks, setLogProgressSubtasks] = useState<SubTask[]>([]);
-  const [logProgressPostReport, setLogProgressPostReport] = useState<boolean>(true);
   const [logProgressDelayReason, setLogProgressDelayReason] = useState<string>('');
+  const [logProgressPostReport, setLogProgressPostReport] = useState<boolean>(true);
+  const [dispatchingActivity, setDispatchingActivity] = useState<Activity | null>(null);
+  const [isPasteReportOpen, setIsPasteReportOpen] = useState<boolean>(false);
+  const [pasteReportText, setPasteReportText] = useState<string>('');
+  const [pasteSuccessMsg, setPasteSuccessMsg] = useState<string>('');
 
   // Click outside listener for subtask select popout
   useEffect(() => {
@@ -221,6 +230,9 @@ export function Activities() {
     setLogProgressSubtasks(subtasks);
     setLogProgressPostReport(true);
     setLogProgressDelayReason('');
+    setIsPasteReportOpen(false);
+    setPasteReportText('');
+    setPasteSuccessMsg('');
 
     // Granular Subtask Inputs Initialization
     const initialInputs: Record<string, any> = {};
@@ -246,6 +258,46 @@ export function Activities() {
     setSubtaskDropdownSearch('');
     setSubtaskDropdownFilter('all');
     setLogProgressIsGranularMode(subtasks.length > 0);
+  };
+
+  const handleApplyPastedSupervisorReport = () => {
+    if (!loggingProgressActivity || !pasteReportText.trim()) return;
+
+    const parsed = parseSupervisorProgressReply(pasteReportText, loggingProgressActivity);
+    let matchedCount = 0;
+
+    if (parsed.subtaskUpdates.length > 0) {
+      const updatedInputs = { ...logProgressSubtaskInputs };
+      parsed.subtaskUpdates.forEach(up => {
+        if (up.subtaskId && updatedInputs[up.subtaskId]) {
+          const current = updatedInputs[up.subtaskId];
+          const prevQty = loggingProgressActivity.subtasks?.find(s => s.id === up.subtaskId)?.completedQuantity || 0;
+          const shiftVal = up.shiftOutput !== undefined ? up.shiftOutput : current.shiftOutput;
+          
+          updatedInputs[up.subtaskId] = {
+            ...current,
+            shiftOutput: shiftVal,
+            cumulativeOutput: prevQty + shiftVal,
+            status: up.status || current.status,
+            holdPointApproved: up.holdPointApproved !== undefined ? up.holdPointApproved : current.holdPointApproved,
+            holdPointSignedBy: up.inspectorName || current.holdPointSignedBy,
+            notes: up.notes || current.notes
+          };
+          matchedCount++;
+        }
+      });
+      setLogProgressSubtaskInputs(updatedInputs);
+    }
+
+    if (parsed.shiftDate) setLogProgressDate(parsed.shiftDate);
+    if (parsed.weather) setLogProgressWeather(parsed.weather);
+    if (parsed.delayReason) setLogProgressDelayReason(parsed.delayReason);
+    if (parsed.supervisorNotes) setLogProgressNotes(parsed.supervisorNotes);
+
+    setPasteSuccessMsg(`✨ Successfully imported ${matchedCount} subtask updates and shift remarks from supervisor's message!`);
+    setIsPasteReportOpen(false);
+    setPasteReportText('');
+    setTimeout(() => setPasteSuccessMsg(''), 6000);
   };
 
   const handleQuickLogProgressSubmit = (e: React.FormEvent) => {
@@ -1055,6 +1107,7 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
               onSelectActivity={setSelectedActivity} 
               onOpenSlideOver={setSlideOverActivity} 
               onOpenLogProgress={handleOpenLogProgress} 
+              onDispatchShiftTicket={setDispatchingActivity}
               onUpdateStatus={handleQuickUpdateStatus} 
             />
           ) : viewMode === 'table' ? (
@@ -1063,6 +1116,7 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
               onSelectActivity={setSelectedActivity} 
               onOpenSlideOver={setSlideOverActivity} 
               onOpenLogProgress={handleOpenLogProgress} 
+              onDispatchShiftTicket={setDispatchingActivity}
               onUpdateStatus={handleQuickUpdateStatus} 
               onBulkStatusChange={handleBulkStatusChange} 
               onExportSelected={(selected) => exportActivitiesToExcel(selected, projects, 'selected')} 
@@ -1381,6 +1435,21 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
                           <span className="font-semibold">Log</span>
                         </Button>
 
+                        {/* Quick Dispatch Shift Ticket Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDispatchingActivity(activity);
+                          }}
+                          className="h-8 rounded-xl px-2 gap-1 text-xs text-blue-600 dark:text-blue-400 border-blue-200 hover:bg-blue-50 dark:hover:bg-blue-950/50 dark:border-blue-900"
+                          title="Dispatch Shift Ticket (WhatsApp / PDF / Offline HTML)"
+                        >
+                          <Share2 className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline font-semibold">Dispatch</span>
+                        </Button>
+
                         {/* Quick Camera Capture Button */}
                         <Button
                           variant="outline"
@@ -1590,18 +1659,127 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
                   </p>
                 </div>
               </div>
-              <button 
-                onClick={() => setLoggingProgressActivity(null)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
-                title="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDispatchingActivity(loggingProgressActivity)}
+                  className="rounded-xl px-3 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 gap-1.5 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  title="Dispatch Work Order via WhatsApp / PDF / Offline HTML"
+                >
+                  <Share2 className="h-3.5 w-3.5 text-blue-500" />
+                  <span className="hidden sm:inline">Dispatch Ticket</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setIsPasteReportOpen(!isPasteReportOpen)}
+                  className={`rounded-xl px-3 py-1 text-xs font-bold gap-1.5 transition-all cursor-pointer ${
+                    isPasteReportOpen 
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white' 
+                      : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
+                  }`}
+                  title="Paste Supervisor's WhatsApp Progress Report to auto-fill subtasks"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  <span>{isPasteReportOpen ? 'Close Paste Box' : 'Paste WhatsApp Report'}</span>
+                </Button>
+
+                <button 
+                  onClick={() => setLoggingProgressActivity(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                  title="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Form Body */}
             <form onSubmit={handleQuickLogProgressSubmit} className="flex flex-col flex-1 overflow-hidden">
               <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1 custom-scrollbar">
+
+                {/* Green feedback alert when pasted */}
+                {pasteSuccessMsg && (
+                  <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 rounded-2xl flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-200 animate-in fade-in">
+                    <span className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-emerald-600" />
+                      {pasteSuccessMsg}
+                    </span>
+                    <button type="button" onClick={() => setPasteSuccessMsg('')} className="p-1 hover:opacity-75 cursor-pointer">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Expandable WhatsApp Return Paste Drawer */}
+                {isPasteReportOpen && (
+                  <div className="p-4 rounded-3xl bg-amber-50/80 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-700/80 space-y-3 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-amber-600" />
+                        <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                          Paste Supervisor WhatsApp Report / Summary
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                        Auto-extracts subtask outputs, status, QA approvals & remarks
+                      </span>
+                    </div>
+
+                    <textarea
+                      rows={4}
+                      value={pasteReportText}
+                      onChange={(e) => setPasteReportText(e.target.value)}
+                      placeholder="Paste the WhatsApp message received from your site supervisor here (e.g. #1 Trenching: [+150 m] Status: Completed (🔒 QA Cleared by John)...)"
+                      className="w-full p-3 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-2xl text-xs text-slate-900 dark:text-white font-mono placeholder:text-slate-400 focus:outline-none focus:border-amber-500 shadow-xs"
+                      autoFocus
+                    />
+
+                    <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (navigator.clipboard) {
+                            navigator.clipboard.readText().then(txt => {
+                              if (txt) setPasteReportText(txt);
+                            }).catch(() => {});
+                          }
+                        }}
+                        className="text-xs font-bold text-amber-800 dark:text-amber-300 hover:underline cursor-pointer"
+                      >
+                        📋 Paste From Clipboard
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setIsPasteReportOpen(false);
+                            setPasteReportText('');
+                          }}
+                          className="rounded-xl text-xs cursor-pointer"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={!pasteReportText.trim()}
+                          onClick={handleApplyPastedSupervisorReport}
+                          className="rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shadow-sm cursor-pointer disabled:opacity-40"
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          <span>✨ Auto-Fill Subtasks & Daily Report</span>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Granular vs Direct Mode Switcher */}
                 {logProgressSubtasks.length > 0 && (
@@ -2684,6 +2862,17 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
           defaultProjectId={projects[0]?.id || 'all'}
           defaultFilterLabel={searchTerm ? `Search query: "${searchTerm}"` : timeframe !== 'all' ? `Timeframe: ${timeframe}` : 'All Filtered Activities'}
           initialTemplate={mainScreen === 'daily_logs' ? 'daily_shift' : 'executive'}
+        />
+      )}
+
+      {/* Field Shift Dispatch & Offline Work Orders Modal */}
+      {dispatchingActivity && (
+        <ShiftDispatchModal
+          activity={dispatchingActivity}
+          isOpen={Boolean(dispatchingActivity)}
+          onClose={() => setDispatchingActivity(null)}
+          project={projects.find(p => p.id === dispatchingActivity.projectId) || projects[0]}
+          employees={employees}
         />
       )}
     </div>

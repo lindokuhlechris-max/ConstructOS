@@ -24,6 +24,7 @@ import {
   ShieldCheck, 
   Zap, 
   Tag,
+  Share2,
   Image as ImageIcon 
 } from 'lucide-react';
 
@@ -32,6 +33,7 @@ interface ActivityDataTableProps {
   onSelectActivity: (activity: Activity) => void;
   onOpenSlideOver: (activity: Activity) => void;
   onOpenLogProgress: (activity: Activity) => void;
+  onDispatchShiftTicket?: (activity: Activity) => void;
   onUpdateStatus: (activityId: string, newStatus: ActivityStatus) => void;
   onBulkStatusChange?: (activityIds: string[], newStatus: ActivityStatus) => void;
   onExportSelected?: (selectedActivities: Activity[]) => void;
@@ -44,6 +46,7 @@ export function ActivityDataTable({
   onSelectActivity,
   onOpenSlideOver,
   onOpenLogProgress,
+  onDispatchShiftTicket,
   onUpdateStatus,
   onBulkStatusChange,
   onExportSelected
@@ -393,6 +396,16 @@ export function ActivityDataTable({
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </button>
+                        {onDispatchShiftTicket && (
+                          <button
+                            type="button"
+                            onClick={() => onDispatchShiftTicket(activity)}
+                            className="p-1 rounded text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors"
+                            title="Dispatch Shift Ticket (WhatsApp / PDF / Offline HTML)"
+                          >
+                            <Share2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => onOpenLogProgress(activity)}

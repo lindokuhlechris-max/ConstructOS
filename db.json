@@ -21825,6 +21825,19 @@
       "action": "Status Updated",
       "details": "Changed status of \"PTS02 - PTS03\" (02-03) to In Progress",
       "timestamp": "2026-08-23T22:43:19.835Z"
+    },
+    {
+      "id": "AL-mt6fo363-ikei",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Survey Report Created",
+      "details": "Created Survey report \"PTS08 - PTS15\" (SRV-ASB-2026-629)",
+      "timestamp": "2026-08-23T23:23:33.003Z",
+      "entityType": "Report",
+      "entityId": "RPT-1787527413003",
+      "actionType": "create",
+      "newValue": "Title: PTS08 - PTS15 | Type: SURVEY | Status: Approved"
     }
   ],
   "allocations": [],

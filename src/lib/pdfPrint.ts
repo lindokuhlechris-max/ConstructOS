@@ -968,3 +968,214 @@ export async function printQAInspectionRegisterSummary({
   }
 }
 
+export interface PrintShiftTicketOptions {
+  project?: Project;
+  activity: Activity;
+  supervisorName?: string;
+  shiftDate?: string;
+  customInstructions?: string;
+}
+
+/**
+ * Generates an executive 1-Page Printable / PDF Daily Shift Work Order & Execution Ticket
+ */
+export async function printShiftTicketPdf({
+  project,
+  activity,
+  supervisorName = 'Site Supervisor',
+  shiftDate = new Date().toISOString().split('T')[0],
+  customInstructions = ''
+}: PrintShiftTicketOptions): Promise<boolean> {
+  try {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'pt',
+      format: 'a4'
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 36;
+    let yPos = margin;
+
+    // Header Bar
+    doc.setFillColor(11, 95, 255); // #0B5FFF Primary
+    doc.rect(margin, yPos, pageWidth - (margin * 2), 48, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text('CONSTRUCTOS • DAILY FIELD WORK ORDER & SHIFT TICKET', margin + 14, yPos + 22);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(220, 235, 255);
+    doc.text(`Shift Date: ${shiftDate}  |  WO Ref: WO-${activity.id}-${shiftDate.replace(/-/g, '')}`, margin + 14, yPos + 38);
+
+    yPos += 58;
+
+    // Activity & Project Summary Grid Card
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(margin, yPos, pageWidth - (margin * 2), 64, 6, 6, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${activity.id}: ${activity.name}`, margin + 12, yPos + 18);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Project: ${project?.name || 'ConstructOS Project'} (${(project as any)?.code || project?.id || 'PROJ-001'})`, margin + 12, yPos + 34);
+    doc.text(`Work Package: ${activity.workPackage || 'General'}  |  Discipline: ${activity.discipline || 'General'}`, margin + 12, yPos + 48);
+
+    const rightColX = pageWidth - margin - 190;
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text(`Supervisor: ${supervisorName}`, rightColX, yPos + 18);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Target Output: ${activity.targetQuantity ? `${activity.targetQuantity} ${activity.unit || 'units'}` : 'As Scheduled'}`, rightColX, yPos + 34);
+    doc.text(`Location / Chainage: ${activity.location || activity.chainage || 'Site Work Zone'}`, rightColX, yPos + 48);
+
+    yPos += 74;
+
+    // Method Subtasks Table
+    const subtasks = activity.subtasks || [];
+    const subtaskRows = subtasks.length > 0
+      ? subtasks.map((st, idx) => {
+          const holdStr = st.isHoldPoint ? ' [🔒 QA HOLD POINT]' : '';
+          const targetStr = st.targetQuantity ? `${st.targetQuantity} ${st.unit || ''}` : '-';
+          const priorStr = `${st.completedQuantity || 0} ${st.unit || ''}`;
+          return [
+            `#${idx + 1}`,
+            `${st.title}${holdStr}\nCategory: ${st.category || 'General'}`,
+            targetStr,
+            priorStr,
+            '[           ]',
+            '[  ] In Progress\n[  ] Completed',
+            st.isHoldPoint ? 'Approved: [  ]\nSign: ________________' : 'N/A'
+          ];
+        })
+      : [
+          ['#1', activity.name, `${activity.targetQuantity || 0} ${activity.unit || ''}`, `${activity.actualQuantity || 0} ${activity.unit || ''}`, '[           ]', '[  ] Completed', 'N/A']
+        ];
+
+    autoTable(doc, {
+      startY: yPos,
+      margin: { left: margin, right: margin },
+      head: [['#', 'Method Subtask Scope & Details', 'Target', 'Prior Log', 'Today Output', 'Shift Status', 'QA Sign-Off']],
+      body: subtaskRows,
+      theme: 'grid',
+      styles: {
+        fontSize: 8,
+        cellPadding: 4.5,
+        textColor: [30, 41, 59],
+        lineColor: [226, 232, 240],
+        lineWidth: 0.5
+      },
+      headStyles: {
+        fillColor: [15, 23, 42],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 8
+      },
+      columnStyles: {
+        0: { cellWidth: 24, fontStyle: 'bold', halign: 'center' },
+        1: { cellWidth: 160 },
+        2: { cellWidth: 50, halign: 'center' },
+        3: { cellWidth: 50, halign: 'center' },
+        4: { cellWidth: 65, halign: 'center', fontStyle: 'bold' },
+        5: { cellWidth: 75 },
+        6: { cellWidth: 99, fontSize: 7.5 }
+      }
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 12;
+
+    // Resource Allocations (2 Columns: Labour & Equipment)
+    const midX = pageWidth / 2;
+    const colWidth = (pageWidth - (margin * 2) - 10) / 2;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text('👷 Allocated Crew Workforce', margin, yPos);
+    doc.text('🚜 Allocated Machinery & Plant', margin + colWidth + 10, yPos);
+
+    yPos += 6;
+
+    const crewLines = (activity.assignedLabour || []).length > 0
+      ? (activity.assignedLabour || []).map(l => `• ${l.role || 'Worker'}: ${l.name || 'Worker'} (${l.hours || 8}h)`).join('\n')
+      : '• Standard trade workforce.';
+
+    const plantLines = (activity.assignedEquipment || []).length > 0
+      ? (activity.assignedEquipment || []).map(e => `• ${e.name || e.equipmentId} (Op: ${e.operator || 'Assigned'})`).join('\n')
+      : '• Standard tools & plant allocated.';
+
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(margin, yPos, colWidth, 46, 4, 4, 'FD');
+    doc.roundedRect(margin + colWidth + 10, yPos, colWidth, 46, 4, 4, 'FD');
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(crewLines, margin + 6, yPos + 12, { maxWidth: colWidth - 12 });
+    doc.text(plantLines, margin + colWidth + 16, yPos + 12, { maxWidth: colWidth - 12 });
+
+    yPos += 54;
+
+    // Safety & Special Instructions
+    if (customInstructions) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(220, 38, 38);
+      doc.text('⚠️ Safety Notes & Special Instructions:', margin, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(51, 65, 85);
+      doc.text(customInstructions, margin + 180, yPos, { maxWidth: pageWidth - margin - 190 });
+      yPos += 14;
+    }
+
+    // Site Handover & Supervisor Return Sign-off Section
+    const signBoxY = pageHeight - margin - 88;
+    doc.setFillColor(241, 245, 249);
+    doc.setDrawColor(203, 213, 225);
+    doc.roundedRect(margin, signBoxY, pageWidth - (margin * 2), 80, 6, 6, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text('FIELD HANDOVER & DAILY RETURN VERIFICATION', margin + 10, signBoxY + 14);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text('Shift Weather / Temp: ____________________', margin + 10, signBoxY + 30);
+    doc.text('Delays / Blockers: __________________________________________________________________', margin + 10, signBoxY + 44);
+    doc.text('Supervisor Notes: ____________________________________________________________________', margin + 10, signBoxY + 58);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Supervisor Sign: _________________________`, margin + 10, signBoxY + 72);
+    doc.text(`QA/QC Inspector Sign: _________________________`, rightColX, signBoxY + 72);
+
+    const filename = `Shift_Ticket_${activity.id}_${shiftDate}.pdf`;
+    const blob = doc.output('blob');
+
+    await saveOrShareFile({
+      filename,
+      blob,
+      title: `Shift Work Order - ${activity.id}`,
+      text: `Shift Work Order Ticket for ${activity.name} on ${shiftDate}`
+    });
+
+    return true;
+  } catch (err) {
+    console.error('Error generating shift ticket PDF:', err);
+    return false;
+  }
+}
+
