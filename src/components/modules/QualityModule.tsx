@@ -23,7 +23,8 @@ import {
   Sliders,
   Check,
   AlertTriangle,
-  Clock
+  Clock,
+  Calendar
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { QAInspectionItem, QAMeasurementType } from '../../types';
@@ -97,7 +98,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   const [documentNumber, setDocumentNumber] = useState(`QA-ITR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
   const [inspectionDate, setInspectionDate] = useState(new Date().toISOString().split('T')[0]);
   const [inspectionTime, setInspectionTime] = useState(new Date().toTimeString().substring(0, 5));
-  const [dueDate, setDueDate] = useState(new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().split('T')[0]);
+  const [submissionDate, setSubmissionDate] = useState(new Date().toISOString().split('T')[0]);
   const [referenceDrawingNumber, setReferenceDrawingNumber] = useState('');
 
   const [clientQCRepresentative, setClientQCRepresentative] = useState('');
@@ -157,7 +158,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       inspector: inspector || 'QA Inspector',
       date: inspectionDate || new Date().toISOString().split('T')[0],
       inspectionTime: inspectionTime || new Date().toTimeString().substring(0, 5),
-      dueDate: dueDate ? dueDate : undefined,
+      submissionDate: submissionDate || inspectionDate || new Date().toISOString().split('T')[0],
       status: initialStatus,
       category: category || 'Earthworks',
       
@@ -487,15 +488,15 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   </div>
                 </div>
 
-                {/* 6. Due Date / Signoff Deadline */}
+                {/* 6. Submission Date */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                    6. Due Date / Signoff Target
+                    6. Submission Date
                   </label>
                   <input
                     type="date"
-                    value={dueDate}
-                    onChange={e => setDueDate(e.target.value)}
+                    value={submissionDate}
+                    onChange={e => setSubmissionDate(e.target.value)}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono font-semibold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
                   />
                 </div>
@@ -765,9 +766,9 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                       </span>
                     )}
 
-                    {item.dueDate && (
-                      <span className="text-[10px] font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800 flex items-center gap-1">
-                        <Clock className="h-3 w-3" /> Due: {item.dueDate}
+                    {item.submissionDate && (
+                      <span className="text-[10px] font-mono font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+                        <Calendar className="h-3 w-3" /> Submitted: {item.submissionDate}
                       </span>
                     )}
 
@@ -801,12 +802,12 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                     {item.title}
                   </h3>
 
-                  {/* Metadata: Location, Inspector, Date & Time, Due Date, Stakeholders */}
+                  {/* Metadata: Location, Inspector, Date & Time, Submission Date, Stakeholders */}
                   <div className="flex items-center gap-x-4 gap-y-1 text-xs text-slate-500 flex-wrap">
                     <span>Location: <strong className="text-slate-700 dark:text-slate-300">{item.location}</strong></span>
                     <span>Inspector: <strong className="text-slate-700 dark:text-slate-300">{item.inspector}</strong></span>
                     <span>Inspection Date: <strong className="text-slate-700 dark:text-slate-300">{item.date} {item.inspectionTime ? `@ ${item.inspectionTime}` : ''}</strong></span>
-                    {item.dueDate && <span>Due Date: <strong className="text-amber-600 dark:text-amber-400 font-mono">{item.dueDate}</strong></span>}
+                    {item.submissionDate && <span>Submitted: <strong className="text-slate-700 dark:text-slate-300">{item.submissionDate}</strong></span>}
                     {item.client && <span>Client: <strong className="text-slate-700 dark:text-slate-300">{item.client}</strong></span>}
                     {item.epc && <span>EPC: <strong className="text-slate-700 dark:text-slate-300">{item.epc}</strong></span>}
                     {item.subcontractor && <span>Subcontractor: <strong className="text-slate-700 dark:text-slate-300">{item.subcontractor}</strong></span>}

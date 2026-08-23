@@ -145,6 +145,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     inspector: inspection.inspector,
     date: inspection.date,
     inspectionTime: inspection.inspectionTime || '',
+    submissionDate: inspection.submissionDate || inspection.date || new Date().toISOString().split('T')[0],
     dueDate: inspection.dueDate || '',
     client: inspection.client || '',
     epc: inspection.epc || '',
@@ -342,6 +343,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       inspector: editForm.inspector || inspection.inspector,
       date: editForm.date || inspection.date,
       inspectionTime: editForm.inspectionTime || inspection.inspectionTime,
+      submissionDate: editForm.submissionDate !== undefined ? editForm.submissionDate : (inspection.submissionDate || inspection.date),
       dueDate: editForm.dueDate !== undefined ? editForm.dueDate : inspection.dueDate,
       client: editForm.client !== undefined ? editForm.client : inspection.client,
       epc: editForm.epc !== undefined ? editForm.epc : inspection.epc,
@@ -570,6 +572,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   inspector: inspection.inspector,
                   date: inspection.date,
                   inspectionTime: inspection.inspectionTime || '',
+                  submissionDate: inspection.submissionDate || inspection.date || new Date().toISOString().split('T')[0],
                   dueDate: inspection.dueDate || '',
                   client: inspection.client || '',
                   epc: inspection.epc || '',
@@ -762,9 +765,9 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
 
                 <div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase block mb-1">Due / Signoff Target</span>
+                  <span className="text-xs font-semibold text-slate-400 uppercase block mb-1">Submission Date</span>
                   <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 font-mono">
-                    <Clock className="h-4 w-4 text-amber-500" /> {inspection.dueDate || 'Not Specified'}
+                    <Calendar className="h-4 w-4 text-[#0B5FFF]" /> {inspection.submissionDate || inspection.date || 'Not Specified'}
                   </span>
                 </div>
 
@@ -816,16 +819,14 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">5. Inspection Schedule & Due Date</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">5. Inspection & Submission Schedule</span>
                     <div className="space-y-0.5">
                       <div className="font-mono text-slate-700 dark:text-slate-300">
                         Date: {inspection.date} {inspection.inspectionTime ? `@ ${inspection.inspectionTime}` : ''}
                       </div>
-                      {inspection.dueDate && (
-                        <div className="font-mono text-amber-600 dark:text-amber-400 font-bold text-[11px]">
-                          Due: {inspection.dueDate}
-                        </div>
-                      )}
+                      <div className="font-mono text-[#0B5FFF] font-bold text-[11px]">
+                        Submitted: {inspection.submissionDate || inspection.date}
+                      </div>
                     </div>
                   </div>
 
@@ -2179,11 +2180,11 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Due Date / Signoff Target</label>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Submission Date</label>
                   <input
                     type="date"
-                    value={editForm.dueDate || ''}
-                    onChange={e => setEditForm({ ...editForm, dueDate: e.target.value })}
+                    value={editForm.submissionDate || ''}
+                    onChange={e => setEditForm({ ...editForm, submissionDate: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-mono"
                   />
                 </div>

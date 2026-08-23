@@ -749,6 +749,7 @@ export interface QAInspectionItem {
   inspector: string;
   date: string;
   inspectionTime?: string;
+  submissionDate?: string;
   dueDate?: string;
   status: 'Passed' | 'Failed' | 'Pending Approval';
   

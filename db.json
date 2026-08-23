@@ -20164,6 +20164,30 @@
       "entityType": "QA",
       "entityId": "QA-621",
       "actionType": "update"
+    },
+    {
+      "id": "AL-mt5k0s61-kzrs",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T08:37:37.561Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5k4dii-bndm",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T08:40:25.194Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
     }
   ],
   "allocations": [],
@@ -21170,7 +21194,7 @@
       "title": "Survey and setting out of MV Cable Trench: PTS20 - PTS21",
       "location": "Block 20 to 21",
       "inspector": "Advocate Khoza",
-      "date": "2026-08-23",
+      "date": "2026-08-01",
       "status": "Pending Approval",
       "category": "Earthworks",
       "clientQCRepresentative": "Obakeng Mogadi",
@@ -21186,7 +21210,13 @@
       "rejectedQuantity": 0,
       "toleranceSpec": "",
       "measurementItems": [],
-      "epc": "Carl"
+      "epc": "HDEC",
+      "inspectionTime": "11:00",
+      "dueDate": "",
+      "client": "Red Rocket",
+      "subcontractor": "MBEU Engineering",
+      "documentNumber": "MVT-HDEC-MBEU-RFI-002",
+      "referenceDrawingNumber": "RRT-HDC-08-IDR-PDE-CAB-002"
     }
   ],
   "userProfiles": [
