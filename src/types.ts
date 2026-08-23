@@ -868,9 +868,24 @@ export interface DocumentSignoff {
   signatureStamp?: string;
 }
 
+export interface DocumentFolder {
+  id: string;
+  projectId: string;
+  name: string;
+  code?: string;
+  parentId?: string | null;
+  icon?: string;
+  color?: string;
+  description?: string;
+  createdAt?: string;
+}
+
 export interface DocumentItem {
   id: string;
   projectId: string;
+  folderId?: string;
+  folderPath?: string;
+  workPackageId?: string;
   documentNumber?: string;
   title: string;
   fileName: string;

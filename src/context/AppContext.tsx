@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, QARFIItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority, UniversalReportItem, SurveyReportData, WeeklyProgressReportData, MonthlyProgressReportData, ReportCategory, ReportStatus, ReportSignoff, SurveyPointRecord, WeeklyActivitySnapshot, FinanceReportData, FleetReportData, MaterialsReportData, AccommodationReportData, CustomReportData, ReportTemplateDefinition } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, QARFIItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DocumentFolder, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority, UniversalReportItem, SurveyReportData, WeeklyProgressReportData, MonthlyProgressReportData, ReportCategory, ReportStatus, ReportSignoff, SurveyPointRecord, WeeklyActivitySnapshot, FinanceReportData, FleetReportData, MaterialsReportData, AccommodationReportData, CustomReportData, ReportTemplateDefinition } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -172,10 +172,17 @@ interface AppContextType {
   updateWeatherLog: (weatherLog: WeatherLog) => void;
   deleteWeatherLog: (id: string) => void;
   documents: DocumentItem[];
+  documentFolders: DocumentFolder[];
   addDocument: (doc: DocumentItem) => void;
   updateDocument: (doc: DocumentItem) => void;
   deleteDocument: (id: string) => void;
   assignDocumentToActivity: (docId: string, activityId?: string, activityName?: string) => void;
+  addDocumentFolder: (folder: DocumentFolder) => void;
+  updateDocumentFolder: (folder: DocumentFolder) => void;
+  deleteDocumentFolder: (id: string) => void;
+  moveDocumentsToFolder: (docIds: string[], folderId: string, folderPath?: string) => void;
+  bulkUpdateDocuments: (docIds: string[], updates: Partial<DocumentItem>) => void;
+  bulkDeleteDocuments: (docIds: string[]) => void;
   addAccommodation: (acc: AccommodationUnit) => void;
   updateAccommodation: (acc: AccommodationUnit) => void;
   deleteAccommodation: (id: string) => void;
@@ -702,6 +709,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return [];
     }
   });
+  const DEFAULT_ISO_DOCUMENT_FOLDERS: DocumentFolder[] = [
+    { id: 'FLD-01', projectId: 'PRJ-001', name: '01 - Contracts & Commercial Agreements', code: '01-COM', parentId: null, color: '#0B5FFF' },
+    { id: 'FLD-02', projectId: 'PRJ-001', name: '02 - Drawings & Blueprints', code: '02-DWG', parentId: null, color: '#10b981' },
+    { id: 'FLD-02-1', projectId: 'PRJ-001', name: '02.1 - Civil & Earthworks', code: '02-CIV', parentId: 'FLD-02' },
+    { id: 'FLD-02-2', projectId: 'PRJ-001', name: '02.2 - Structural & Concrete', code: '02-STR', parentId: 'FLD-02' },
+    { id: 'FLD-02-3', projectId: 'PRJ-001', name: '02.3 - Electrical & MV Cabling', code: '02-ELE', parentId: 'FLD-02' },
+    { id: 'FLD-02-4', projectId: 'PRJ-001', name: '02.4 - Mechanical & Piping', code: '02-MEC', parentId: 'FLD-02' },
+    { id: 'FLD-02-5', projectId: 'PRJ-001', name: '02.5 - Geotechnical & Topo Survey', code: '02-GEO', parentId: 'FLD-02' },
+    { id: 'FLD-03', projectId: 'PRJ-001', name: '03 - Technical Specifications & Data Sheets', code: '03-SPC', parentId: null, color: '#f59e0b' },
+    { id: 'FLD-04', projectId: 'PRJ-001', name: '04 - Method Statements & SWMS', code: '04-MS', parentId: null, color: '#8b5cf6' },
+    { id: 'FLD-05', projectId: 'PRJ-001', name: '05 - QA/QC Inspection Test Plans (ITPs)', code: '05-QA', parentId: null, color: '#06b6d4' },
+    { id: 'FLD-06', projectId: 'PRJ-001', name: '06 - HSE, Safety & Environmental Compliance', code: '06-HSE', parentId: null, color: '#ec4899' },
+    { id: 'FLD-07', projectId: 'PRJ-001', name: '07 - Vendor & Subcontractor Submittals', code: '07-SUB', parentId: null, color: '#6366f1' },
+    { id: 'FLD-08', projectId: 'PRJ-001', name: '08 - Site Photos & Field Evidence', code: '08-PHO', parentId: null, color: '#64748b' }
+  ];
+
+  const [documentFolders, setDocumentFolders] = useState<DocumentFolder[]>(() => {
+    try {
+      const saved = localStorage.getItem('constructos_document_folders');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // fallback
+    }
+    return DEFAULT_ISO_DOCUMENT_FOLDERS;
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('constructos_document_folders', JSON.stringify(documentFolders));
+    } catch {
+      // ignore
+    }
+  }, [documentFolders]);
+
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [accommodations, setAccommodations] = useState<AccommodationUnit[]>([]);
   const [accommodationUtilities, setAccommodationUtilities] = useState<AccommodationUtilityLog[]>([]);
@@ -2844,17 +2888,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const assignDocumentToActivity = (docId: string, activityId?: string, activityName?: string) => {
     setDocuments(prev => prev.map(d => {
       if (d.id === docId) {
-        const updated = {
+        return {
           ...d,
           linkedActivityId: activityId || undefined,
           linkedActivityName: activityName || undefined,
           lastModified: new Date().toISOString()
         };
-        syncToServer('update_document', updated);
-        return updated;
       }
       return d;
     }));
+    syncToServer('assign_document_activity', { docId, activityId, activityName });
+  };
+
+  const addDocumentFolder = (folder: DocumentFolder) => {
+    setDocumentFolders(prev => [...prev, folder]);
+    syncToServer('add_document_folder', folder);
+  };
+
+  const updateDocumentFolder = (folder: DocumentFolder) => {
+    setDocumentFolders(prev => prev.map(f => f.id === folder.id ? folder : f));
+    syncToServer('update_document_folder', folder);
+  };
+
+  const deleteDocumentFolder = (id: string) => {
+    setDocumentFolders(prev => prev.filter(f => f.id !== id && f.parentId !== id));
+    setDocuments(prev => prev.map(d => d.folderId === id ? { ...d, folderId: undefined, folderPath: undefined } : d));
+    syncToServer('delete_document_folder', { id });
+  };
+
+  const moveDocumentsToFolder = (docIds: string[], folderId: string, folderPath?: string) => {
+    setDocuments(prev => prev.map(d => {
+      if (docIds.includes(d.id)) {
+        return { ...d, folderId, folderPath, lastModified: new Date().toISOString() };
+      }
+      return d;
+    }));
+    syncToServer('move_documents_to_folder', { docIds, folderId, folderPath });
+  };
+
+  const bulkUpdateDocuments = (docIds: string[], updates: Partial<DocumentItem>) => {
+    setDocuments(prev => prev.map(d => {
+      if (docIds.includes(d.id)) {
+        return { ...d, ...updates, lastModified: new Date().toISOString() };
+      }
+      return d;
+    }));
+    syncToServer('bulk_update_documents', { docIds, updates });
+  };
+
+  const bulkDeleteDocuments = (docIds: string[]) => {
+    setDocuments(prev => prev.filter(d => !docIds.includes(d.id)));
+    docIds.forEach(id => deleteDocumentFile(id).catch(console.warn));
+    syncToServer('bulk_delete_documents', { docIds });
   };
 
   const addAccommodation = (acc: AccommodationUnit) => {
@@ -3869,7 +3954,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{ 
       projects, activities, reports, universalReports, addUniversalReport, updateUniversalReport, deleteUniversalReport, compileWeeklyProgressReport, reportTemplates, addReportTemplate, updateReportTemplate, deleteReportTemplate, weatherLogs, labourLogs, labourAllocations, workerCheckIns, auditLogs, allocations, safetyIncidents, materials, materialReceipts, materialUsages, customFieldDefinitions, employees, teams, equipment, equipmentLogs, 
-      safetyRequirements, safetyPolicies, activityInspections, siteInspectionPhotos, ppeItems, qaInspections, documents, reminders, userProfiles, currentUserProfile, hasPermission, theme, units, currency, userRole, 
+      safetyRequirements, safetyPolicies, activityInspections, siteInspectionPhotos, ppeItems, qaInspections, reminders, userProfiles, currentUserProfile, hasPermission, theme, units, currency, userRole, 
       isAuthenticated, login, loginWithProfile, logout, accessRequests, addAccessRequest, approveAccessRequest, rejectAccessRequest,
       isSyncing, isOffline, lastSyncedAt, syncToast, syncConflict, isManualSyncMode, setIsManualSyncMode, hasPendingChanges, pendingChangesCount, setSyncConflict, resolveSyncConflict, triggerSyncToast, hideSyncToast, forceSyncAll,
       setUserRole, setTheme, setUnits, setCurrency, setCurrentUserProfile, addProfile, updateProfile, deleteProfile,
@@ -3886,7 +3971,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       rfis, addRFI, updateRFI, deleteRFI,
       addReminder, updateReminder, deleteReminder,
       addWeatherLog, updateWeatherLog, deleteWeatherLog,
-      addDocument, updateDocument, deleteDocument, assignDocumentToActivity,
+      documents, documentFolders, addDocument, updateDocument, deleteDocument, assignDocumentToActivity,
+      addDocumentFolder, updateDocumentFolder, deleteDocumentFolder, moveDocumentsToFolder, bulkUpdateDocuments, bulkDeleteDocuments,
       accommodations, accommodationUtilities, accommodationPayments,
       addAccommodation, updateAccommodation, deleteAccommodation,
       assignEmployeeToAccommodation, removeEmployeeFromAccommodation,
