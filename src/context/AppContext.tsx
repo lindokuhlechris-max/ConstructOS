@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, QARFIItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority, UniversalReportItem, SurveyReportData, WeeklyProgressReportData, MonthlyProgressReportData, ReportCategory, ReportStatus, ReportSignoff, SurveyPointRecord, WeeklyActivitySnapshot } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, QARFIItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority, UniversalReportItem, SurveyReportData, WeeklyProgressReportData, MonthlyProgressReportData, ReportCategory, ReportStatus, ReportSignoff, SurveyPointRecord, WeeklyActivitySnapshot, FinanceReportData, FleetReportData, MaterialsReportData, AccommodationReportData, CustomReportData, ReportTemplateDefinition } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -14,6 +14,10 @@ interface AppContextType {
   updateUniversalReport: (report: UniversalReportItem) => void;
   deleteUniversalReport: (id: string) => void;
   compileWeeklyProgressReport: (projectId: string, startDate: string, endDate: string) => UniversalReportItem<WeeklyProgressReportData>;
+  reportTemplates: ReportTemplateDefinition[];
+  addReportTemplate: (tpl: ReportTemplateDefinition) => void;
+  updateReportTemplate: (tpl: ReportTemplateDefinition) => void;
+  deleteReportTemplate: (id: string) => void;
   weatherLogs: WeatherLog[];
   labourLogs: LabourLog[];
   labourAllocations: LabourAllocation[];
@@ -725,6 +729,441 @@ export const DEFAULT_INITIAL_UNIVERSAL_REPORTS: UniversalReportItem[] = [
         }
       ]
     }
+  },
+  {
+    id: 'REP-FIN-001',
+    projectId: 'PRJ-001',
+    reportType: 'FINANCE_CLAIM',
+    category: 'Finance',
+    title: 'Interim Payment Certificate & Valuation Claim #04',
+    documentNumber: 'FIN-IPC-2026-004',
+    revision: 'Rev 0',
+    date: '2026-08-21',
+    submissionDate: '2026-08-22',
+    author: 'Elena Rostova (Commercial Manager & QS)',
+    authorRole: 'Chief Quantity Surveyor',
+    status: 'Approved',
+    location: 'Section A & B Works',
+    client: 'Transnet Engineering (Client)',
+    epc: 'Scedih Engineering (EPC)',
+    summaryNotes: 'Interim valuation claim #04 covering civil trenching, ducting, and foundation casting up to 20 August 2026. Cumulative progress certified at 64.5% of Contract Sum.',
+    signoffs: [
+      {
+        role: 'Commercial Manager (Contractor QS)',
+        name: 'Elena Rostova',
+        date: '2026-08-22',
+        status: 'Approved',
+        notes: 'Quantities verified from joint on-site measurement sheets.'
+      },
+      {
+        role: 'Principal Agent / Engineer QS',
+        name: 'Michael Scott',
+        date: '2026-08-23',
+        status: 'Approved',
+        notes: 'Certified for gross amount R 1,450,000 less 10% retention.'
+      }
+    ],
+    data: {
+      valuationType: 'Interim Progress Claim',
+      paymentCertificateNo: 'IPC-004-PRJ1',
+      claimPeriodStart: '2026-08-01',
+      claimPeriodEnd: '2026-08-20',
+      contractSum: 8500000,
+      previousCertifiedGross: 4030000,
+      currentClaimGross: 1450000,
+      cumulativeGross: 5480000,
+      retentionPercentage: 10,
+      retentionDeducted: 145000,
+      advancePaymentDeduction: 50000,
+      netClaimBeforeTax: 1255000,
+      vatPercentage: 15,
+      vatAmount: 188250,
+      netPayableAmount: 1443250,
+      currency: 'ZAR (R)',
+      paymentStatus: 'Certified by Engineer',
+      commercialRemarks: 'Retention held is capped at 5% of total contract sum in accordance with GCC 2015 Clause 6.10.',
+      items: [
+        {
+          id: 'BOQ-1.1',
+          itemNumber: '1.1',
+          description: 'Site Clearance and Topsoil Stripping (150mm depth)',
+          unit: 'm²',
+          rate: 45,
+          contractQuantity: 25000,
+          previousClaimedQty: 18000,
+          currentClaimedQty: 5500,
+          cumulativeQty: 23500,
+          cumulativeAmount: 1057500,
+          percentageComplete: 94,
+          remarks: 'Near completion'
+        },
+        {
+          id: 'BOQ-2.3',
+          itemNumber: '2.3',
+          description: 'Excavation of Cable Trenches in Intermediate Material (0 - 1.5m)',
+          unit: 'm³',
+          rate: 180,
+          contractQuantity: 8400,
+          previousClaimedQty: 4200,
+          currentClaimedQty: 2100,
+          cumulativeQty: 6300,
+          cumulativeAmount: 1134000,
+          percentageComplete: 75,
+          remarks: 'Progress verified by survey'
+        },
+        {
+          id: 'BOQ-3.1',
+          itemNumber: '3.1',
+          description: 'Supply & Pour 30MPa Structural Reinforced Concrete Footings',
+          unit: 'm³',
+          rate: 2850,
+          contractQuantity: 650,
+          previousClaimedQty: 250,
+          currentClaimedQty: 180,
+          cumulativeQty: 430,
+          cumulativeAmount: 1225500,
+          percentageComplete: 66.1,
+          remarks: 'Cube test 28-day strengths compliant'
+        }
+      ]
+    }
+  },
+  {
+    id: 'REP-FLT-001',
+    projectId: 'PRJ-001',
+    reportType: 'FLEET_DAILY',
+    category: 'Fleet',
+    title: 'Daily Heavy Plant Utilization, Fuel & Availability Log',
+    documentNumber: 'FLT-LOG-2026-0822',
+    revision: 'Rev 0',
+    date: '2026-08-22',
+    submissionDate: '2026-08-22',
+    author: 'Kagiso Mokoena (Plant & Fleet Coordinator)',
+    authorRole: 'Fleet Supervisor',
+    status: 'Approved',
+    location: 'Central Plant Yard & Sector 4 Trench Line',
+    client: 'Transnet Engineering (Client)',
+    epc: 'Scedih Engineering (EPC)',
+    summaryNotes: 'Fleet operational availability recorded at 91.7%. CAT 320 excavator and Bomag roller achieved 9.5 operating hours with zero downtime.',
+    signoffs: [
+      {
+        role: 'Fleet Manager',
+        name: 'Kagiso Mokoena',
+        date: '2026-08-22',
+        status: 'Approved',
+        notes: 'All telematics data cross-verified with daily fuel bowser dispensing logs.'
+      }
+    ],
+    data: {
+      reportDate: '2026-08-22',
+      shift: 'Day Shift',
+      totalFleetCount: 12,
+      operationalCount: 11,
+      breakdownCount: 1,
+      standbyCount: 0,
+      totalOperatingHours: 94.5,
+      totalFuelConsumedLiters: 1240,
+      fleetAvailabilityPct: 91.7,
+      maintenanceNotes: 'Bell B30E ADT Articulated Dump Truck scheduled for 500-hour hydraulic service tomorrow morning.',
+      equipmentList: [
+        {
+          id: 'EQ-01',
+          equipmentId: 'EXC-01',
+          name: 'CAT 320D Hydraulic Excavator',
+          category: 'Earthmoving',
+          registrationNumber: 'DX-44-BB-GP',
+          operatorName: 'Sipho Zulu',
+          startHourMeter: 4820.5,
+          endHourMeter: 4830.0,
+          operatingHours: 9.5,
+          idleHours: 0.5,
+          fuelAddedLiters: 210,
+          locationArea: 'Sector 4 Trenching',
+          status: 'Operational'
+        },
+        {
+          id: 'EQ-02',
+          equipmentId: 'TLB-03',
+          name: 'JCB 3CX Eco Backhoe Loader',
+          category: 'Earthmoving',
+          registrationNumber: 'CC-92-TR-GP',
+          operatorName: 'Themba Khumalo',
+          startHourMeter: 2140.0,
+          endHourMeter: 2148.5,
+          operatingHours: 8.5,
+          idleHours: 1.0,
+          fuelAddedLiters: 140,
+          locationArea: 'Stockpile Loading',
+          status: 'Operational'
+        },
+        {
+          id: 'EQ-03',
+          equipmentId: 'ROL-02',
+          name: 'Bomag BW213 Single Drum Roller',
+          category: 'Compaction',
+          registrationNumber: 'FL-33-JK-GP',
+          operatorName: 'Jan Van Der Merwe',
+          startHourMeter: 3100.0,
+          endHourMeter: 3108.0,
+          operatingHours: 8.0,
+          idleHours: 1.5,
+          fuelAddedLiters: 120,
+          locationArea: 'Access Road Bedding',
+          status: 'Operational'
+        }
+      ]
+    }
+  },
+  {
+    id: 'REP-MAT-001',
+    projectId: 'PRJ-001',
+    reportType: 'MATERIAL_RECON',
+    category: 'Materials',
+    title: 'Materials Receiving, Mill Test & Quality Conformance Certificate',
+    documentNumber: 'MAT-QA-2026-019',
+    revision: 'Rev 0',
+    date: '2026-08-21',
+    submissionDate: '2026-08-21',
+    author: 'Thabo Ndlovu (Materials & Quality Engineer)',
+    authorRole: 'Materials QA Engineer',
+    status: 'Approved',
+    location: 'Main Site Warehouse & Laydown Yard',
+    summaryNotes: '100% QA clearance on batch delivery of 32 Ton High-Tensile Y16/Y20 Steel Rebar and 500m 33kV MV Aluminium Power Cables.',
+    data: {
+      reportDate: '2026-08-21',
+      discipline: 'Civil / Structural Steel',
+      supplierSummary: 'ArcelorMittal SA & Aberdare Cables',
+      totalDeliveriesCount: 4,
+      totalAcceptedQty: 4,
+      totalRejectedQty: 0,
+      warehouseObservations: 'All rebar bundles offloaded on timber dunnage. Mill test certificates verified for yield strength > 500 MPa.',
+      materials: [
+        {
+          id: 'MAT-INSP-01',
+          materialName: 'High Tensile Deformed Steel Rebar Y16 (12m)',
+          specification: 'SANS 920:2011 Grade 500D',
+          deliveryNoteNumber: 'DN-AMSA-98124',
+          supplier: 'ArcelorMittal South Africa',
+          batchNumber: 'HT-2026-0819',
+          quantityDelivered: 18,
+          unit: 'Tons',
+          storageLocation: 'Laydown Yard Bay 3',
+          testCertificateAttached: true,
+          qualityStatus: 'Conforms / Accepted',
+          sampleTestReference: 'LAB-REBAR-044',
+          remarks: 'Tensile & bend tests passed'
+        },
+        {
+          id: 'MAT-INSP-02',
+          materialName: 'High Tensile Deformed Steel Rebar Y20 (12m)',
+          specification: 'SANS 920:2011 Grade 500D',
+          deliveryNoteNumber: 'DN-AMSA-98125',
+          supplier: 'ArcelorMittal South Africa',
+          batchNumber: 'HT-2026-0820',
+          quantityDelivered: 14,
+          unit: 'Tons',
+          storageLocation: 'Laydown Yard Bay 3',
+          testCertificateAttached: true,
+          qualityStatus: 'Conforms / Accepted',
+          sampleTestReference: 'LAB-REBAR-045',
+          remarks: 'Coating and ribs within tolerance'
+        }
+      ]
+    }
+  },
+  {
+    id: 'REP-CAMP-001',
+    projectId: 'PRJ-001',
+    reportType: 'CAMP_AUDIT',
+    category: 'Accommodation',
+    title: 'Site Village & Accommodation Camp Facility & Utility Audit',
+    documentNumber: 'CMP-AUD-2026-008',
+    revision: 'Rev 0',
+    date: '2026-08-20',
+    submissionDate: '2026-08-21',
+    author: 'Grace Sithole (Camp Operations Officer)',
+    authorRole: 'Camp Facility Manager',
+    status: 'Approved',
+    location: 'Main Contractors Camp Village (Blocks A - F)',
+    summaryNotes: 'Camp capacity operating at 86.4% occupancy. All culinary hygiene inspections scored A-Grade. Potable water testing compliant with SANS 241.',
+    data: {
+      reportDate: '2026-08-20',
+      campName: 'Tournee Solar Camp Village',
+      totalBedCapacity: 140,
+      totalOccupiedBeds: 121,
+      occupancyRatePct: 86.4,
+      cateringMealsServedToday: 363,
+      waterConsumptionKiloLiters: 14.5,
+      powerConsumptionKWh: 480,
+      dieselGeneratorHours: 2.0,
+      campManagerNotes: 'Routine pest control completed across Blocks C and D. HVAC air filters cleaned in dining hall.',
+      roomInspections: [
+        {
+          id: 'RM-A101',
+          blockNumber: 'Block A',
+          roomNumber: 'A-101',
+          roomType: 'Senior Staff Single',
+          maxCapacity: 1,
+          currentOccupants: 1,
+          cleanlinessScore: 'Excellent',
+          electricalFittingsOk: true,
+          plumbingSanitationOk: true
+        },
+        {
+          id: 'RM-B204',
+          blockNumber: 'Block B',
+          roomNumber: 'B-204',
+          roomType: 'Junior Staff Twin',
+          maxCapacity: 2,
+          currentOccupants: 2,
+          cleanlinessScore: 'Good',
+          electricalFittingsOk: true,
+          plumbingSanitationOk: true
+        }
+      ]
+    }
+  }
+];
+
+export const DEFAULT_REPORT_TEMPLATES: ReportTemplateDefinition[] = [
+  {
+    id: 'tpl-srv-asbuilt',
+    name: 'As-Built Coordinate Tolerance & Setting-Out',
+    category: 'Survey',
+    description: 'Setting-out pegs, benchmark calibration, and live Easting, Northing & Elevation tolerance checking in millimeters.',
+    icon: 'Compass',
+    defaultTitle: 'As-Built Setting-Out & Coordinate Tolerance Check',
+    docNumberPrefix: 'SRV-ASB',
+    disciplineType: 'As-Built Tolerance Verification',
+    isSystemPreset: true,
+    defaultDataPreset: {
+      surveyType: 'As-Built',
+      instrument: 'Leica TS16 Total Station (1" PinPoint Accuracy)',
+      coordinateSystem: 'Lo29 / WGS84 Universal Grid',
+      verticalDatum: 'Mean Sea Level (MSL) Benchmark BM-04',
+      maxAllowedHorizontalToleranceMm: 15,
+      maxAllowedVerticalToleranceMm: 10
+    }
+  },
+  {
+    id: 'tpl-srv-cutfill',
+    name: 'Earthworks Cut & Fill Volumetric Summary',
+    category: 'Survey',
+    description: 'Volumetric earthwork computation, design vs actual cut/fill comparisons, compaction factors, and net balance.',
+    icon: 'Scale',
+    defaultTitle: 'Earthworks Cut & Fill Volumetric Quantity Report',
+    docNumberPrefix: 'SRV-VOL',
+    disciplineType: 'Cut & Fill Earthwork Volumetrics',
+    isSystemPreset: true,
+    defaultDataPreset: {
+      surveyType: 'Cut & Fill Volume',
+      instrument: 'Trimble R12 GNSS RTK Base & Rover',
+      compactionFactor: 1.15,
+      maxAllowedHorizontalToleranceMm: 25,
+      maxAllowedVerticalToleranceMm: 20
+    }
+  },
+  {
+    id: 'tpl-fin-claim',
+    name: 'Interim Payment Certificate (IPC) & Progress Claim',
+    category: 'Finance',
+    description: 'Contract valuation claim with BOQ item lines, previous/current quantities, retention deduction, VAT, and net payable certificate.',
+    icon: 'DollarSign',
+    defaultTitle: 'Interim Payment Certificate & Valuation Claim',
+    docNumberPrefix: 'FIN-IPC',
+    isSystemPreset: true,
+    defaultDataPreset: {
+      valuationType: 'Interim Progress Claim',
+      currency: 'ZAR (R)',
+      retentionPercentage: 10,
+      vatPercentage: 15
+    }
+  },
+  {
+    id: 'tpl-fin-variation',
+    name: 'Variation Order & Commercial Valuation',
+    category: 'Finance',
+    description: 'Contract variation order, scope adjustment, rate analysis, and net financial impact on contractual baseline.',
+    icon: 'DollarSign',
+    defaultTitle: 'Contract Variation Order & Budget Valuation',
+    docNumberPrefix: 'FIN-VO',
+    isSystemPreset: true,
+    defaultDataPreset: {
+      valuationType: 'Variation Order Report',
+      currency: 'ZAR (R)',
+      retentionPercentage: 10,
+      vatPercentage: 15
+    }
+  },
+  {
+    id: 'tpl-flt-daily',
+    name: 'Daily Plant, Fleet Utilization & Fuel Log',
+    category: 'Fleet',
+    description: 'Heavy machinery tracking, start/end hour meters, fuel liters dispensed, operating vs idle hours, and availability %.',
+    icon: 'Truck',
+    defaultTitle: 'Daily Heavy Plant Utilization, Fuel & Availability Log',
+    docNumberPrefix: 'FLT-LOG',
+    isSystemPreset: true,
+    defaultDataPreset: {
+      shift: 'Day Shift'
+    }
+  },
+  {
+    id: 'tpl-mat-delivery',
+    name: 'Material Delivery & Quality Conformance',
+    category: 'Materials',
+    description: 'Delivery notes, mill test certificate attachment, quality pass/fail checks, batch tracking, and warehouse storage locations.',
+    icon: 'Package',
+    defaultTitle: 'Materials Receiving, Mill Test & Quality Conformance Certificate',
+    docNumberPrefix: 'MAT-QA',
+    isSystemPreset: true,
+    defaultDataPreset: {
+      discipline: 'Civil / Structural Steel'
+    }
+  },
+  {
+    id: 'tpl-camp-audit',
+    name: 'Camp Accommodation & Facility Health Audit',
+    category: 'Accommodation',
+    description: 'Living quarters occupancy %, bed capacity, room hygiene scorecards, and daily water, power & generator utility logs.',
+    icon: 'Home',
+    defaultTitle: 'Site Village & Accommodation Camp Facility & Utility Audit',
+    docNumberPrefix: 'CMP-AUD',
+    isSystemPreset: true,
+    defaultDataPreset: {}
+  },
+  {
+    id: 'tpl-qa-ncr',
+    name: 'Site Quality Audit & NCR Resolution',
+    category: 'Quality',
+    description: 'Quality surveillance, non-conformance root cause, corrective actions, and QA engineer sign-off endorsements.',
+    icon: 'ShieldCheck',
+    defaultTitle: 'Site Quality Surveillance & NCR Resolution Report',
+    docNumberPrefix: 'QA-REP',
+    isSystemPreset: true,
+    defaultDataPreset: {}
+  },
+  {
+    id: 'tpl-prg-wpr',
+    name: 'Weekly Executive Progress Report (WPR)',
+    category: 'WeeklyProgress',
+    description: 'Automated 1-click aggregation of safe man-hours, active work packages, S-curve variances, and lookahead schedules.',
+    icon: 'FileBarChart',
+    defaultTitle: 'Weekly Progress Report (WPR)',
+    docNumberPrefix: 'PRG-WPR',
+    isSystemPreset: true,
+    defaultDataPreset: {}
+  },
+  {
+    id: 'tpl-custom-matrix',
+    name: 'Custom Dynamic Table & Matrix Template',
+    category: 'DailySite',
+    description: 'Fully customizable blank template with dynamic column headers, auto-calculating numerical fields, and custom sections.',
+    icon: 'Sparkles',
+    defaultTitle: 'Technical Operations & Specialized Report',
+    docNumberPrefix: 'RPT-CUS',
+    isSystemPreset: true,
+    defaultDataPreset: {}
   }
 ];
 
@@ -875,6 +1314,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return saved ? JSON.parse(saved) : DEFAULT_INITIAL_UNIVERSAL_REPORTS;
     } catch {
       return DEFAULT_INITIAL_UNIVERSAL_REPORTS;
+    }
+  });
+  const [reportTemplates, setReportTemplates] = useState<ReportTemplateDefinition[]>(() => {
+    try {
+      const saved = localStorage.getItem('constructos_report_templates');
+      return saved ? JSON.parse(saved) : DEFAULT_REPORT_TEMPLATES;
+    } catch {
+      return DEFAULT_REPORT_TEMPLATES;
     }
   });
   const [notes, setNotes] = useState<ActivityNote[]>(() => {
@@ -1757,6 +2204,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
       entityType: 'Report',
       entityId: id,
       actionType: 'delete'
+    });
+  };
+
+  const addReportTemplate = (newTemplate: ReportTemplateDefinition) => {
+    setReportTemplates(prev => {
+      const updated = [newTemplate, ...prev];
+      try {
+        localStorage.setItem('constructos_report_templates', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Error saving report template', err);
+      }
+      return updated;
+    });
+  };
+
+  const updateReportTemplate = (updatedTemplate: ReportTemplateDefinition) => {
+    setReportTemplates(prev => {
+      const updated = prev.map(t => t.id === updatedTemplate.id ? updatedTemplate : t);
+      try {
+        localStorage.setItem('constructos_report_templates', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Error updating report template', err);
+      }
+      return updated;
+    });
+  };
+
+  const deleteReportTemplate = (id: string) => {
+    setReportTemplates(prev => {
+      const updated = prev.filter(t => t.id !== id);
+      try {
+        localStorage.setItem('constructos_report_templates', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Error deleting report template', err);
+      }
+      return updated;
     });
   };
 
@@ -3973,7 +4456,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{ 
-      projects, activities, reports, universalReports, addUniversalReport, updateUniversalReport, deleteUniversalReport, compileWeeklyProgressReport, weatherLogs, labourLogs, labourAllocations, workerCheckIns, auditLogs, allocations, safetyIncidents, materials, materialReceipts, materialUsages, customFieldDefinitions, employees, teams, equipment, equipmentLogs, 
+      projects, activities, reports, universalReports, addUniversalReport, updateUniversalReport, deleteUniversalReport, compileWeeklyProgressReport, reportTemplates, addReportTemplate, updateReportTemplate, deleteReportTemplate, weatherLogs, labourLogs, labourAllocations, workerCheckIns, auditLogs, allocations, safetyIncidents, materials, materialReceipts, materialUsages, customFieldDefinitions, employees, teams, equipment, equipmentLogs, 
       safetyRequirements, safetyPolicies, activityInspections, siteInspectionPhotos, ppeItems, qaInspections, documents, reminders, userProfiles, currentUserProfile, hasPermission, theme, units, currency, userRole, 
       isAuthenticated, login, loginWithProfile, logout, accessRequests, addAccessRequest, approveAccessRequest, rejectAccessRequest,
       isSyncing, isOffline, lastSyncedAt, syncToast, syncConflict, isManualSyncMode, setIsManualSyncMode, hasPendingChanges, pendingChangesCount, setSyncConflict, resolveSyncConflict, triggerSyncToast, hideSyncToast, forceSyncAll,

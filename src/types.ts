@@ -1626,3 +1626,176 @@ export interface UniversalReportItem<TData = any> {
   createdAt?: string;
   updatedAt?: string;
 }
+
+// -------------------------------------------------------------
+// Specialized Discipline Report Payloads
+// -------------------------------------------------------------
+
+export interface FinanceValuationItem {
+  id: string;
+  itemNumber: string;
+  description: string;
+  unit: string;
+  rate: number;
+  contractQuantity: number;
+  previousClaimedQty: number;
+  currentClaimedQty: number;
+  cumulativeQty: number;
+  cumulativeAmount: number;
+  percentageComplete: number;
+  remarks?: string;
+}
+
+export interface FinanceReportData {
+  valuationType: 'Interim Progress Claim' | 'Final Account Valuation' | 'Variation Order Report' | 'Advance Payment & Retention Log' | 'Subcontractor Certificate';
+  paymentCertificateNo?: string;
+  claimPeriodStart: string;
+  claimPeriodEnd: string;
+  contractSum: number;
+  previousCertifiedGross: number;
+  currentClaimGross: number;
+  cumulativeGross: number;
+  retentionPercentage: number;
+  retentionDeducted: number;
+  advancePaymentDeduction?: number;
+  netClaimBeforeTax: number;
+  vatPercentage: number;
+  vatAmount: number;
+  netPayableAmount: number;
+  currency: string;
+  items: FinanceValuationItem[];
+  paymentStatus: 'Submitted' | 'Certified by Engineer' | 'Approved by Client' | 'Paid' | 'Disputed';
+  commercialRemarks?: string;
+}
+
+export interface FleetEquipmentItem {
+  id: string;
+  equipmentId: string;
+  name: string;
+  category: string;
+  registrationNumber?: string;
+  operatorName?: string;
+  startHourMeter: number;
+  endHourMeter: number;
+  operatingHours: number;
+  idleHours: number;
+  fuelAddedLiters: number;
+  locationArea: string;
+  status: 'Operational' | 'Standby' | 'Breakdown / Maintenance' | 'Off-Hire';
+  breakdownReason?: string;
+}
+
+export interface FleetReportData {
+  reportDate: string;
+  shift: 'Day Shift' | 'Night Shift' | '24-Hour Cycle';
+  totalFleetCount: number;
+  operationalCount: number;
+  breakdownCount: number;
+  standbyCount: number;
+  totalOperatingHours: number;
+  totalFuelConsumedLiters: number;
+  fleetAvailabilityPct: number;
+  equipmentList: FleetEquipmentItem[];
+  maintenanceNotes?: string;
+}
+
+export interface MaterialInspectionItem {
+  id: string;
+  materialName: string;
+  specification: string;
+  deliveryNoteNumber: string;
+  supplier: string;
+  batchNumber: string;
+  quantityDelivered: number;
+  unit: string;
+  storageLocation: string;
+  testCertificateAttached: boolean;
+  qualityStatus: 'Conforms / Accepted' | 'Pending Testing' | 'Rejected / NCR Issued';
+  sampleTestReference?: string;
+  remarks?: string;
+}
+
+export interface MaterialsReportData {
+  reportDate: string;
+  discipline: 'Civil / Structural Steel' | 'Concrete & Aggregates' | 'Electrical & Solar Cables' | 'Mechanical / Piping' | 'General Consumables';
+  supplierSummary?: string;
+  totalDeliveriesCount: number;
+  totalAcceptedQty: number;
+  totalRejectedQty: number;
+  materials: MaterialInspectionItem[];
+  warehouseObservations?: string;
+}
+
+export interface AccommodationInspectionItem {
+  id: string;
+  blockNumber: string;
+  roomNumber: string;
+  roomType: 'Senior Staff Single' | 'Junior Staff Twin' | 'Artisan Dormitory';
+  maxCapacity: number;
+  currentOccupants: number;
+  cleanlinessScore: 'Excellent' | 'Good' | 'Fair' | 'Poor';
+  electricalFittingsOk: boolean;
+  plumbingSanitationOk: boolean;
+  maintenanceDefects?: string;
+}
+
+export interface AccommodationReportData {
+  reportDate: string;
+  campName: string;
+  totalBedCapacity: number;
+  totalOccupiedBeds: number;
+  occupancyRatePct: number;
+  cateringMealsServedToday?: number;
+  waterConsumptionKiloLiters?: number;
+  powerConsumptionKWh?: number;
+  dieselGeneratorHours?: number;
+  roomInspections: AccommodationInspectionItem[];
+  campManagerNotes?: string;
+}
+
+export interface CustomReportColumn {
+  id: string;
+  header: string;
+  type: 'text' | 'number' | 'date' | 'select' | 'status';
+  width?: string;
+  options?: string[];
+  isSummable?: boolean;
+}
+
+export interface CustomReportSection {
+  id: string;
+  title: string;
+  type: 'key-value' | 'table' | 'text' | 'metrics';
+  fields?: { key: string; label: string; value: string; type?: 'text' | 'number' | 'date' }[];
+  columns?: CustomReportColumn[];
+  rows?: Record<string, any>[];
+  metrics?: { label: string; value: string | number; unit?: string; change?: string }[];
+  content?: string;
+}
+
+export interface CustomReportData {
+  templateName: string;
+  sections: CustomReportSection[];
+  generalRemarks?: string;
+}
+
+// -------------------------------------------------------------
+// Report Template Engine Definitions
+// -------------------------------------------------------------
+
+export interface ReportTemplateDefinition {
+  id: string;
+  name: string;
+  category: ReportCategory;
+  description: string;
+  icon: string;
+  defaultTitle: string;
+  docNumberPrefix: string;
+  disciplineType?: string;
+  defaultSections?: CustomReportSection[];
+  defaultDataPreset?: any;
+  isSystemPreset: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+

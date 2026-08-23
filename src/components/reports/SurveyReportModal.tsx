@@ -237,8 +237,8 @@ export function SurveyReportModal({ isOpen, onClose, initialReport, onSave }: Su
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-slate-950/75 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-[95vw] lg:max-w-7xl w-full max-h-[94vh] flex flex-col overflow-hidden">
         
         {/* Modal Header */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
@@ -557,7 +557,7 @@ export function SurveyReportModal({ isOpen, onClose, initialReport, onSave }: Su
           )}
 
           {/* Section 4: Interactive Coordinate Point Matrix */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -565,7 +565,7 @@ export function SurveyReportModal({ isOpen, onClose, initialReport, onSave }: Su
                   <span>4. Coordinate Point Deviation Matrix ({points.length} Points)</span>
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Deltas $\Delta E, \Delta N, \Delta Z$ calculate automatically in millimeters ($mm$) with instant pass/fail validation.
+                  Deltas ΔE, ΔN, ΔZ calculate automatically in millimeters (mm) with instant pass/fail validation.
                 </p>
               </div>
 
@@ -581,23 +581,23 @@ export function SurveyReportModal({ isOpen, onClose, initialReport, onSave }: Su
             </div>
 
             {/* Points Table */}
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold">
-                    <th className="p-2.5">Point #</th>
-                    <th className="p-2.5">Description / Chainage</th>
-                    <th className="p-2.5 font-mono">Design East (m)</th>
-                    <th className="p-2.5 font-mono">Design North (m)</th>
-                    <th className="p-2.5 font-mono">Design Elev (m)</th>
-                    <th className="p-2.5 font-mono bg-blue-50/50 dark:bg-blue-950/20">Act East (m)</th>
-                    <th className="p-2.5 font-mono bg-blue-50/50 dark:bg-blue-950/20">Act North (m)</th>
-                    <th className="p-2.5 font-mono bg-blue-50/50 dark:bg-blue-950/20">Act Elev (m)</th>
-                    <th className="p-2.5 font-mono text-center">$\Delta E$ (mm)</th>
-                    <th className="p-2.5 font-mono text-center">$\Delta N$ (mm)</th>
-                    <th className="p-2.5 font-mono text-center">$\Delta Z$ (mm)</th>
-                    <th className="p-2.5 text-center">Status</th>
-                    <th className="p-2.5 text-center">Action</th>
+                    <th className="p-3">Point #</th>
+                    <th className="p-3">Description / Chainage</th>
+                    <th className="p-3 font-mono text-right">Design East (m)</th>
+                    <th className="p-3 font-mono text-right">Design North (m)</th>
+                    <th className="p-3 font-mono text-right">Design Elev (m)</th>
+                    <th className="p-3 font-mono text-right bg-blue-50/50 dark:bg-blue-950/20">Act East (m)</th>
+                    <th className="p-3 font-mono text-right bg-blue-50/50 dark:bg-blue-950/20">Act North (m)</th>
+                    <th className="p-3 font-mono text-right bg-blue-50/50 dark:bg-blue-950/20">Act Elev (m)</th>
+                    <th className="p-3 font-mono text-center">ΔE (mm)</th>
+                    <th className="p-3 font-mono text-center">ΔN (mm)</th>
+                    <th className="p-3 font-mono text-center">ΔZ (mm)</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-xs">

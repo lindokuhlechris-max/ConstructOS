@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '../components/ui';
-import { DailyReport, UniversalReportItem, SurveyReportData, WeeklyProgressReportData, ReportCategory } from '../types';
+import { DailyReport, UniversalReportItem, ReportCategory } from '../types';
 import { ReportDetail } from '../components/ReportDetail';
 import { DailyLogForm } from '../components/DailyLogForm';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 import { DailyPdfSummaryModal } from '../components/DailyPdfSummaryModal';
 import { ProjectSummaryPdfModal } from '../components/ProjectSummaryPdfModal';
-import { SurveyReportModal } from '../components/reports/SurveyReportModal';
-import { SurveyReportDetail } from '../components/reports/SurveyReportDetail';
+import { UniversalReportModal } from '../components/reports/UniversalReportModal';
+import { UniversalReportDetail } from '../components/reports/UniversalReportDetail';
 import { ProgressReportCompilerModal } from '../components/reports/ProgressReportCompilerModal';
 import { ProgressReportDetail } from '../components/reports/ProgressReportDetail';
 import {
@@ -50,7 +50,8 @@ import {
   ShieldCheck,
   Sparkles,
   Layers,
-  ChevronDown
+  ChevronDown,
+  Bookmark
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { exportReportsToCSV, exportFullProjectCSV } from '../lib/csvExport';
@@ -63,6 +64,7 @@ export function Reports() {
     addUniversalReport, 
     updateUniversalReport, 
     deleteUniversalReport,
+    reportTemplates,
     projects, 
     activities, 
     addReport, 
@@ -82,20 +84,20 @@ export function Reports() {
 
   // Active Detail Selection
   const [selectedDailyReport, setSelectedDailyReport] = useState<DailyReport | null>(null);
-  const [selectedSurveyReport, setSelectedSurveyReport] = useState<UniversalReportItem<SurveyReportData> | null>(null);
-  const [selectedProgressReport, setSelectedProgressReport] = useState<UniversalReportItem<WeeklyProgressReportData> | null>(null);
+  const [selectedUniversalReport, setSelectedUniversalReport] = useState<UniversalReportItem | null>(null);
+  const [selectedProgressReport, setSelectedProgressReport] = useState<UniversalReportItem | null>(null);
 
   // Creation & Wizard Modals
   const [isDailyCreating, setIsDailyCreating] = useState(false);
-  const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false);
-  const [editingSurveyReport, setEditingSurveyReport] = useState<UniversalReportItem<SurveyReportData> | null>(null);
+  const [isUniversalModalOpen, setIsUniversalModalOpen] = useState(false);
+  const [editingReport, setEditingReport] = useState<UniversalReportItem | null>(null);
+  const [modalInitialCategory, setModalInitialCategory] = useState<ReportCategory>('Survey');
 
   const [isCompilerModalOpen, setIsCompilerModalOpen] = useState(false);
 
   // Exports Modals
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [isProjectSummaryPdfModalOpen, setIsProjectSummaryPdfModalOpen] = useState(false);
-  const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
   const [isNewReportDropdownOpen, setIsNewReportDropdownOpen] = useState(false);
 
   const getProjectName = (projectId: string) => {
@@ -180,45 +182,29 @@ export function Reports() {
 
   // Handle Opening a Report
   const handleOpenReport = (item: UniversalReportItem) => {
-    if (item.category === 'Survey') {
-      setSelectedSurveyReport(item as UniversalReportItem<SurveyReportData>);
-    } else if (item.category === 'WeeklyProgress' || item.category === 'MonthlyProgress') {
-      setSelectedProgressReport(item as UniversalReportItem<WeeklyProgressReportData>);
+    if (item.category === 'WeeklyProgress' || item.category === 'MonthlyProgress') {
+      setSelectedProgressReport(item);
     } else if (item.category === 'DailySite') {
       const origDaily = reports.find(r => r.id === item.id) || (item.data as DailyReport);
       setSelectedDailyReport(origDaily);
+    } else {
+      setSelectedUniversalReport(item);
     }
   };
 
-  // Render Sub-Views if a report is selected
-  if (selectedSurveyReport) {
-    return (
-      <div className="p-4 md:p-8">
-        <SurveyReportDetail
-          report={selectedSurveyReport}
-          onClose={() => setSelectedSurveyReport(null)}
-          onEdit={() => {
-            setEditingSurveyReport(selectedSurveyReport);
-            setIsSurveyModalOpen(true);
-          }}
-          onSave={canEditReports ? (updated) => {
-            updateUniversalReport(updated);
-            setSelectedSurveyReport(updated);
-          } : undefined}
-          onDelete={canEditReports ? (id) => {
-            deleteUniversalReport(id);
-            setSelectedSurveyReport(null);
-          } : undefined}
-        />
-      </div>
-    );
-  }
+  const handleOpenNewReportModal = (cat: ReportCategory) => {
+    setIsNewReportDropdownOpen(false);
+    setEditingReport(null);
+    setModalInitialCategory(cat);
+    setIsUniversalModalOpen(true);
+  };
 
+  // Render Sub-Views if a report is selected
   if (selectedProgressReport) {
     return (
       <div className="p-4 md:p-8">
         <ProgressReportDetail
-          report={selectedProgressReport}
+          report={selectedProgressReport as any}
           onClose={() => setSelectedProgressReport(null)}
           onEdit={() => {
             setIsCompilerModalOpen(true);
@@ -230,6 +216,30 @@ export function Reports() {
           onDelete={canEditReports ? (id) => {
             deleteUniversalReport(id);
             setSelectedProgressReport(null);
+          } : undefined}
+        />
+      </div>
+    );
+  }
+
+  if (selectedUniversalReport) {
+    return (
+      <div className="p-4 md:p-8">
+        <UniversalReportDetail
+          report={selectedUniversalReport}
+          onClose={() => setSelectedUniversalReport(null)}
+          onEdit={() => {
+            setEditingReport(selectedUniversalReport);
+            setModalInitialCategory(selectedUniversalReport.category);
+            setIsUniversalModalOpen(true);
+          }}
+          onSave={canEditReports ? (updated) => {
+            updateUniversalReport(updated);
+            setSelectedUniversalReport(updated);
+          } : undefined}
+          onDelete={canEditReports ? (id) => {
+            deleteUniversalReport(id);
+            setSelectedUniversalReport(null);
           } : undefined}
         />
       </div>
@@ -291,10 +301,10 @@ export function Reports() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
-            <FileBarChart className="h-6 w-6 text-[#0B5FFF]" /> Reports & Progress Hub
+            <FileBarChart className="h-6 w-6 text-[#0B5FFF]" /> Reports & Templates Studio Hub
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">
-            Unified management for Progress Cycles (Daily, Weekly, Monthly) and Technical Disciplines (Survey, Finance, Fleet).
+            Universal report builder with customizable templates across Survey, Finance, Fleet, Materials, Camp, and QA/QC.
           </p>
         </div>
 
@@ -330,7 +340,7 @@ export function Reports() {
             CSV Export
           </Button>
 
-          {/* New Report Dropdown Action */}
+          {/* New Report Universal Studio Dropdown */}
           {canEditReports && (
             <div className="relative">
               <Button 
@@ -343,15 +353,73 @@ export function Reports() {
               </Button>
 
               {isNewReportDropdownOpen && (
-                <div className="absolute right-0 top-11 z-30 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-2 space-y-1 animate-in fade-in zoom-in-95">
+                <div className="absolute right-0 top-11 z-30 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-2 space-y-1 animate-in fade-in zoom-in-95">
+                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Select Discipline Template
+                  </div>
+
+                  <button
+                    onClick={() => handleOpenNewReportModal('Survey')}
+                    className="w-full text-left p-2.5 rounded-2xl hover:bg-teal-50 dark:hover:bg-teal-950/40 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
+                  >
+                    <div className="h-8 w-8 rounded-xl bg-teal-100 dark:bg-teal-900/60 text-teal-600 flex items-center justify-center shrink-0">
+                      <Compass className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">Survey & Geospatial Report</div>
+                      <div className="text-[10px] text-slate-400">Setting-out, as-built, cut & fill volumes</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenNewReportModal('Finance')}
+                    className="w-full text-left p-2.5 rounded-2xl hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
+                  >
+                    <div className="h-8 w-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 flex items-center justify-center shrink-0">
+                      <DollarSign className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">Finance & Valuation Claim (IPC)</div>
+                      <div className="text-[10px] text-slate-400">Payment certs, BOQ progress, retention</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenNewReportModal('Fleet')}
+                    className="w-full text-left p-2.5 rounded-2xl hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
+                  >
+                    <div className="h-8 w-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-600 flex items-center justify-center shrink-0">
+                      <Truck className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">Fleet, Plant & Machinery Log</div>
+                      <div className="text-[10px] text-slate-400">Hour meters, fuel liters, availability</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenNewReportModal('Materials')}
+                    className="w-full text-left p-2.5 rounded-2xl hover:bg-orange-50 dark:hover:bg-orange-950/40 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
+                  >
+                    <div className="h-8 w-8 rounded-xl bg-orange-100 dark:bg-orange-900/60 text-orange-600 flex items-center justify-center shrink-0">
+                      <Package className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">Materials Quality & Delivery</div>
+                      <div className="text-[10px] text-slate-400">Mill test certificates, batch tests</div>
+                    </div>
+                  </button>
+
+                  <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+
                   <button
                     onClick={() => {
                       setIsNewReportDropdownOpen(false);
                       setIsCompilerModalOpen(true);
                     }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/40 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
+                    className="w-full text-left p-2.5 rounded-2xl hover:bg-blue-50 dark:hover:bg-blue-950/40 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
                   >
-                    <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-[#0B5FFF] flex items-center justify-center shrink-0">
+                    <div className="h-8 w-8 rounded-xl bg-blue-100 dark:bg-blue-900/60 text-[#0B5FFF] flex items-center justify-center shrink-0">
                       <Sparkles className="h-4 w-4" />
                     </div>
                     <div>
@@ -363,28 +431,11 @@ export function Reports() {
                   <button
                     onClick={() => {
                       setIsNewReportDropdownOpen(false);
-                      setEditingSurveyReport(null);
-                      setIsSurveyModalOpen(true);
-                    }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
-                  >
-                    <div className="h-8 w-8 rounded-lg bg-teal-100 dark:bg-teal-900/60 text-teal-600 flex items-center justify-center shrink-0">
-                      <Compass className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold">New Survey & Geospatial Report</div>
-                      <div className="text-[10px] text-slate-400">Setting-out, as-built, cut & fill volumes</div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setIsNewReportDropdownOpen(false);
                       setIsDailyCreating(true);
                     }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
+                    className="w-full text-left p-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
                   >
-                    <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0">
+                    <div className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0">
                       <Calendar className="h-4 w-4" />
                     </div>
                     <div>
@@ -406,16 +457,18 @@ export function Reports() {
           <div className="flex items-baseline justify-between">
             <span className="text-2xl font-bold text-slate-900 dark:text-white font-mono">{allUnifiedItems.length}</span>
             <span className="text-xs font-bold text-[#0B5FFF] bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-md">
-              All Modules
+              {reportTemplates.length} Templates
             </span>
           </div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase block mb-1">Weekly Progress Status</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase block mb-1">Financial Claims Certified</span>
           <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-emerald-600 font-mono">Week 34</span>
-            <Badge className="bg-emerald-600 text-white text-[10px]">Submitted</Badge>
+            <span className="text-2xl font-bold text-emerald-600 font-mono">
+              {universalReports.filter(r => r.category === 'Finance').length} Claims
+            </span>
+            <Badge className="bg-emerald-600 text-white text-[10px]">Valuation</Badge>
           </div>
         </div>
 
@@ -456,46 +509,6 @@ export function Reports() {
           <span>All Reports ({countsByCategory.all || 0})</span>
         </button>
 
-        {/* Progress Cycles Group */}
-        <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
-
-        <button
-          onClick={() => setActiveCategory('DailySite')}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-            activeCategory === 'DailySite' 
-              ? 'bg-blue-600 text-white shadow-sm' 
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Calendar className="h-4 w-4" />
-          <span>Daily Site Logs ({countsByCategory['DailySite'] || 0})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveCategory('WeeklyProgress')}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-            activeCategory === 'WeeklyProgress' 
-              ? 'bg-indigo-600 text-white shadow-sm' 
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <TrendingUp className="h-4 w-4" />
-          <span>Weekly (WPR) ({countsByCategory['WeeklyProgress'] || 0})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveCategory('MonthlyProgress')}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-            activeCategory === 'MonthlyProgress' 
-              ? 'bg-purple-600 text-white shadow-sm' 
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <FileBarChart className="h-4 w-4" />
-          <span>Monthly (MPR) ({countsByCategory['MonthlyProgress'] || 0})</span>
-        </button>
-
-        {/* Technical Disciplines Group */}
         <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
 
         <button
@@ -543,7 +556,7 @@ export function Reports() {
           }`}
         >
           <Package className="h-4 w-4 text-orange-500" />
-          <span>Materials ({countsByCategory['Materials'] || 0})</span>
+          <span>Materials & Quality ({countsByCategory['Materials'] || 0})</span>
         </button>
 
         <button
@@ -559,15 +572,27 @@ export function Reports() {
         </button>
 
         <button
-          onClick={() => setActiveCategory('Quality')}
+          onClick={() => setActiveCategory('WeeklyProgress')}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-            activeCategory === 'Quality' 
-              ? 'bg-emerald-600 text-white shadow-sm' 
+            activeCategory === 'WeeklyProgress' 
+              ? 'bg-indigo-600 text-white shadow-sm' 
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
-          <ShieldCheck className="h-4 w-4 text-emerald-500" />
-          <span>QA/QC & Safety ({countsByCategory['Quality'] || 0})</span>
+          <TrendingUp className="h-4 w-4" />
+          <span>Weekly (WPR) ({countsByCategory['WeeklyProgress'] || 0})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveCategory('DailySite')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'DailySite' 
+              ? 'bg-blue-600 text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Calendar className="h-4 w-4" />
+          <span>Daily Site Logs ({countsByCategory['DailySite'] || 0})</span>
         </button>
       </div>
 
@@ -643,6 +668,9 @@ export function Reports() {
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs divide-y divide-slate-100 dark:divide-slate-800">
           {filteredAndSorted.map(item => {
             const isSurvey = item.category === 'Survey';
+            const isFinance = item.category === 'Finance';
+            const isFleet = item.category === 'Fleet';
+            const isMaterials = item.category === 'Materials';
             const isProgress = item.category === 'WeeklyProgress' || item.category === 'MonthlyProgress';
 
             return (
@@ -654,10 +682,16 @@ export function Reports() {
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className={`h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 ${
                     isSurvey ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 border border-teal-200 dark:border-teal-800' :
+                    isFinance ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 border border-emerald-200 dark:border-emerald-800' :
+                    isFleet ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 border border-amber-200 dark:border-amber-800' :
+                    isMaterials ? 'bg-orange-50 dark:bg-orange-950/40 text-orange-600 border border-orange-200 dark:border-orange-800' :
                     isProgress ? 'bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF] border border-blue-200 dark:border-blue-800' :
                     'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                   }`}>
                     {isSurvey ? <Compass className="h-5 w-5" /> :
+                     isFinance ? <DollarSign className="h-5 w-5" /> :
+                     isFleet ? <Truck className="h-5 w-5" /> :
+                     isMaterials ? <Package className="h-5 w-5" /> :
                      isProgress ? <TrendingUp className="h-5 w-5" /> :
                      <Calendar className="h-5 w-5" />}
                   </div>
@@ -667,6 +701,9 @@ export function Reports() {
                       <span className="font-mono text-xs font-bold text-slate-500">{item.documentNumber || item.id}</span>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         isSurvey ? 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300' :
+                        isFinance ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                        isFleet ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
+                        isMaterials ? 'bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300' :
                         isProgress ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' :
                         'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
                       }`}>
@@ -707,6 +744,9 @@ export function Reports() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredAndSorted.map(item => {
             const isSurvey = item.category === 'Survey';
+            const isFinance = item.category === 'Finance';
+            const isFleet = item.category === 'Fleet';
+            const isMaterials = item.category === 'Materials';
             const isProgress = item.category === 'WeeklyProgress' || item.category === 'MonthlyProgress';
 
             return (
@@ -720,10 +760,16 @@ export function Reports() {
                     <div className="flex items-center gap-2">
                       <div className={`h-8 w-8 rounded-xl flex items-center justify-center ${
                         isSurvey ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600' :
+                        isFinance ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600' :
+                        isFleet ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600' :
+                        isMaterials ? 'bg-orange-50 dark:bg-orange-950/40 text-orange-600' :
                         isProgress ? 'bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF]' :
                         'bg-slate-100 dark:bg-slate-800 text-slate-600'
                       }`}>
                         {isSurvey ? <Compass className="h-4 w-4" /> :
+                         isFinance ? <DollarSign className="h-4 w-4" /> :
+                         isFleet ? <Truck className="h-4 w-4" /> :
+                         isMaterials ? <Package className="h-4 w-4" /> :
                          isProgress ? <TrendingUp className="h-4 w-4" /> :
                          <Calendar className="h-4 w-4" />}
                       </div>
@@ -759,23 +805,24 @@ export function Reports() {
         </div>
       )}
 
-      {/* Survey Creation/Edit Modal */}
-      {isSurveyModalOpen && (
-        <SurveyReportModal
-          isOpen={isSurveyModalOpen}
+      {/* Universal Report & Template Studio Modal */}
+      {isUniversalModalOpen && (
+        <UniversalReportModal
+          isOpen={isUniversalModalOpen}
           onClose={() => {
-            setIsSurveyModalOpen(false);
-            setEditingSurveyReport(null);
+            setIsUniversalModalOpen(false);
+            setEditingReport(null);
           }}
-          initialReport={editingSurveyReport}
+          initialReport={editingReport}
+          initialCategory={modalInitialCategory}
           onSave={(savedReport) => {
-            if (editingSurveyReport) {
+            if (editingReport) {
               updateUniversalReport(savedReport);
             } else {
               addUniversalReport(savedReport);
             }
-            setIsSurveyModalOpen(false);
-            setEditingSurveyReport(null);
+            setIsUniversalModalOpen(false);
+            setEditingReport(null);
           }}
         />
       )}
