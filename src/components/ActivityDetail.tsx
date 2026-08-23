@@ -1367,72 +1367,6 @@ ${subtaskSummaryLines}
         </div>
       </div>
 
-      {/* Living Resource Conflict Radar Alert */}
-      {resourceVitality.conflicts.length > 0 && (
-        <div className="p-4 rounded-2xl bg-red-50/95 dark:bg-red-950/40 border border-red-200 dark:border-red-800/80 shadow-xs flex flex-col gap-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
-              </span>
-              <div>
-                <div className="text-xs font-black uppercase tracking-wider text-red-900 dark:text-red-200 flex items-center gap-2">
-                  <span>Living Resource Vitality Alert: {resourceVitality.label}</span>
-                </div>
-                <div className="text-[11px] text-red-700/90 dark:text-red-300/90">
-                  Assigned plant or crew allocations on this activity collide with other concurrent work on site.
-                </div>
-              </div>
-            </div>
-            <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800">
-              {resourceVitality.conflicts.length} Active Collision{resourceVitality.conflicts.length > 1 ? 's' : ''}
-            </span>
-          </div>
-
-          <div className="space-y-2 pt-1 border-t border-red-100 dark:border-red-900/40">
-            {resourceVitality.conflicts.map(conf => (
-              <div key={conf.id} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-red-100 dark:border-red-900/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
-                <div className="flex items-start gap-2.5">
-                  <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950 text-red-600 shrink-0 mt-0.5 border border-red-100 dark:border-red-900/40">
-                    {conf.type === 'EQUIPMENT_MAINTENANCE' ? <Wrench className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
-                      <span>{conf.resourceName}</span>
-                      {conf.conflictingActivityId && (
-                        <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          vs {conf.conflictingActivityId}
-                        </span>
-                      )}
-                      {conf.overlapDays ? (
-                        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                          ({conf.overlapDays} days overlap)
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-                      {conf.message}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setSwappingConflict(conf)}
-                    className="h-8 text-xs font-bold gap-1.5 rounded-xl text-[#0B5FFF] border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/50"
-                  >
-                    <ArrowRightLeft className="h-3.5 w-3.5" /> Swap Plant
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -2087,6 +2021,96 @@ ${subtaskSummaryLines}
                         </div>
                       );
                     })}
+                  </div>
+                )}
+              </div>
+
+              {/* Living Resource Vitality & Contention Radar Section */}
+              <div className="pt-4 border-t border-slate-200/80 dark:border-slate-800">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-[#0B5FFF]" />
+                    <h4 className="text-xs font-bold uppercase text-slate-700 dark:text-slate-300 tracking-wider">
+                      Living Resource Vitality & Site Contention Radar
+                    </h4>
+                  </div>
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border ${resourceVitality.badgeClass}`}>
+                    {resourceVitality.status === 'OPTIMAL' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />}
+                    {resourceVitality.status === 'CONFLICT' && <AlertOctagon className="h-3.5 w-3.5 text-red-600" />}
+                    {resourceVitality.status === 'WARNING' && <Clock className="h-3.5 w-3.5 text-amber-600" />}
+                    {resourceVitality.label}
+                  </span>
+                </div>
+
+                {resourceVitality.conflicts.length > 0 ? (
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex flex-col gap-2.5">
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span className="font-semibold">Active Scheduling Collisions ({resourceVitality.conflicts.length})</span>
+                      <span className="text-[11px] font-mono text-slate-400">Window: {activity.startDate || 'N/A'} → {activity.finishDate || activity.startDate || 'N/A'}</span>
+                    </div>
+
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {resourceVitality.conflicts.map(conf => (
+                        <div 
+                          key={conf.id} 
+                          className="p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs"
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                              conf.type === 'EQUIPMENT_CLASH' || conf.type === 'EQUIPMENT_MAINTENANCE'
+                                ? 'bg-red-50 dark:bg-red-950/70 text-red-600 border border-red-100 dark:border-red-900/50'
+                                : 'bg-amber-50 dark:bg-amber-950/70 text-amber-600 border border-amber-100 dark:border-amber-900/50'
+                            }`}>
+                              {conf.type === 'EQUIPMENT_MAINTENANCE' ? (
+                                <Wrench className="h-4 w-4" />
+                              ) : conf.type === 'EQUIPMENT_CLASH' ? (
+                                <Truck className="h-4 w-4" />
+                              ) : conf.type === 'OPERATOR_CLASH' ? (
+                                <Truck className="h-4 w-4" />
+                              ) : (
+                                <Users className="h-4 w-4" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
+                                <span>{conf.resourceName}</span>
+                                {conf.conflictingActivityId && (
+                                  <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                    vs {conf.conflictingActivityId}
+                                  </span>
+                                )}
+                                {conf.overlapDays ? (
+                                  <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                                    ({conf.overlapDays} days overlap)
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                                {conf.message}
+                              </p>
+                            </div>
+                          </div>
+
+                          {(conf.type === 'EQUIPMENT_CLASH' || conf.type === 'EQUIPMENT_MAINTENANCE') && (
+                            <div className="shrink-0 self-end sm:self-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSwappingConflict(conf)}
+                                className="h-7 text-xs font-bold gap-1.5 rounded-lg text-[#0B5FFF] border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                              >
+                                <ArrowRightLeft className="h-3 w-3" /> Swap Plant
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>0 scheduling clashes detected. All assigned plant, operators, and workforce are unencumbered on site.</span>
                   </div>
                 )}
               </div>
