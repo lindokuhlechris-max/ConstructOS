@@ -1182,7 +1182,7 @@ ${subtaskSummaryLines}
   };
 
   return (
-    <div className="flex flex-col gap-6 w-full h-full p-4 sm:p-6 md:p-8">
+    <div className="flex flex-col gap-6 w-full min-h-full p-4 sm:p-6 md:p-8 pb-28 sm:pb-36">
       {/* Top Header Bar (MD3 Top App Bar style) */}
       <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-3">

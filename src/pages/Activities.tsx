@@ -532,7 +532,7 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
 
   if (selectedActivity) {
     return (
-      <div className="p-4 md:p-8">
+      <div className="p-4 md:p-8 pb-28 md:pb-36">
         <ActivityDetail
           activity={selectedActivity}
           onSave={canEditActivities ? handleSaveActivity : undefined}
@@ -545,7 +545,7 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-8">
+    <div className="flex flex-col gap-6 p-4 md:p-8 pb-28 md:pb-36">
       {/* Top Level Screen Switcher: Activity Tracker | Discipline Tracker */}
       <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 flex-wrap gap-3">
         <div className="flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-xs">

@@ -239,7 +239,7 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-[#F5F7FA] dark:bg-slate-900 text-[#1A1C1E] dark:text-slate-50 overflow-hidden relative">
+    <div className="flex h-[100dvh] h-screen flex-col bg-[#F5F7FA] dark:bg-slate-900 text-[#1A1C1E] dark:text-slate-50 overflow-hidden relative">
       
       {/* BURGER / SIDE MENU DRAWER */}
       {isSideMenuOpen && (

@@ -11726,6 +11726,87 @@
   ],
   "reports": [
     {
+      "id": "RPT-1787484265433",
+      "date": "2026-08-23",
+      "projectId": "PRJ-5401",
+      "weather": "Sunny",
+      "temperature": "24°C",
+      "siteConditions": "Normal operations, clear access",
+      "significantEvents": "",
+      "workersOnSite": 12,
+      "equipmentRunning": 3,
+      "incidents": 0,
+      "ncr": 0,
+      "supervisorNotes": "",
+      "activitiesWorked": [
+        "PTS14 - PTS15"
+      ],
+      "activitiesLogged": [
+        "ACT-5191"
+      ],
+      "subtasksCompleted": [],
+      "pinnedSubtaskMap": {
+        "ACT-5191": [
+          "ST-1787145302893-gztk",
+          "ST-1787145302893-a0ah",
+          "ST-1787145302893-pp5i",
+          "ST-1787145302893-scyl"
+        ]
+      },
+      "activityProgress": {},
+      "workSummary": "",
+      "status": "Approved",
+      "attachments": [],
+      "photos": []
+    },
+    {
+      "id": "RPT-1787483584667",
+      "date": "2026-08-23",
+      "projectId": "PRJ-5401",
+      "weather": "Sunny",
+      "temperature": "31",
+      "siteConditions": "Normal operations, clear access",
+      "significantEvents": "Standard production activities continued as planned. No major delays.",
+      "workersOnSite": 0,
+      "equipmentRunning": 0,
+      "incidents": 0,
+      "ncr": 0,
+      "supervisorNotes": "",
+      "activitiesWorked": [
+        "PTS06 - PTS07"
+      ],
+      "activitiesLogged": [
+        "ACT-2779"
+      ],
+      "subtasksCompleted": [],
+      "pinnedSubtaskMap": {
+        "ACT-2779": [
+          "ST-1787144983335-uvjq"
+        ]
+      },
+      "activityProgress": {
+        "ACT-9830": {
+          "completedSubtasks": []
+        }
+      },
+      "workSummary": "Standard production activities continued as planned. No major delays.",
+      "status": "Approved"
+    },
+    {
+      "id": "RPT-1787482655344",
+      "date": "2026-08-16",
+      "projectId": "PRJ-5401",
+      "weather": "Sunny",
+      "temperature": "25",
+      "siteConditions": "Normal operations, clear access",
+      "significantEvents": "Standard production activities continued as planned. No major delays.",
+      "workersOnSite": 12,
+      "equipmentRunning": 3,
+      "incidents": 0,
+      "ncr": 0,
+      "supervisorNotes": ""
+    },
+    {
       "id": "DREP-SHIFT-2026-08-21-4670",
       "projectId": "PRJ-9348",
       "date": "2026-08-21",
@@ -12066,85 +12147,6 @@
       ],
       "photos": [],
       "supervisorNotes": "=== DAILY PROGRESS LOG: PTS-07(Foundation)  (ACT-8158) ===\nDiscipline / Package: Platform Installation | Civil, Electrical, Quality\nOverall Activity Progress: 0% | Output: 0 / 0 m²\nPriority: High | Shift Hours: 24 hrs\n\n--- SUBTASK & METHOD EXECUTION STATUS ---\n[x] #1 Foundation set-out (Surveying & Set-out) - 13/13 Points [Completed]\n[ ] #2 Trench marking (Excavation & Earthworks) - 0/1 done [Not Started]\n[ ] #3 Inspection of Trench marking (Surveying & Set-out) - 0/1 sign-off [Not Started]\n[ ] #4 Trench Excavation (Excavation & Earthworks) - 0/1 done [Not Started]\n[ ] #5 Barricading of Trench (Excavation & Earthworks) - 0/347 m [Not Started]\n[ ] #6 Inspection of Excavation (Quality & Inspection) - 0/1 sign-off [Not Started]\n[ ] #7 Trench Preparation (Excavation & Earthworks) - 0/347 m [Not Started]\n[ ] #8 Installation of Bedding sand - 100mm (Excavation & Earthworks) - 0/347 m [Not Started]\n[ ] #9 Inspection of Bedding Sand (Quality & Inspection) - 0/1 sign-off [Not Started]\n[ ] #10 Installation of Cables (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #11 Cable Joints (Electrical & MEP) - 0/1 done [Not Started]\n[ ] #12 Installation of Fibre optic and Earth Cable (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #13 Inspection of Cable Installation (Quality & Inspection) - 0/1 sign-off [Not Started]\n[ ] #14 Installation of Blanket Sand - 300mm (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #15 Inspection of Blanket Sand (Quality & Inspection) - 0/1 sign-off [Not Started]\n[ ] #16 Installation of Electric Cable Marker (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #17 Inspection of Electric Cable Markers (Quality & Inspection) - 0/1 sign-off [Not Started]\n[ ] #18 Installation of Backfil - 300mm (Level 2) (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #19 Installation of Electric Cable Marker - level 2 (Cable & Underground Installation) - 0/347 m [Not Started]\n[ ] #20 Installation of Backfil - 300mm (Excavation & Earthworks) - 0/347 m [Not Started]\n[ ] #21 Installation of overfill - 50mm (Excavation & Earthworks) - 0/347 m [Not Started]\n[ ] #22 Final Inspection. (Quality & Inspection) - 0/1 sign-off [Not Started]\n\n--- RESOURCE ALLOCATIONS ON SHIFT ---\nCrew Workforce (3 personnel):\n• Site Worker: McDonald Mtshweni (8 hrs)\n• Site Worker: Dimi Maphanga (8 hrs)\n• Site Worker: Advocate Khoza (8 hrs)\n\nPlant & Machinery (1 active units):\n• CAT (Operator: Assigned Operator)\n\nMaterials Allocated:\nStandard material stock.\n\n--- FIELD REMARKS & OBSERVATIONS ---\nDaily production targets executed in accordance with method statement and QA/QC specifications."
-    },
-    {
-      "id": "RPT-1787482655344",
-      "date": "2026-08-16",
-      "projectId": "PRJ-5401",
-      "weather": "Sunny",
-      "temperature": "25",
-      "siteConditions": "Normal operations, clear access",
-      "significantEvents": "Standard production activities continued as planned. No major delays.",
-      "workersOnSite": 12,
-      "equipmentRunning": 3,
-      "incidents": 0,
-      "ncr": 0,
-      "supervisorNotes": ""
-    },
-    {
-      "id": "RPT-1787483584667",
-      "date": "2026-08-23",
-      "projectId": "PRJ-5401",
-      "weather": "Sunny",
-      "temperature": "31",
-      "siteConditions": "Normal operations, clear access",
-      "significantEvents": "Standard production activities continued as planned. No major delays.",
-      "workersOnSite": 0,
-      "equipmentRunning": 0,
-      "incidents": 0,
-      "ncr": 0,
-      "supervisorNotes": "",
-      "activitiesWorked": [
-        "PTS06 - PTS07"
-      ],
-      "activitiesLogged": [
-        "ACT-2779"
-      ],
-      "subtasksCompleted": [],
-      "pinnedSubtaskMap": {
-        "ACT-2779": [
-          "ST-1787144983335-uvjq"
-        ]
-      },
-      "activityProgress": {
-        "ACT-9830": {
-          "completedSubtasks": []
-        }
-      },
-      "workSummary": "Standard production activities continued as planned. No major delays.",
-      "status": "Approved"
-    },
-    {
-      "id": "RPT-1787484265433",
-      "date": "2026-08-23",
-      "projectId": "PRJ-5401",
-      "weather": "Sunny",
-      "temperature": "24°C",
-      "siteConditions": "Normal operations, clear access",
-      "significantEvents": "",
-      "workersOnSite": 12,
-      "equipmentRunning": 3,
-      "incidents": 0,
-      "ncr": 0,
-      "supervisorNotes": "",
-      "activitiesWorked": [
-        "PTS14 - PTS15"
-      ],
-      "activitiesLogged": [
-        "ACT-5191"
-      ],
-      "subtasksCompleted": [],
-      "pinnedSubtaskMap": {
-        "ACT-5191": [
-          "ST-1787145302893-gztk",
-          "ST-1787145302893-a0ah",
-          "ST-1787145302893-pp5i",
-          "ST-1787145302893-scyl"
-        ]
-      },
-      "activityProgress": {},
-      "workSummary": "",
-      "status": "Approved"
     }
   ],
   "labourLogs": [
@@ -13015,6 +13017,331 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "AL-mt5xfz5o-11dh",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Surveying and Setting out of MV cable Type A1 trench ",
+      "timestamp": "2026-08-23T14:53:21.468Z",
+      "entityType": "QA",
+      "entityId": "QA-988",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5xfry4-rxlx",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Surveying and Setting out of MV cable Type A1 trench ",
+      "timestamp": "2026-08-23T14:53:12.124Z",
+      "entityType": "QA",
+      "entityId": "QA-988",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5xeq4j-10sd",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Surveying and Setting out of MV cable Type A1 trench ",
+      "timestamp": "2026-08-23T14:52:23.107Z",
+      "entityType": "QA",
+      "entityId": "QA-988",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5xakn5-ngil",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Surveying and Setting out of MV cable Type A1 trench ",
+      "timestamp": "2026-08-23T14:49:09.377Z",
+      "entityType": "QA",
+      "entityId": "QA-988",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5x6dc6-d4w0",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Surveying and Setting out of MV cable Type A1 trench ",
+      "timestamp": "2026-08-23T14:45:53.286Z",
+      "entityType": "QA",
+      "entityId": "QA-988",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5wsps2-yarn",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Surveying and Setting out of MV cable Type A1 trench ",
+      "timestamp": "2026-08-23T14:35:16.226Z",
+      "entityType": "QA",
+      "entityId": "QA-988",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5wse10-iey2",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Surveying and Setting out of MV cable Type A1 trench ",
+      "timestamp": "2026-08-23T14:35:00.996Z",
+      "entityType": "QA",
+      "entityId": "QA-988",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5wrqbs-x37g",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Item Created",
+      "details": "Created QA inspection \"Surveying and Setting out of MV cable Type A1 trench \" (Earthworks)",
+      "timestamp": "2026-08-23T14:34:30.280Z",
+      "entityType": "QA",
+      "entityId": "QA-988",
+      "actionType": "create"
+    },
+    {
+      "id": "AL-mt5tnw4n-v4ll",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T13:07:32.327Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5tc9h6-xbpm",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Daily Report Updated",
+      "details": "Updated Daily Site Report for 2026-08-23",
+      "timestamp": "2026-08-23T12:58:29.754Z",
+      "entityType": "Report",
+      "entityId": "RPT-1787484265433",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5tc2wr-w6wk",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Daily Report Updated",
+      "details": "Updated Daily Site Report for 2026-08-23",
+      "timestamp": "2026-08-23T12:58:21.243Z",
+      "entityType": "Report",
+      "entityId": "RPT-1787484265433",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-1vlj6q4m9",
+      "projectId": "PRJ-5401",
+      "userId": "Current User",
+      "action": "Material Deleted",
+      "details": "Deleted material \"Steal Bars\" (MAT-530)",
+      "timestamp": "2026-08-23T12:52:40.203Z"
+    },
+    {
+      "id": "AL-mt5svvyb-cm90",
+      "projectId": "PRJ-001",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Survey Deleted",
+      "details": "Deleted Survey Report \"As-Built Setting-Out & Coordinate Tolerance Check - Sector 4\"",
+      "timestamp": "2026-08-23T12:45:45.731Z",
+      "entityType": "Report",
+      "entityId": "REP-SRV-001",
+      "actionType": "delete"
+    },
+    {
+      "id": "AL-mt5sfcvb-bqhj",
+      "projectId": "PRJ-001",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Survey Deleted",
+      "details": "Deleted Survey Report \"Earthworks Cut & Fill Volumetric Quantity Report - North Retention Basin\"",
+      "timestamp": "2026-08-23T12:32:54.503Z",
+      "entityType": "Report",
+      "entityId": "REP-SRV-002",
+      "actionType": "delete"
+    },
+    {
+      "id": "AL-mt5pzaai-lno6",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Daily Report Created",
+      "details": "Created Daily Site Report for 2026-08-23",
+      "timestamp": "2026-08-23T11:24:25.434Z",
+      "entityType": "Report",
+      "entityId": "RPT-1787484265433",
+      "actionType": "create",
+      "newValue": "Date: 2026-08-23 | Weather: Sunny"
+    },
+    {
+      "id": "AL-mt5py60z-hap1",
+      "projectId": "PRJ-001",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "WeeklyProgress Deleted",
+      "details": "Deleted WeeklyProgress Report \"Weekly Progress Report - Week 34 (17 Aug - 23 Aug 2026)\"",
+      "timestamp": "2026-08-23T11:23:33.251Z",
+      "entityType": "Report",
+      "entityId": "REP-WPR-2026-W34",
+      "actionType": "delete"
+    },
+    {
+      "id": "AL-mt5pkp0c-12iu",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Daily Report Created",
+      "details": "Created Daily Site Report for 2026-08-23",
+      "timestamp": "2026-08-23T11:13:04.668Z",
+      "entityType": "Report",
+      "entityId": "RPT-1787483584667",
+      "actionType": "create",
+      "newValue": "Date: 2026-08-23 | Weather: Sunny"
+    },
+    {
+      "id": "AL-mt5p0rxt-ocfr",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "Daily Report Created",
+      "details": "Created Daily Site Report for 2026-08-16",
+      "timestamp": "2026-08-23T10:57:35.345Z",
+      "entityType": "Report",
+      "entityId": "RPT-1787482655344",
+      "actionType": "create",
+      "newValue": "Date: 2026-08-16 | Weather: Sunny"
+    },
+    {
+      "id": "AL-mt5lmmnb-v0h2",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T09:22:36.455Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5k4dii-bndm",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T08:40:25.194Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5k0s61-kzrs",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T08:37:37.561Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5j0vge-8ss9",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T08:09:42.206Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5iy3ic-8sa5",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T08:07:32.676Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5eou0w-jl07",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T06:08:22.016Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5e7ikt-kp64",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T05:54:54.029Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5e7blx-lcz4",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Deleted",
+      "details": "Deleted QA inspection \"dw\" (QA-574)",
+      "timestamp": "2026-08-23T05:54:44.997Z",
+      "entityType": "QA",
+      "entityId": "QA-574",
+      "actionType": "delete",
+      "previousValue": "Title: dw",
+      "newValue": "Inspection Record Removed"
+    },
+    {
+      "id": "AL-mt5e71nk-jb8h",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Item Created",
+      "details": "Created QA inspection \"Survey and setting out of MV Cable Trench: PTS20 - PTS21\" (Earthworks)",
+      "timestamp": "2026-08-23T05:54:32.096Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "create"
+    },
     {
       "id": "AL-ggglgf8bm",
       "projectId": "PRJ-5401",
@@ -20169,167 +20496,6 @@
       "previousValue": "In Progress",
       "newValue": "Not Started",
       "timestamp": "2026-08-20T04:48:20.446Z"
-    },
-    {
-      "id": "AL-mt5e71nk-jb8h",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "QA Inspection Item Created",
-      "details": "Created QA inspection \"Survey and setting out of MV Cable Trench: PTS20 - PTS21\" (Earthworks)",
-      "timestamp": "2026-08-23T05:54:32.096Z",
-      "entityType": "QA",
-      "entityId": "QA-621",
-      "actionType": "create"
-    },
-    {
-      "id": "AL-mt5e7blx-lcz4",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "QA Inspection Deleted",
-      "details": "Deleted QA inspection \"dw\" (QA-574)",
-      "timestamp": "2026-08-23T05:54:44.997Z",
-      "entityType": "QA",
-      "entityId": "QA-574",
-      "actionType": "delete",
-      "previousValue": "Title: dw",
-      "newValue": "Inspection Record Removed"
-    },
-    {
-      "id": "AL-mt5e7ikt-kp64",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "QA Inspection Updated",
-      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
-      "timestamp": "2026-08-23T05:54:54.029Z",
-      "entityType": "QA",
-      "entityId": "QA-621",
-      "actionType": "update"
-    },
-    {
-      "id": "AL-mt5eou0w-jl07",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "QA Inspection Updated",
-      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
-      "timestamp": "2026-08-23T06:08:22.016Z",
-      "entityType": "QA",
-      "entityId": "QA-621",
-      "actionType": "update"
-    },
-    {
-      "id": "AL-mt5iy3ic-8sa5",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "QA Inspection Updated",
-      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
-      "timestamp": "2026-08-23T08:07:32.676Z",
-      "entityType": "QA",
-      "entityId": "QA-621",
-      "actionType": "update"
-    },
-    {
-      "id": "AL-mt5j0vge-8ss9",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "QA Inspection Updated",
-      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
-      "timestamp": "2026-08-23T08:09:42.206Z",
-      "entityType": "QA",
-      "entityId": "QA-621",
-      "actionType": "update"
-    },
-    {
-      "id": "AL-mt5k0s61-kzrs",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "QA Inspection Updated",
-      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
-      "timestamp": "2026-08-23T08:37:37.561Z",
-      "entityType": "QA",
-      "entityId": "QA-621",
-      "actionType": "update"
-    },
-    {
-      "id": "AL-mt5k4dii-bndm",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "QA Inspection Updated",
-      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
-      "timestamp": "2026-08-23T08:40:25.194Z",
-      "entityType": "QA",
-      "entityId": "QA-621",
-      "actionType": "update"
-    },
-    {
-      "id": "AL-mt5lmmnb-v0h2",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "QA Inspection Updated",
-      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
-      "timestamp": "2026-08-23T09:22:36.455Z",
-      "entityType": "QA",
-      "entityId": "QA-621",
-      "actionType": "update"
-    },
-    {
-      "id": "AL-mt5p0rxt-ocfr",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "Daily Report Created",
-      "details": "Created Daily Site Report for 2026-08-16",
-      "timestamp": "2026-08-23T10:57:35.345Z",
-      "entityType": "Report",
-      "entityId": "RPT-1787482655344",
-      "actionType": "create",
-      "newValue": "Date: 2026-08-16 | Weather: Sunny"
-    },
-    {
-      "id": "AL-mt5pkp0c-12iu",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "Daily Report Created",
-      "details": "Created Daily Site Report for 2026-08-23",
-      "timestamp": "2026-08-23T11:13:04.668Z",
-      "entityType": "Report",
-      "entityId": "RPT-1787483584667",
-      "actionType": "create",
-      "newValue": "Date: 2026-08-23 | Weather: Sunny"
-    },
-    {
-      "id": "AL-mt5py60z-hap1",
-      "projectId": "PRJ-001",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "WeeklyProgress Deleted",
-      "details": "Deleted WeeklyProgress Report \"Weekly Progress Report - Week 34 (17 Aug - 23 Aug 2026)\"",
-      "timestamp": "2026-08-23T11:23:33.251Z",
-      "entityType": "Report",
-      "entityId": "REP-WPR-2026-W34",
-      "actionType": "delete"
-    },
-    {
-      "id": "AL-mt5pzaai-lno6",
-      "projectId": "PRJ-5401",
-      "userId": "Lindokuhle Chris (Admin) (Admin)",
-      "userRole": "Admin",
-      "action": "Daily Report Created",
-      "details": "Created Daily Site Report for 2026-08-23",
-      "timestamp": "2026-08-23T11:24:25.434Z",
-      "entityType": "Report",
-      "entityId": "RPT-1787484265433",
-      "actionType": "create",
-      "newValue": "Date: 2026-08-23 | Weather: Sunny"
     }
   ],
   "allocations": [],
@@ -20350,19 +20516,6 @@
       "type": "Consumable",
       "costPerUnit": 50,
       "photos": []
-    },
-    {
-      "id": "MAT-530",
-      "projectId": "PRJ-5401",
-      "name": "Steal Bars",
-      "category": "Panels",
-      "unit": "pcs",
-      "estimatedQuantity": 1000,
-      "receivedQuantity": 500,
-      "usedQuantity": 0,
-      "reorderLevel": 50,
-      "status": "In Stock",
-      "sku": "SKU-5030"
     }
   ],
   "materialReceipts": [],
@@ -21330,6 +21483,45 @@
   "ppeItems": [],
   "qaInspections": [
     {
+      "id": "QA-988",
+      "projectId": "PRJ-5401",
+      "activityId": "ACT-1179",
+      "title": "Surveying and Setting out of MV cable Type A1 trench ",
+      "location": "Block 8 & Block 15",
+      "inspector": "Advocate Khoza",
+      "date": "2026-08-06",
+      "inspectionTime": "15:00",
+      "submissionDate": "2026-08-05",
+      "status": "Pending Approval",
+      "category": "Earthworks",
+      "client": "Red Rocket",
+      "epc": "HDEC",
+      "subcontractor": "Mbeu Engineering",
+      "documentNumber": "MVT-HDEC-MBEU-RFI-003",
+      "referenceDrawingNumber": "RRT-HDC-08-IDR-PDE-CAB-003",
+      "clientQCRepresentative": "",
+      "clientQCStatus": "Pending Client Review",
+      "clientQCSignoffDate": "2026-08-23",
+      "linkedDocumentIds": [],
+      "measurementType": "Length",
+      "unit": "m",
+      "targetQuantity": 824,
+      "inspectedQuantity": 775,
+      "approvedQuantity": 775,
+      "rejectedQuantity": 0,
+      "toleranceSpec": "±10mm / SANS 1200",
+      "dueDate": "",
+      "clientQCNotes": "",
+      "measurementItems": [],
+      "linkedActivityId": "ACT-1179",
+      "documentNumbers": [
+        "MVT-HDEC-MBEU-RFI-003"
+      ],
+      "referenceDrawingNumbers": [
+        "RRT-HDC-08-IDR-PDE-CAB-003"
+      ]
+    },
+    {
       "id": "QA-621",
       "projectId": "PRJ-5401",
       "activityId": "ACT-6487",
@@ -21346,9 +21538,9 @@
       "clientQCNotes": "",
       "measurementType": "Length",
       "unit": "m",
-      "targetQuantity": 150,
-      "inspectedQuantity": 140,
-      "approvedQuantity": 0,
+      "targetQuantity": 433,
+      "inspectedQuantity": 380,
+      "approvedQuantity": 380,
       "rejectedQuantity": 0,
       "toleranceSpec": "",
       "measurementItems": [],
