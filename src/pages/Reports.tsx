@@ -1,11 +1,15 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '../components/ui';
-import { DailyReport } from '../types';
+import { DailyReport, UniversalReportItem, SurveyReportData, WeeklyProgressReportData, ReportCategory } from '../types';
 import { ReportDetail } from '../components/ReportDetail';
 import { DailyLogForm } from '../components/DailyLogForm';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 import { DailyPdfSummaryModal } from '../components/DailyPdfSummaryModal';
 import { ProjectSummaryPdfModal } from '../components/ProjectSummaryPdfModal';
+import { SurveyReportModal } from '../components/reports/SurveyReportModal';
+import { SurveyReportDetail } from '../components/reports/SurveyReportDetail';
+import { ProgressReportCompilerModal } from '../components/reports/ProgressReportCompilerModal';
+import { ProgressReportDetail } from '../components/reports/ProgressReportDetail';
 import {
   FileBarChart,
   Plus,
@@ -36,137 +40,245 @@ import {
   MapPin,
   Thermometer,
   Droplets,
-  Sunrise,
-  Sunset,
   Download,
   Printer,
   FileSpreadsheet,
-  Mic
+  Compass,
+  DollarSign,
+  Package,
+  Home,
+  ShieldCheck,
+  Sparkles,
+  Layers,
+  ChevronDown
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { exportReportsToCSV, exportFullProjectCSV } from '../lib/csvExport';
 import { exportSingleReportPDF, exportMultipleReportsPDF } from '../lib/pdfReportExport';
-import { RecordActivityModal } from '../components/RecordActivityModal';
-import { WeatherWidget } from '../components/WeatherWidget';
 
 export function Reports() {
-  const { reports, projects, activities, addReport, updateReport, deleteReport, addAuditLog, userRole, hasPermission } = useAppContext();
+  const { 
+    reports, 
+    universalReports, 
+    addUniversalReport, 
+    updateUniversalReport, 
+    deleteUniversalReport,
+    projects, 
+    activities, 
+    addReport, 
+    updateReport, 
+    deleteReport, 
+    hasPermission 
+  } = useAppContext();
+
   const canEditReports = hasPermission('reports');
 
-
-  
-
-  const [selectedReport, setSelectedReport] = useState<DailyReport | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
-  const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
-  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
-  const [isProjectSummaryPdfModalOpen, setIsProjectSummaryPdfModalOpen] = useState(false);
+  // Navigation & Category Filter State
+  const [activeCategory, setActiveCategory] = useState<ReportCategory | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterProject, setFilterProject] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'workers' | 'incidents'>('date-desc');
-  const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'title' | 'status'>('date-desc');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+
+  // Active Detail Selection
+  const [selectedDailyReport, setSelectedDailyReport] = useState<DailyReport | null>(null);
+  const [selectedSurveyReport, setSelectedSurveyReport] = useState<UniversalReportItem<SurveyReportData> | null>(null);
+  const [selectedProgressReport, setSelectedProgressReport] = useState<UniversalReportItem<WeeklyProgressReportData> | null>(null);
+
+  // Creation & Wizard Modals
+  const [isDailyCreating, setIsDailyCreating] = useState(false);
+  const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false);
+  const [editingSurveyReport, setEditingSurveyReport] = useState<UniversalReportItem<SurveyReportData> | null>(null);
+
+  const [isCompilerModalOpen, setIsCompilerModalOpen] = useState(false);
+
+  // Exports Modals
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [isProjectSummaryPdfModalOpen, setIsProjectSummaryPdfModalOpen] = useState(false);
+  const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
+  const [isNewReportDropdownOpen, setIsNewReportDropdownOpen] = useState(false);
 
   const getProjectName = (projectId: string) => {
     const project = projects.find(p => p.id === projectId);
     return project?.name || 'Unknown Project';
   };
 
-  const getWeatherIcon = (weather: string) => {
-    const w = weather.toLowerCase();
-    if (w.includes('rain') || w.includes('storm')) return <CloudRain className="h-4 w-4 text-blue-500" />;
-    if (w.includes('cloud') || w.includes('overcast')) return <Cloud className="h-4 w-4 text-slate-400" />;
-    if (w.includes('wind')) return <Wind className="h-4 w-4 text-teal-500" />;
-    return <Sun className="h-4 w-4 text-amber-500" />;
-  };
+  // Convert daily reports to uniform list items for unified view
+  const allUnifiedItems = useMemo(() => {
+    const dailyAsUniversal: UniversalReportItem[] = reports.map(d => ({
+      id: d.id,
+      projectId: d.projectId,
+      reportType: 'DAILY_SITE',
+      category: 'DailySite',
+      title: `Daily Site Report - ${d.date}`,
+      documentNumber: `DLY-${d.date.replace(/-/g, '')}`,
+      revision: 'Rev 0',
+      date: d.date,
+      submissionDate: d.date,
+      author: d.submittedBy || d.supervisor || 'Site Supervisor',
+      status: (d.status as any) || 'Approved',
+      location: 'Site-Wide',
+      summaryNotes: d.workSummary || d.significantEvents || d.generalNotes || 'Daily construction activities and site conditions.',
+      data: d
+    }));
 
+    return [...universalReports, ...dailyAsUniversal];
+  }, [reports, universalReports]);
+
+  // Filtered & Sorted unified report list
   const filteredAndSorted = useMemo(() => {
-    let result = reports.filter(r => {
-      const matchesSearch =
-        r.date.includes(searchTerm) ||
-        getProjectName(r.projectId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.weather.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (r.significantEvents || '').toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesProject = filterProject === 'all' || r.projectId === filterProject;
-      return matchesSearch && matchesProject;
+    let result = allUnifiedItems.filter(r => {
+      // Category filter
+      if (activeCategory !== 'all' && r.category !== activeCategory) {
+        return false;
+      }
+
+      // Project filter
+      if (filterProject !== 'all' && r.projectId !== filterProject) {
+        return false;
+      }
+
+      // Search term
+      if (searchTerm.trim()) {
+        const query = searchTerm.toLowerCase();
+        const matchesTitle = r.title.toLowerCase().includes(query);
+        const matchesDoc = (r.documentNumber || '').toLowerCase().includes(query);
+        const matchesAuthor = (r.author || '').toLowerCase().includes(query);
+        const matchesLocation = (r.location || '').toLowerCase().includes(query);
+        const matchesProject = getProjectName(r.projectId).toLowerCase().includes(query);
+        return matchesTitle || matchesDoc || matchesAuthor || matchesLocation || matchesProject;
+      }
+
+      return true;
     });
 
     switch (sortBy) {
       case 'date-desc':
-        result.sort((a, b) => b.date.localeCompare(a.date));
+        result.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
         break;
       case 'date-asc':
-        result.sort((a, b) => a.date.localeCompare(b.date));
+        result.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
         break;
-      case 'workers':
-        result.sort((a, b) => b.workersOnSite - a.workersOnSite);
+      case 'title':
+        result.sort((a, b) => a.title.localeCompare(b.title));
         break;
-      case 'incidents':
-        result.sort((a, b) => b.incidents - a.incidents);
+      case 'status':
+        result.sort((a, b) => (a.status || '').localeCompare(b.status || ''));
         break;
     }
     return result;
-  }, [reports, searchTerm, filterProject, sortBy, projects]);
+  }, [allUnifiedItems, activeCategory, filterProject, searchTerm, sortBy, projects]);
 
-  // Summary stats
-  const totalReports = reports.length;
-  const totalWorkerDays = reports.reduce((sum, r) => sum + r.workersOnSite, 0);
-  const totalIncidents = reports.reduce((sum, r) => sum + r.incidents, 0);
-  const totalNCRs = reports.reduce((sum, r) => sum + r.ncr, 0);
+  // Aggregate Category Counts
+  const countsByCategory = useMemo(() => {
+    const counts: Record<string, number> = { all: allUnifiedItems.length };
+    allUnifiedItems.forEach(r => {
+      counts[r.category] = (counts[r.category] || 0) + 1;
+    });
+    return counts;
+  }, [allUnifiedItems]);
 
-  const handleCreateReport = (formData: Partial<DailyReport>) => {
-    const newReport: DailyReport = {
-      id: `RPT-${Date.now()}`,
-      date: formData.date || new Date().toISOString().split('T')[0],
-      projectId: formData.projectId || '',
-      weather: formData.weather || 'Sunny',
-      temperature: formData.temperature || '',
-      siteConditions: formData.siteConditions || '',
-      significantEvents: formData.significantEvents || '',
-      workersOnSite: formData.workersOnSite || 0,
-      equipmentRunning: formData.equipmentRunning || 0,
-      incidents: formData.incidents || 0,
-      ncr: formData.ncr || 0,
-      supervisorNotes: formData.supervisorNotes || '',
-    };
-    addReport(newReport);
-    setIsCreating(false);
-  };
-
-  const handleDeleteReport = () => {
-    if (deletingReportId) {
-      deleteReport(deletingReportId);
-      if (selectedReport && selectedReport.id === deletingReportId) {
-        setSelectedReport(null);
-      }
-      setDeletingReportId(null);
+  // Handle Opening a Report
+  const handleOpenReport = (item: UniversalReportItem) => {
+    if (item.category === 'Survey') {
+      setSelectedSurveyReport(item as UniversalReportItem<SurveyReportData>);
+    } else if (item.category === 'WeeklyProgress' || item.category === 'MonthlyProgress') {
+      setSelectedProgressReport(item as UniversalReportItem<WeeklyProgressReportData>);
+    } else if (item.category === 'DailySite') {
+      const origDaily = reports.find(r => r.id === item.id) || (item.data as DailyReport);
+      setSelectedDailyReport(origDaily);
     }
   };
 
-  // Show create form
-  if (isCreating) {
+  // Render Sub-Views if a report is selected
+  if (selectedSurveyReport) {
     return (
       <div className="p-4 md:p-8">
-        <DailyLogForm onSubmit={handleCreateReport} onCancel={() => setIsCreating(false)} />
+        <SurveyReportDetail
+          report={selectedSurveyReport}
+          onClose={() => setSelectedSurveyReport(null)}
+          onEdit={() => {
+            setEditingSurveyReport(selectedSurveyReport);
+            setIsSurveyModalOpen(true);
+          }}
+          onSave={canEditReports ? (updated) => {
+            updateUniversalReport(updated);
+            setSelectedSurveyReport(updated);
+          } : undefined}
+          onDelete={canEditReports ? (id) => {
+            deleteUniversalReport(id);
+            setSelectedSurveyReport(null);
+          } : undefined}
+        />
       </div>
     );
   }
 
-  // Show detail view
-  if (selectedReport) {
+  if (selectedProgressReport) {
+    return (
+      <div className="p-4 md:p-8">
+        <ProgressReportDetail
+          report={selectedProgressReport}
+          onClose={() => setSelectedProgressReport(null)}
+          onEdit={() => {
+            setIsCompilerModalOpen(true);
+          }}
+          onSave={canEditReports ? (updated) => {
+            updateUniversalReport(updated);
+            setSelectedProgressReport(updated);
+          } : undefined}
+          onDelete={canEditReports ? (id) => {
+            deleteUniversalReport(id);
+            setSelectedProgressReport(null);
+          } : undefined}
+        />
+      </div>
+    );
+  }
+
+  if (selectedDailyReport) {
     return (
       <div className="p-4 md:p-8">
         <ReportDetail
-          report={selectedReport}
+          report={selectedDailyReport}
           onSave={canEditReports ? (updated) => {
             updateReport(updated);
-            setSelectedReport(updated);
+            setSelectedDailyReport(updated);
           } : undefined}
-          onClose={() => setSelectedReport(null)}
+          onClose={() => setSelectedDailyReport(null)}
           onDelete={canEditReports ? (id) => {
             deleteReport(id);
-            setSelectedReport(null);
+            setSelectedDailyReport(null);
           } : undefined}
+        />
+      </div>
+    );
+  }
+
+  // If creating a daily report
+  if (isDailyCreating) {
+    return (
+      <div className="p-4 md:p-8">
+        <DailyLogForm
+          onSubmit={(formData) => {
+            const newReport: DailyReport = {
+              id: `RPT-${Date.now()}`,
+              date: formData.date || new Date().toISOString().split('T')[0],
+              projectId: formData.projectId || projects[0]?.id || 'PRJ-001',
+              weather: formData.weather || 'Sunny',
+              temperature: formData.temperature || '24°C',
+              siteConditions: formData.siteConditions || 'Dry / Optimal',
+              significantEvents: formData.significantEvents || '',
+              workersOnSite: formData.workersOnSite || 12,
+              equipmentRunning: formData.equipmentRunning || 3,
+              incidents: formData.incidents || 0,
+              ncr: formData.ncr || 0,
+              supervisorNotes: formData.supervisorNotes || '',
+            };
+            addReport(newReport);
+            setIsDailyCreating(false);
+          }}
+          onCancel={() => setIsDailyCreating(false)}
         />
       </div>
     );
@@ -174,412 +286,525 @@ export function Reports() {
 
   return (
     <div className="flex flex-col h-full w-full p-4 md:p-6 gap-6 overflow-y-auto">
-      {/* Header */}
+      
+      {/* Header Bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
-            <FileBarChart className="h-6 w-6 text-blue-500" /> Daily Site Reports
+            <FileBarChart className="h-6 w-6 text-[#0B5FFF]" /> Reports & Progress Hub
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">
-            Create, review, and manage daily construction site reports.
+            Unified management for Progress Cycles (Daily, Weekly, Monthly) and Technical Disciplines (Survey, Finance, Fleet).
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+
+        {/* Header Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2 relative">
           <Button 
             variant="outline"
             onClick={() => window.print()}
             className="flex items-center gap-1.5 border-slate-300 dark:border-slate-700 hover:bg-slate-100 text-slate-700 dark:text-slate-300 font-semibold"
-            title="Print current report view using browser print"
+            title="Print report overview"
           >
             <Printer className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-            Print Reports
+            Print Hub
           </Button>
 
           <Button 
             variant="outline"
-            onClick={() => exportMultipleReportsPDF(filteredAndSorted, projects, filterProject === 'all' ? undefined : getProjectName(filterProject))}
+            onClick={() => exportMultipleReportsPDF(reports, projects, filterProject === 'all' ? undefined : getProjectName(filterProject))}
             className="flex items-center gap-1.5 border-purple-200 bg-purple-50/60 hover:bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:border-purple-800 dark:text-purple-300 font-semibold"
-            title="Export filtered daily reports as a PDF document"
+            title="Export daily reports PDF"
           >
             <Download className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-            Export Reports PDF
+            Export Daily PDF
           </Button>
 
           <Button 
             variant="outline"
-            onClick={() => exportReportsToCSV(filteredAndSorted, projects)}
+            onClick={() => exportReportsToCSV(reports, projects)}
             className="flex items-center gap-1.5 border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300 font-semibold"
-            title="Export daily site reports to offline CSV file"
+            title="Export reports to CSV"
           >
-            <FileSpreadsheet
-className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            Export Reports CSV
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            CSV Export
           </Button>
 
-          <Button 
-            variant="outline"
-            onClick={() => exportFullProjectCSV(activities, reports, projects, filterProject === 'all' ? undefined : filterProject)}
-            className="flex items-center gap-1.5 border-slate-200 hover:bg-slate-100 text-slate-700 dark:border-slate-800 dark:text-slate-300 font-semibold"
-            title="Export combined activities and reports dataset to CSV"
-          >
-            <FileSpreadsheet
-className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            Export Full Dataset CSV
-          </Button>
-
-          <Button 
-            variant="outline"
-            onClick={() => setIsProjectSummaryPdfModalOpen(true)}
-            className="flex items-center gap-1.5 border-blue-200 bg-blue-50/60 hover:bg-blue-100 text-[#0B5FFF] dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300 font-semibold"
-          >
-            <FileText className="h-4 w-4" />
-            Project Summary PDF
-          </Button>
-
-          <Button onClick={() => setIsPdfModalOpen(true)} className="flex items-center gap-1.5 border-slate-200 hover:bg-slate-100 text-slate-700 dark:border-slate-800 dark:text-slate-300 font-semibold" variant="outline">
-            <Download className="h-4 w-4" />
-            Daily Weather PDF
-          </Button>
-
+          {/* New Report Dropdown Action */}
           {canEditReports && (
-            <Button onClick={() => setIsCreating(true)} className="flex items-center gap-1.5 bg-[#0B5FFF] hover:bg-blue-700 text-white font-semibold">
-              <Plus className="h-4 w-4" /> New Report
-            </Button>
+            <div className="relative">
+              <Button 
+                onClick={() => setIsNewReportDropdownOpen(!isNewReportDropdownOpen)}
+                className="flex items-center gap-2 bg-[#0B5FFF] hover:bg-blue-700 text-white font-semibold shadow-sm"
+              >
+                <Plus className="h-4 w-4" />
+                <span>New Report</span>
+                <ChevronDown className="h-3.5 w-3.5 opacity-80" />
+              </Button>
+
+              {isNewReportDropdownOpen && (
+                <div className="absolute right-0 top-11 z-30 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-2 space-y-1 animate-in fade-in zoom-in-95">
+                  <button
+                    onClick={() => {
+                      setIsNewReportDropdownOpen(false);
+                      setIsCompilerModalOpen(true);
+                    }}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/40 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
+                  >
+                    <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-[#0B5FFF] flex items-center justify-center shrink-0">
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">Compile Weekly / Monthly (WPR)</div>
+                      <div className="text-[10px] text-slate-400">Auto-roll up site activities & progress</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsNewReportDropdownOpen(false);
+                      setEditingSurveyReport(null);
+                      setIsSurveyModalOpen(true);
+                    }}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
+                  >
+                    <div className="h-8 w-8 rounded-lg bg-teal-100 dark:bg-teal-900/60 text-teal-600 flex items-center justify-center shrink-0">
+                      <Compass className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">New Survey & Geospatial Report</div>
+                      <div className="text-[10px] text-slate-400">Setting-out, as-built, cut & fill volumes</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsNewReportDropdownOpen(false);
+                      setIsDailyCreating(true);
+                    }}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-900 dark:text-white flex items-center gap-3 transition-colors"
+                  >
+                    <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0">
+                      <Calendar className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">New Daily Site Report</div>
+                      <div className="text-[10px] text-slate-400">Daily labor, weather & shift diary</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-
-      <div className="flex flex-col-reverse lg:flex-row gap-6 flex-1 min-h-0">
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col gap-6 min-w-0">
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/30">
-              <FileText className="h-5 w-5 text-blue-500" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Total Reports</p>
-              <p className="text-lg font-bold text-slate-900 dark:text-slate-50">{totalReports}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-50 dark:bg-green-900/30">
-              <Users className="h-5 w-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Total Worker-Days</p>
-              <p className="text-lg font-bold text-slate-900 dark:text-slate-50">{totalWorkerDays}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-red-50 dark:bg-red-900/30">
-              <ShieldAlert className="h-5 w-5 text-red-500" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Incidents</p>
-              <p className="text-lg font-bold text-slate-900 dark:text-slate-50">{totalIncidents}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/30">
-              <TriangleAlert className="h-5 w-5 text-amber-500" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">NCRs</p>
-              <p className="text-lg font-bold text-slate-900 dark:text-slate-50">{totalNCRs}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Search & Filters */}
-      <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search reports by date, project, weather..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
-          />
+      {/* KPI Stats Scorecards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <span className="text-[11px] font-bold text-slate-400 uppercase block mb-1">Total Reports Published</span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white font-mono">{allUnifiedItems.length}</span>
+            <span className="text-xs font-bold text-[#0B5FFF] bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-md">
+              All Modules
+            </span>
+          </div>
         </div>
-        <select
-          value={filterProject}
-          onChange={e => setFilterProject(e.target.value)}
-          className="h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
-        >
-          <option value="all">All Projects</option>
-          {projects.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-        <select
-          value={sortBy}
-          onChange={e => setSortBy(e.target.value as typeof sortBy)}
-          className="h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
-        >
-          <option value="date-desc">Newest First</option>
-          <option value="date-asc">Oldest First</option>
-          <option value="workers">Most Workers</option>
-          <option value="incidents">Most Incidents</option>
-        </select>
-        <div className="flex items-center border border-slate-300 dark:border-slate-700 rounded-xl overflow-hidden">
-          <button
-            onClick={() => setViewMode('list')}
-            className={`p-2.5 ${viewMode === 'list' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <ListIcon className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setViewMode('grid')}
-            className={`p-2.5 ${viewMode === 'grid' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </button>
+
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <span className="text-[11px] font-bold text-slate-400 uppercase block mb-1">Weekly Progress Status</span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-bold text-emerald-600 font-mono">Week 34</span>
+            <Badge className="bg-emerald-600 text-white text-[10px]">Submitted</Badge>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <span className="text-[11px] font-bold text-slate-400 uppercase block mb-1">Survey Benchmarks Verified</span>
+          <div className="flex items-baseline justify-between font-mono">
+            <span className="text-2xl font-bold text-teal-600">
+              {universalReports.filter(r => r.category === 'Survey').length} Sets
+            </span>
+            <span className="text-xs font-bold text-teal-600 bg-teal-50 dark:bg-teal-950/50 px-2 py-0.5 rounded-md">
+              ±15mm Tol
+            </span>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <span className="text-[11px] font-bold text-slate-400 uppercase block mb-1">Pending Approval / Review</span>
+          <div className="flex items-baseline justify-between font-mono">
+            <span className="text-2xl font-bold text-amber-600">
+              {allUnifiedItems.filter(r => r.status === 'Under Review' || r.status === 'Draft').length}
+            </span>
+            <span className="text-xs text-slate-400">Signoff Queue</span>
+          </div>
         </div>
       </div>
 
-      {/* Reports List */}
-      {filteredAndSorted.length === 0 ? (
-        <Card>
-          <CardContent className="py-16 text-center">
-            <FileBarChart className="h-12 w-12 mx-auto mb-4 text-slate-300 dark:text-slate-600" />
-            <h3 className="text-lg font-semibold text-slate-600 dark:text-slate-300 mb-1">No Reports Found</h3>
-            <p className="text-sm text-slate-400 dark:text-slate-500 mb-4">
-              {reports.length === 0 ? 'Create your first daily site report to get started.' : 'No reports match your search criteria.'}
-            </p>
-            {reports.length === 0 && (
-              <Button onClick={() => setIsCreating(true)} className="bg-blue-600 hover:bg-blue-700 text-white">
-                <Plus className="h-4 w-4 mr-1" /> Create First Report
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredAndSorted.map(report => (
-            <Card
-              key={report.id}
-              className="cursor-pointer hover:shadow-md transition-shadow hover:border-blue-200 dark:hover:border-blue-800"
-              onClick={() => setSelectedReport(report)}
+      {/* Dual-Mode Category Filter Tabs */}
+      <div className="flex items-center gap-1.5 overflow-x-auto py-1 border-b border-slate-200 dark:border-slate-800 w-full shrink-0">
+        <button
+          onClick={() => setActiveCategory('all')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'all' 
+              ? 'bg-[#0B5FFF] text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Layers className="h-4 w-4" />
+          <span>All Reports ({countsByCategory.all || 0})</span>
+        </button>
+
+        {/* Progress Cycles Group */}
+        <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
+
+        <button
+          onClick={() => setActiveCategory('DailySite')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'DailySite' 
+              ? 'bg-blue-600 text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Calendar className="h-4 w-4" />
+          <span>Daily Site Logs ({countsByCategory['DailySite'] || 0})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveCategory('WeeklyProgress')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'WeeklyProgress' 
+              ? 'bg-indigo-600 text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <TrendingUp className="h-4 w-4" />
+          <span>Weekly (WPR) ({countsByCategory['WeeklyProgress'] || 0})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveCategory('MonthlyProgress')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'MonthlyProgress' 
+              ? 'bg-purple-600 text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <FileBarChart className="h-4 w-4" />
+          <span>Monthly (MPR) ({countsByCategory['MonthlyProgress'] || 0})</span>
+        </button>
+
+        {/* Technical Disciplines Group */}
+        <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
+
+        <button
+          onClick={() => setActiveCategory('Survey')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'Survey' 
+              ? 'bg-teal-600 text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Compass className="h-4 w-4 text-teal-500" />
+          <span>Survey & Geospatial ({countsByCategory['Survey'] || 0})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveCategory('Finance')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'Finance' 
+              ? 'bg-emerald-600 text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <DollarSign className="h-4 w-4 text-emerald-500" />
+          <span>Finance & Claims ({countsByCategory['Finance'] || 0})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveCategory('Fleet')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'Fleet' 
+              ? 'bg-amber-600 text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Truck className="h-4 w-4 text-amber-500" />
+          <span>Fleet & Machinery ({countsByCategory['Fleet'] || 0})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveCategory('Materials')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'Materials' 
+              ? 'bg-orange-600 text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Package className="h-4 w-4 text-orange-500" />
+          <span>Materials ({countsByCategory['Materials'] || 0})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveCategory('Accommodation')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'Accommodation' 
+              ? 'bg-cyan-600 text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Home className="h-4 w-4 text-cyan-500" />
+          <span>Camp & Accommodation ({countsByCategory['Accommodation'] || 0})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveCategory('Quality')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            activeCategory === 'Quality' 
+              ? 'bg-emerald-600 text-white shadow-sm' 
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <ShieldCheck className="h-4 w-4 text-emerald-500" />
+          <span>QA/QC & Safety ({countsByCategory['Quality'] || 0})</span>
+        </button>
+      </div>
+
+      {/* Filter & Search Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto flex-1">
+          <div className="relative flex-1 max-w-md">
+            <Search className="h-4 w-4 absolute left-3 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search reports by title, doc number, author, or location..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="h-9 pl-9 pr-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs w-full"
+            />
+          </div>
+
+          <select
+            value={filterProject}
+            onChange={e => setFilterProject(e.target.value)}
+            className="h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300"
+          >
+            <option value="all">All Projects</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as any)}
+            className="h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300"
+          >
+            <option value="date-desc">Newest First</option>
+            <option value="date-asc">Oldest First</option>
+            <option value="title">Sort by Title</option>
+            <option value="status">Sort by Status</option>
+          </select>
+
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 border border-slate-200 dark:border-slate-700">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-lg text-xs font-semibold ${viewMode === 'list' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs' : 'text-slate-500'}`}
+              title="List View"
             >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-slate-400" />
-                    <span className="font-semibold text-sm text-slate-900 dark:text-slate-50">
-                      {new Date(report.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {getWeatherIcon(report.weather)}
-                    <span className="text-xs text-slate-500">{report.weather}</span>
-                  </div>
-                </div>
+              <ListIcon className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-lg text-xs font-semibold ${viewMode === 'grid' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs' : 'text-slate-500'}`}
+              title="Grid View"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
 
-                <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-3 truncate">
-                  {getProjectName(report.projectId)}
-                </p>
+      {/* Reports Listing */}
+      {filteredAndSorted.length === 0 ? (
+        <div className="p-12 text-center rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+          <div className="h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF] flex items-center justify-center mx-auto">
+            <FileBarChart className="h-6 w-6" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">No Reports Found</h3>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            No published reports match your active filter criteria. Click "New Report" to create or compile a new report.
+          </p>
+        </div>
+      ) : viewMode === 'list' ? (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs divide-y divide-slate-100 dark:divide-slate-800">
+          {filteredAndSorted.map(item => {
+            const isSurvey = item.category === 'Survey';
+            const isProgress = item.category === 'WeeklyProgress' || item.category === 'MonthlyProgress';
 
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
-                    <HardHat className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{report.workersOnSite} workers</span>
+            return (
+              <div 
+                key={item.id}
+                onClick={() => handleOpenReport(item)}
+                className="p-4 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors flex items-center justify-between gap-4 cursor-pointer group"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className={`h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                    isSurvey ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 border border-teal-200 dark:border-teal-800' :
+                    isProgress ? 'bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF] border border-blue-200 dark:border-blue-800' :
+                    'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                  }`}>
+                    {isSurvey ? <Compass className="h-5 w-5" /> :
+                     isProgress ? <TrendingUp className="h-5 w-5" /> :
+                     <Calendar className="h-5 w-5" />}
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
-                    <Truck className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{report.equipmentRunning} equipment</span>
-                  </div>
-                  {report.incidents > 0 && (
-                    <div className="flex items-center gap-1.5 text-xs text-red-600">
-                      <ShieldAlert className="h-3.5 w-3.5" />
-                      <span>{report.incidents} incident{report.incidents !== 1 ? 's' : ''}</span>
+
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs font-bold text-slate-500">{item.documentNumber || item.id}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        isSurvey ? 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300' :
+                        isProgress ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' :
+                        'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                      }`}>
+                        {item.category}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        item.status === 'Approved' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                        'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                      }`}>
+                        {item.status}
+                      </span>
                     </div>
-                  )}
-                  {report.ncr > 0 && (
-                    <div className="flex items-center gap-1.5 text-xs text-amber-600">
-                      <AlertCircle className="h-3.5 w-3.5" />
-                      <span>{report.ncr} NCR{report.ncr !== 1 ? 's' : ''}</span>
+
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-[#0B5FFF] transition-colors truncate">
+                      {item.title}
+                    </h3>
+
+                    <div className="flex items-center gap-x-4 gap-y-1 text-xs text-slate-400 flex-wrap">
+                      <span>Date: <strong className="text-slate-700 dark:text-slate-300 font-mono">{item.date}</strong></span>
+                      <span>Submitted: <strong className="text-blue-600 dark:text-blue-400 font-mono">{item.submissionDate || item.date}</strong></span>
+                      <span>Author: <strong className="text-slate-700 dark:text-slate-300">{item.author}</strong></span>
+                      <span>Project: <strong className="text-slate-700 dark:text-slate-300">{getProjectName(item.projectId)}</strong></span>
                     </div>
-                  )}
-                </div>
-
-                {report.significantEvents && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3">
-                    {report.significantEvents}
-                  </p>
-                )}
-
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] text-slate-400 font-mono">{report.id}</span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        exportSingleReportPDF(report, getProjectName(report.projectId));
-                      }}
-                      className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-600 transition-colors"
-                      title="Export Daily Report as PDF"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); setDeletingReportId(report.id); }}
-                      className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
-                      title="Delete Report"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 group-hover:text-[#0B5FFF] font-semibold">
+                    <span>View Detail</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
-        <div className="space-y-2">
-          {filteredAndSorted.map(report => (
-            <Card
-              key={report.id}
-              className="cursor-pointer hover:shadow-md transition-shadow hover:border-blue-200 dark:hover:border-blue-800"
-              onClick={() => setSelectedReport(report)}
-            >
-              <CardContent className="p-3 md:p-4 flex items-center gap-4">
-                <div className="hidden md:flex items-center justify-center w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/30 shrink-0">
-                  <FileText className="h-5 w-5 text-blue-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="font-semibold text-sm text-slate-900 dark:text-slate-50">
-                      {new Date(report.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
-                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium truncate">
-                      — {getProjectName(report.projectId)}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredAndSorted.map(item => {
+            const isSurvey = item.category === 'Survey';
+            const isProgress = item.category === 'WeeklyProgress' || item.category === 'MonthlyProgress';
+
+            return (
+              <div
+                key={item.id}
+                onClick={() => handleOpenReport(item)}
+                className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-700 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between space-y-4 group"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-8 w-8 rounded-xl flex items-center justify-center ${
+                        isSurvey ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600' :
+                        isProgress ? 'bg-blue-50 dark:bg-blue-950/40 text-[#0B5FFF]' :
+                        'bg-slate-100 dark:bg-slate-800 text-slate-600'
+                      }`}>
+                        {isSurvey ? <Compass className="h-4 w-4" /> :
+                         isProgress ? <TrendingUp className="h-4 w-4" /> :
+                         <Calendar className="h-4 w-4" />}
+                      </div>
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        {item.documentNumber || item.id}
+                      </Badge>
+                    </div>
+
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      item.status === 'Approved' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                      'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                    }`}>
+                      {item.status}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                    <span className="flex items-center gap-1">{getWeatherIcon(report.weather)} {report.weather}</span>
-                    <span className="flex items-center gap-1"><HardHat className="h-3 w-3" /> {report.workersOnSite}</span>
-                    <span className="flex items-center gap-1"><Truck className="h-3 w-3" /> {report.equipmentRunning}</span>
-                    {report.incidents > 0 && (
-                      <span className="flex items-center gap-1 text-red-500"><ShieldAlert className="h-3 w-3" /> {report.incidents}</span>
-                    )}
-                    {report.ncr > 0 && (
-                      <span className="flex items-center gap-1 text-amber-500"><AlertCircle className="h-3 w-3" /> {report.ncr}</span>
-                    )}
-                  </div>
+
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white group-hover:text-[#0B5FFF] transition-colors line-clamp-2">
+                    {item.title}
+                  </h3>
+
+                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                    {item.summaryNotes || 'Standard construction report filing.'}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      exportSingleReportPDF(report, getProjectName(report.projectId));
-                    }}
-                    className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-600 transition-colors"
-                    title="Export Daily Report as PDF"
-                  >
-                    <Download className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={e => { e.stopPropagation(); setDeletingReportId(report.id); }}
-                    className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
-                    title="Delete Report"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                  <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600" />
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400 font-mono">
+                  <span>📅 {item.date}</span>
+                  <span className="font-sans font-semibold text-slate-600 dark:text-slate-300">{item.author}</span>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      <ConfirmDeleteModal
-        isOpen={Boolean(deletingReportId)}
-        title="Delete Report"
-        itemName={deletingReportId ? `Report from ${reports.find(r => r.id === deletingReportId)?.date || 'unknown date'}` : ''}
-        message="Are you sure you want to delete this daily report? This action cannot be undone."
-        onConfirm={handleDeleteReport}
-        onCancel={() => setDeletingReportId(null)}
-        confirmLabel="Delete Report"
-      />
-
-      {/* PDF Summary & Email Export Modal */}
-      <DailyPdfSummaryModal
-        isOpen={isPdfModalOpen}
-        onClose={() => setIsPdfModalOpen(false)}
-      />
-
-
-        </div>
-{/* Right Panel */}
-        <div className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
-          <WeatherWidget />
-          
-          <Card className="border-slate-200 dark:border-slate-800 shadow-sm flex-1">
-             <CardHeader className="pb-2 border-b border-slate-100 dark:border-slate-800">
-               <CardTitle className="text-sm flex items-center gap-2">
-                 <MapPin className="h-4 w-4 text-emerald-500" />
-                 Active Sites
-               </CardTitle>
-             </CardHeader>
-             <CardContent className="p-0">
-               <div className="flex flex-col">
-                 {projects.filter(p => p.status === 'In Progress').map((project, i) => {
-                   const colorClass = ['bg-emerald-500', 'bg-blue-500', 'bg-amber-500', 'bg-purple-500', 'bg-pink-500'][i % 5];
-                   const reportCount = reports.filter(r => r.projectId === project.id).length;
-                   return (
-                     <div key={project.id} className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer">
-                       <div className="flex items-center gap-3">
-                         <div className={`w-2 h-2 rounded-full ${colorClass}`}></div>
-                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[150px]" title={project.name}>{project.name}</span>
-                       </div>
-                       <span className="text-xs text-slate-400 font-mono">{reportCount} Rep{reportCount !== 1 && 's'}</span>
-                     </div>
-                   );
-                 })}
-                 {projects.filter(p => p.status === 'In Progress').length === 0 && (
-                   <div className="p-4 text-center text-sm text-slate-500">No active sites found.</div>
-                 )}
-               </div>
-             </CardContent>
-          </Card>
-        </div>
-        
-        
-      </div>
-      {/* Project Summary PDF Modal */}
-      <ProjectSummaryPdfModal
-        isOpen={isProjectSummaryPdfModalOpen}
-        onClose={() => setIsProjectSummaryPdfModalOpen(false)}
-        defaultProjectId={filterProject !== 'all' ? filterProject : undefined}
-      />
-
-      {isRecordingModalOpen && (
-        <RecordActivityModal
-          projectId={filterProject !== 'all' ? filterProject : (projects[0]?.id || '')}
-          onClose={() => setIsRecordingModalOpen(false)}
-          onReportGenerated={(report) => {
-            const newReport: DailyReport = {
-              id: `REP-${Date.now()}`,
-              ...report
-            } as DailyReport;
-            addReport(newReport);
-            setSelectedReport(newReport);
+      {/* Survey Creation/Edit Modal */}
+      {isSurveyModalOpen && (
+        <SurveyReportModal
+          isOpen={isSurveyModalOpen}
+          onClose={() => {
+            setIsSurveyModalOpen(false);
+            setEditingSurveyReport(null);
           }}
+          initialReport={editingSurveyReport}
+          onSave={(savedReport) => {
+            if (editingSurveyReport) {
+              updateUniversalReport(savedReport);
+            } else {
+              addUniversalReport(savedReport);
+            }
+            setIsSurveyModalOpen(false);
+            setEditingSurveyReport(null);
+          }}
+        />
+      )}
+
+      {/* Progress Report Compiler Modal */}
+      {isCompilerModalOpen && (
+        <ProgressReportCompilerModal
+          isOpen={isCompilerModalOpen}
+          onClose={() => setIsCompilerModalOpen(false)}
+          onSave={(compiled) => {
+            addUniversalReport(compiled);
+            setIsCompilerModalOpen(false);
+          }}
+        />
+      )}
+
+      {/* Daily Weather PDF Modal */}
+      {isPdfModalOpen && (
+        <DailyPdfSummaryModal
+          isOpen={isPdfModalOpen}
+          onClose={() => setIsPdfModalOpen(false)}
+        />
+      )}
+
+      {/* Project Summary PDF Modal */}
+      {isProjectSummaryPdfModalOpen && (
+        <ProjectSummaryPdfModal
+          isOpen={isProjectSummaryPdfModalOpen}
+          onClose={() => setIsProjectSummaryPdfModalOpen(false)}
         />
       )}
     </div>

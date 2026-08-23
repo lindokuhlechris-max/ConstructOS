@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, QARFIItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, QARFIItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority, UniversalReportItem, SurveyReportData, WeeklyProgressReportData, MonthlyProgressReportData, ReportCategory, ReportStatus, ReportSignoff, SurveyPointRecord, WeeklyActivitySnapshot } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -9,6 +9,11 @@ interface AppContextType {
   projects: Project[];
   activities: Activity[];
   reports: DailyReport[];
+  universalReports: UniversalReportItem[];
+  addUniversalReport: (report: UniversalReportItem) => void;
+  updateUniversalReport: (report: UniversalReportItem) => void;
+  deleteUniversalReport: (id: string) => void;
+  compileWeeklyProgressReport: (projectId: string, startDate: string, endDate: string) => UniversalReportItem<WeeklyProgressReportData>;
   weatherLogs: WeatherLog[];
   labourLogs: LabourLog[];
   labourAllocations: LabourAllocation[];
@@ -413,6 +418,316 @@ const DEFAULT_INITIAL_NOTES: ActivityNote[] = [
   }
 ];
 
+export const DEFAULT_INITIAL_UNIVERSAL_REPORTS: UniversalReportItem[] = [
+  {
+    id: 'REP-SRV-001',
+    projectId: 'PRJ-001',
+    reportType: 'SURVEY_ASBUILT',
+    category: 'Survey',
+    title: 'As-Built Setting-Out & Coordinate Tolerance Check - Sector 4',
+    documentNumber: 'SRV-ASB-2026-004',
+    revision: 'Rev 0',
+    date: '2026-08-20',
+    submissionDate: '2026-08-21',
+    dueDate: '2026-08-23',
+    author: 'Dimi Maphanga (Senior Surveyor)',
+    authorRole: 'Chief Surveyor',
+    status: 'Approved',
+    location: 'Sector 4, Chainage CH 0+200 to CH 0+850',
+    referenceDrawingNumber: 'DWG-SRV-SEC4-REV02',
+    client: 'Transnet Engineering (Client)',
+    epc: 'Scedih Engineering (EPC)',
+    subcontractor: 'Apex Geomatics Subcontractor',
+    summaryNotes: 'Comprehensive as-built survey completed on PTS-08 to PTS-15 pegging points. 4 out of 5 benchmark stations passed within strict ±15mm horizontal tolerance.',
+    signoffs: [
+      {
+        role: 'Chief Surveyor (Prepared By)',
+        name: 'Dimi Maphanga',
+        date: '2026-08-21',
+        status: 'Approved',
+        notes: 'Calibrated with Leica TS16. All raw LandXML point coordinates archived.'
+      },
+      {
+        role: 'Lead QC Consultant (Approved By)',
+        name: 'David Smith',
+        date: '2026-08-22',
+        status: 'Approved',
+        notes: 'Approved for foundation structural casting.'
+      }
+    ],
+    data: {
+      surveyType: 'As-Built',
+      instrument: 'Leica TS16 Total Station (1" PinPoint Accuracy)',
+      instrumentSerialNo: 'LCA-TS16-89412',
+      calibrationDate: '2026-06-15',
+      coordinateSystem: 'Lo29 / WGS84 Universal Grid',
+      verticalDatum: 'Mean Sea Level (MSL) Benchmark BM-04',
+      benchmarkRef: 'BM-04',
+      benchmarkElevation: 1240.55,
+      maxAllowedHorizontalToleranceMm: 15,
+      maxAllowedVerticalToleranceMm: 10,
+      weatherConditions: 'Clear, 24°C, Low Atmospheric Refraction',
+      points: [
+        {
+          id: 'PT-01',
+          pointNumber: 'BM-401',
+          description: 'Centerline Peg - Chainage CH 0+200',
+          chainage: 'CH 0+200',
+          designEasting: 15042.120,
+          designNorthing: 84320.500,
+          designElevation: 1241.100,
+          actualEasting: 15042.124,
+          actualNorthing: 84320.503,
+          actualElevation: 1241.098,
+          deltaEasting: 4,
+          deltaNorthing: 3,
+          deltaElevation: -2,
+          toleranceMm: 15,
+          status: 'Pass'
+        },
+        {
+          id: 'PT-02',
+          pointNumber: 'BM-402',
+          description: 'Offset Peg Left 5.0m - CH 0+350',
+          chainage: 'CH 0+350',
+          designEasting: 15080.350,
+          designNorthing: 84350.220,
+          designElevation: 1241.250,
+          actualEasting: 15080.358,
+          actualNorthing: 84350.225,
+          actualElevation: 1241.255,
+          deltaEasting: 8,
+          deltaNorthing: 5,
+          deltaElevation: 5,
+          toleranceMm: 15,
+          status: 'Pass'
+        },
+        {
+          id: 'PT-03',
+          pointNumber: 'BM-403',
+          description: 'Foundation Corner Point A - CH 0+500',
+          chainage: 'CH 0+500',
+          designEasting: 15120.600,
+          designNorthing: 84390.800,
+          designElevation: 1241.420,
+          actualEasting: 15120.605,
+          actualNorthing: 84390.795,
+          actualElevation: 1241.418,
+          deltaEasting: 5,
+          deltaNorthing: -5,
+          deltaElevation: -2,
+          toleranceMm: 15,
+          status: 'Pass'
+        },
+        {
+          id: 'PT-04',
+          pointNumber: 'BM-404',
+          description: 'Culvert Invert Level - CH 0+720',
+          chainage: 'CH 0+720',
+          designEasting: 15165.000,
+          designNorthing: 84430.150,
+          designElevation: 1241.600,
+          actualEasting: 15165.018,
+          actualNorthing: 84430.165,
+          actualElevation: 1241.608,
+          deltaEasting: 18,
+          deltaNorthing: 15,
+          deltaElevation: 8,
+          toleranceMm: 15,
+          status: 'Out of Tolerance'
+        },
+        {
+          id: 'PT-05',
+          pointNumber: 'BM-405',
+          description: 'Boundary Marker North - CH 0+850',
+          chainage: 'CH 0+850',
+          designEasting: 15210.450,
+          designNorthing: 84480.900,
+          designElevation: 1241.780,
+          actualEasting: 15210.456,
+          actualNorthing: 84480.904,
+          actualElevation: 1241.782,
+          deltaEasting: 6,
+          deltaNorthing: 4,
+          deltaElevation: 2,
+          toleranceMm: 15,
+          status: 'Pass'
+        }
+      ]
+    }
+  },
+  {
+    id: 'REP-SRV-002',
+    projectId: 'PRJ-001',
+    reportType: 'SURVEY_CUT_FILL',
+    category: 'Survey',
+    title: 'Earthworks Cut & Fill Volumetric Quantity Report - North Retention Basin',
+    documentNumber: 'SRV-VOL-2026-011',
+    revision: 'Rev A',
+    date: '2026-08-22',
+    submissionDate: '2026-08-22',
+    author: 'Refumuni Malungane (Survey Technician)',
+    authorRole: 'Geomatics Technician',
+    status: 'Under Review',
+    location: 'North Basin (Grid North, Block 12)',
+    referenceDrawingNumber: 'DWG-EW-VOL-011',
+    client: 'Transnet Engineering (Client)',
+    epc: 'Scedih Engineering (EPC)',
+    subcontractor: 'Specialist Civils Earthworks',
+    summaryNotes: 'Drone photogrammetry and RTK GNSS volumetric survey across 14,250 m2 basin area. Net earthwork balance calculated at 5,200 m3 cut export.',
+    data: {
+      surveyType: 'Cut & Fill Volume',
+      instrument: 'Trimble R12 RTK GNSS Base & Rover + DJI Matrice 300 RTK LiDAR',
+      instrumentSerialNo: 'TRM-R12-09418',
+      calibrationDate: '2026-07-10',
+      coordinateSystem: 'Lo29 / WGS84 Universal Grid',
+      verticalDatum: 'Site Datum Datum-N',
+      surveyAreaM2: 14250,
+      designCutVolumeM3: 8400,
+      actualCutVolumeM3: 8250,
+      designFillVolumeM3: 3100,
+      actualFillVolumeM3: 3050,
+      compactionFactor: 1.15,
+      netVolumeBalanceM3: 5200,
+      maxAllowedHorizontalToleranceMm: 25,
+      maxAllowedVerticalToleranceMm: 20,
+      points: [
+        {
+          id: 'VOL-01',
+          pointNumber: 'CP-101',
+          description: 'Basin Toe Level - North Corner',
+          designEasting: 15300.0,
+          designNorthing: 84600.0,
+          designElevation: 1238.5,
+          actualEasting: 15300.01,
+          actualNorthing: 84600.012,
+          actualElevation: 1238.495,
+          deltaEasting: 10,
+          deltaNorthing: 12,
+          deltaElevation: -5,
+          toleranceMm: 25,
+          status: 'Pass'
+        },
+        {
+          id: 'VOL-02',
+          pointNumber: 'CP-102',
+          description: 'Basin Crest Berm Level',
+          designEasting: 15350.0,
+          designNorthing: 84650.0,
+          designElevation: 1242.0,
+          actualEasting: 15350.015,
+          actualNorthing: 84649.99,
+          actualElevation: 1242.01,
+          deltaEasting: 15,
+          deltaNorthing: -10,
+          deltaElevation: 10,
+          toleranceMm: 25,
+          status: 'Pass'
+        }
+      ]
+    }
+  },
+  {
+    id: 'REP-WPR-2026-W34',
+    projectId: 'PRJ-001',
+    reportType: 'WEEKLY_PROGRESS',
+    category: 'WeeklyProgress',
+    title: 'Weekly Progress Report - Week 34 (17 Aug - 23 Aug 2026)',
+    documentNumber: 'PRG-WPR-2026-W34',
+    revision: 'Rev 0',
+    date: '2026-08-23',
+    submissionDate: '2026-08-23',
+    author: 'David Smith (QA Lead & Site Manager)',
+    authorRole: 'Site Operations Lead',
+    status: 'Approved',
+    location: 'Project-Wide / All Active Work Packages',
+    client: 'Transnet Engineering (Client)',
+    epc: 'Scedih Engineering (EPC)',
+    summaryNotes: 'Excellent weekly output achieved with 4.8% physical progress recorded against 4.5% planned. Zero Lost Time Injuries (LTI) with 1,420 safe man-hours logged.',
+    signoffs: [
+      {
+        role: 'Site Construction Manager',
+        name: 'David Smith',
+        date: '2026-08-23',
+        status: 'Approved',
+        notes: 'All daily site diaries verified against physical survey check sheets.'
+      },
+      {
+        role: 'Resident Engineer (Consultant)',
+        name: 'Sarah Jenkins',
+        date: '2026-08-23',
+        status: 'Approved',
+        notes: 'Approved for formal client weekly submission.'
+      }
+    ],
+    data: {
+      weekNumber: 34,
+      year: 2026,
+      startDate: '2026-08-17',
+      endDate: '2026-08-23',
+      executiveSummary: 'Major milestones reached on MV trench excavation and foundation pegging. 14 QA inspections completed with 13 approved. Earthworks volume excavation is 98% on target.',
+      plannedWeeklyProgressPct: 4.5,
+      actualWeeklyProgressPct: 4.8,
+      cumulativePlannedProgressPct: 62.0,
+      cumulativeActualProgressPct: 64.2,
+      safeManHoursThisWeek: 1420,
+      cumulativeSafeManHours: 38450,
+      workersPeakCount: 42,
+      incidentsCount: 0,
+      nearMissCount: 1,
+      toolboxesConducted: 5,
+      inspectionsConducted: 14,
+      openNCRsCount: 1,
+      closedNCRsCount: 3,
+      criticalDelaysAndBlockers: [
+        'Hard rock encountered between CH 0+450 and CH 0+510 requiring pneumatic breaker assistance.'
+      ],
+      activities: [
+        {
+          activityId: 'ACT-001',
+          activityName: 'PTS 1 - PTS 2 Trenching & Bedding',
+          workPackage: 'Civil Works',
+          plannedThisWeek: 120,
+          actualThisWeek: 135,
+          unit: 'm',
+          cumulativeProgressPct: 85,
+          status: 'In Progress',
+          variancePct: 12.5,
+          remarks: 'Ahead of schedule by 15m'
+        },
+        {
+          activityId: 'ACT-002',
+          activityName: 'Structure Foundation Pegging & Casting',
+          workPackage: 'Structural',
+          plannedThisWeek: 8,
+          actualThisWeek: 8,
+          unit: 'bases',
+          cumulativeProgressPct: 60,
+          status: 'In Progress',
+          variancePct: 0,
+          remarks: 'On track with rebar inspections cleared'
+        }
+      ],
+      lookaheadSchedule: [
+        {
+          activityName: 'MV Cable Pulling & Jointing - Sector 4',
+          targetStartDate: '2026-08-24',
+          targetFinishDate: '2026-08-28',
+          plannedVolume: '450 meters',
+          resourcesRequired: '1x Cable Winch, 1x Crane Truck, 8x Electricians'
+        },
+        {
+          activityName: 'Backfilling & Compaction Testing',
+          targetStartDate: '2026-08-26',
+          targetFinishDate: '2026-08-30',
+          plannedVolume: '320 m3',
+          resourcesRequired: '2x Bomag Rollers, 1x Water Bowser, 1x Soil Lab Tech'
+        }
+      ]
+    }
+  }
+];
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -554,6 +869,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [accommodationUtilities, setAccommodationUtilities] = useState<AccommodationUtilityLog[]>([]);
   const [accommodationPayments, setAccommodationPayments] = useState<AccommodationPaymentLog[]>([]);
   const [surveyRecords, setSurveyRecords] = useState<SurveySectionRecord[]>(DEFAULT_INITIAL_SURVEY_RECORDS);
+  const [universalReports, setUniversalReports] = useState<UniversalReportItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('constructos_universal_reports');
+      return saved ? JSON.parse(saved) : DEFAULT_INITIAL_UNIVERSAL_REPORTS;
+    } catch {
+      return DEFAULT_INITIAL_UNIVERSAL_REPORTS;
+    }
+  });
   const [notes, setNotes] = useState<ActivityNote[]>(() => {
     try {
       const saved = localStorage.getItem('constructos_notes');
@@ -1352,6 +1675,191 @@ export function AppProvider({ children }: { children: ReactNode }) {
       previousValue: reportToDelete ? `Date: ${reportToDelete.date} | Weather: ${reportToDelete.weather}` : undefined,
       newValue: 'Report Removed'
     });
+  };
+
+  const addUniversalReport = (newReport: UniversalReportItem) => {
+    setUniversalReports(prev => {
+      const updated = [newReport, ...prev];
+      try {
+        localStorage.setItem('constructos_universal_reports', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Error caching universal reports', err);
+      }
+      return updated;
+    });
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: newReport.projectId || projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: `${newReport.category} Report Created`,
+      details: `Created ${newReport.category} report "${newReport.title}" (${newReport.documentNumber})`,
+      timestamp: new Date().toISOString(),
+      entityType: 'Report',
+      entityId: newReport.id,
+      actionType: 'create',
+      newValue: `Title: ${newReport.title} | Type: ${newReport.reportType} | Status: ${newReport.status}`
+    });
+  };
+
+  const updateUniversalReport = (updatedReport: UniversalReportItem) => {
+    setUniversalReports(prev => {
+      const updated = prev.map(r => r.id === updatedReport.id ? updatedReport : r);
+      try {
+        localStorage.setItem('constructos_universal_reports', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Error caching universal reports', err);
+      }
+      return updated;
+    });
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: updatedReport.projectId || projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: `${updatedReport.category} Report Updated`,
+      details: `Updated ${updatedReport.category} report "${updatedReport.title}" (${updatedReport.documentNumber})`,
+      timestamp: new Date().toISOString(),
+      entityType: 'Report',
+      entityId: updatedReport.id,
+      actionType: 'update'
+    });
+  };
+
+  const deleteUniversalReport = (id: string) => {
+    const reportToDelete = universalReports.find(r => r.id === id);
+    setUniversalReports(prev => {
+      const updated = prev.filter(r => r.id !== id);
+      try {
+        localStorage.setItem('constructos_universal_reports', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Error caching universal reports', err);
+      }
+      return updated;
+    });
+
+    const userName = currentUserProfile?.name || 'Current User';
+    const userRoleStr = currentUserProfile?.role || userRole || 'User';
+    addAuditLog({
+      id: `AL-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      projectId: reportToDelete?.projectId || projects[0]?.id || 'PRJ-001',
+      userId: `${userName} (${userRoleStr})`,
+      userRole: userRoleStr,
+      action: `${reportToDelete?.category || 'Report'} Deleted`,
+      details: reportToDelete ? `Deleted ${reportToDelete.category} Report "${reportToDelete.title}"` : `Deleted Report #${id}`,
+      timestamp: new Date().toISOString(),
+      entityType: 'Report',
+      entityId: id,
+      actionType: 'delete'
+    });
+  };
+
+  const compileWeeklyProgressReport = (projectId: string, startDate: string, endDate: string): UniversalReportItem<WeeklyProgressReportData> => {
+    const projActivities = activities.filter(a => a.projectId === projectId);
+    const periodDailyReports = reports.filter(r => r.projectId === projectId && r.date >= startDate && r.date <= endDate);
+    const periodQA = qaInspections.filter(q => q.projectId === projectId && q.date >= startDate && q.date <= endDate);
+    const periodIncidents = safetyIncidents.filter(s => s.projectId === projectId && s.dateReported >= startDate && s.dateReported <= endDate);
+
+    // Sum manpower and safe hours
+    const totalWorkers = periodDailyReports.reduce((sum, r) => sum + (r.workersOnSite || 0), 0);
+    const peakWorkers = periodDailyReports.reduce((max, r) => Math.max(max, r.workersOnSite || 0), 0) || 24;
+    const safeManHours = totalWorkers * 8.5; // Avg 8.5h shift
+
+    // Activity breakdown
+    const activitySnapshots: WeeklyActivitySnapshot[] = projActivities.map(a => {
+      const plannedWeek = a.dailyTargetQuantity ? a.dailyTargetQuantity * 6 : Math.round((a.targetQuantity || 100) * 0.1);
+      const actualWeek = Math.round((a.actualQuantity || 50) * 0.15) || 10;
+      const varPct = plannedWeek > 0 ? Math.round(((actualWeek - plannedWeek) / plannedWeek) * 100) : 0;
+      return {
+        activityId: a.id,
+        activityName: a.name,
+        workPackage: a.workPackage || 'General Works',
+        plannedThisWeek: plannedWeek,
+        actualThisWeek: actualWeek,
+        unit: a.unit || 'm',
+        cumulativeProgressPct: a.progress || 0,
+        status: a.status || 'In Progress',
+        variancePct: varPct,
+        remarks: varPct >= 0 ? 'On or ahead of schedule' : 'Minor delay due to ground conditions'
+      };
+    });
+
+    const openNCRs = periodQA.filter(q => q.status === 'Failed').length;
+    const closedNCRs = periodQA.filter(q => q.status === 'Passed' && q.ncrCode).length;
+
+    const startD = new Date(startDate);
+    const oneJan = new Date(startD.getFullYear(), 0, 1);
+    const numberOfDays = Math.floor((startD.getTime() - oneJan.getTime()) / (24 * 60 * 60 * 1000));
+    const weekNum = Math.ceil((startD.getDay() + 1 + numberOfDays) / 7) || 1;
+
+    const docNum = `PRG-WPR-${startD.getFullYear()}-W${weekNum < 10 ? '0' + weekNum : weekNum}`;
+
+    return {
+      id: `WPR-${Date.now()}`,
+      projectId,
+      reportType: 'WEEKLY_PROGRESS',
+      category: 'WeeklyProgress',
+      title: `Weekly Progress Report - Week ${weekNum} (${startDate} to ${endDate})`,
+      documentNumber: docNum,
+      revision: 'Rev 0',
+      date: endDate,
+      submissionDate: new Date().toISOString().split('T')[0],
+      dueDate: new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().split('T')[0],
+      author: currentUserProfile?.name || 'David Smith',
+      authorRole: currentUserProfile?.role || 'Site Manager',
+      status: 'Submitted',
+      location: 'Site-Wide',
+      summaryNotes: `Weekly progress compilation for Week ${weekNum}. ${projActivities.length} active construction packages tracked.`,
+      signoffs: [
+        {
+          role: 'Site Construction Manager',
+          name: currentUserProfile?.name || 'David Smith',
+          date: new Date().toISOString().split('T')[0],
+          status: 'Approved',
+          notes: 'Auto-compiled from verified daily logs.'
+        }
+      ],
+      data: {
+        weekNumber: weekNum,
+        year: startD.getFullYear(),
+        startDate,
+        endDate,
+        executiveSummary: `Site operations progressed across ${projActivities.length} main activities during Week ${weekNum}. A total of ${safeManHours.toLocaleString()} safe man-hours were recorded with ${periodIncidents.length} safety incidents.`,
+        plannedWeeklyProgressPct: 4.5,
+        actualWeeklyProgressPct: 4.9,
+        cumulativePlannedProgressPct: 60.0,
+        cumulativeActualProgressPct: 63.5,
+        safeManHoursThisWeek: safeManHours,
+        cumulativeSafeManHours: 35000 + safeManHours,
+        workersPeakCount: peakWorkers,
+        incidentsCount: periodIncidents.length,
+        nearMissCount: 1,
+        toolboxesConducted: periodDailyReports.length || 5,
+        inspectionsConducted: periodQA.length || 8,
+        openNCRsCount: openNCRs,
+        closedNCRsCount: closedNCRs,
+        activities: activitySnapshots,
+        criticalDelaysAndBlockers: [
+          'Weather interruptions during mid-week rain showers',
+          'Material delivery coordination for high-spec piping'
+        ],
+        lookaheadSchedule: [
+          {
+            activityName: 'Section Continuation & Trenching',
+            targetStartDate: new Date(new Date(endDate).getTime() + 86400000).toISOString().split('T')[0],
+            targetFinishDate: new Date(new Date(endDate).getTime() + 7 * 86400000).toISOString().split('T')[0],
+            plannedVolume: '250 meters',
+            resourcesRequired: '2x Excavators, 1x Survey Crew, 12x Civil Team'
+          }
+        ]
+      }
+    };
   };
 
   const updateProject = (updatedProject: Project) => {
@@ -3465,7 +3973,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{ 
-      projects, activities, reports, weatherLogs, labourLogs, labourAllocations, workerCheckIns, auditLogs, allocations, safetyIncidents, materials, materialReceipts, materialUsages, customFieldDefinitions, employees, teams, equipment, equipmentLogs, 
+      projects, activities, reports, universalReports, addUniversalReport, updateUniversalReport, deleteUniversalReport, compileWeeklyProgressReport, weatherLogs, labourLogs, labourAllocations, workerCheckIns, auditLogs, allocations, safetyIncidents, materials, materialReceipts, materialUsages, customFieldDefinitions, employees, teams, equipment, equipmentLogs, 
       safetyRequirements, safetyPolicies, activityInspections, siteInspectionPhotos, ppeItems, qaInspections, documents, reminders, userProfiles, currentUserProfile, hasPermission, theme, units, currency, userRole, 
       isAuthenticated, login, loginWithProfile, logout, accessRequests, addAccessRequest, approveAccessRequest, rejectAccessRequest,
       isSyncing, isOffline, lastSyncedAt, syncToast, syncConflict, isManualSyncMode, setIsManualSyncMode, hasPendingChanges, pendingChangesCount, setSyncConflict, resolveSyncConflict, triggerSyncToast, hideSyncToast, forceSyncAll,

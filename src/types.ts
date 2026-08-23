@@ -1436,4 +1436,193 @@ export interface ActivityNote {
 
 export type FieldNote = ActivityNote;
 
+// ==========================================
+// UNIVERSAL REPORTS ENGINE & SCHEMAS
+// ==========================================
 
+export type ReportCategory = 
+  | 'DailySite'
+  | 'WeeklyProgress'
+  | 'MonthlyProgress'
+  | 'Survey'
+  | 'Finance'
+  | 'Fleet'
+  | 'Materials'
+  | 'Accommodation'
+  | 'Quality'
+  | 'Safety';
+
+export type ReportStatus = 'Draft' | 'Submitted' | 'Under Review' | 'Approved' | 'Rejected';
+
+export interface ReportSignoff {
+  role: string;
+  name: string;
+  date: string;
+  status: 'Approved' | 'Rejected' | 'Pending';
+  signatureUrl?: string;
+  notes?: string;
+}
+
+export interface SurveyPointRecord {
+  id: string;
+  pointNumber: string;
+  description: string;
+  chainage?: string;
+  designEasting: number;
+  designNorthing: number;
+  designElevation: number;
+  actualEasting: number;
+  actualNorthing: number;
+  actualElevation: number;
+  deltaEasting: number;      // in mm
+  deltaNorthing: number;     // in mm
+  deltaElevation: number;    // in mm
+  toleranceMm: number;
+  status: 'Pass' | 'Out of Tolerance';
+}
+
+export interface SurveyReportData {
+  surveyType: 'Topographical' | 'Setting-Out' | 'As-Built' | 'Cut & Fill Volume' | 'Monitoring';
+  instrument: string;              // e.g. 'Leica TS16 Total Station / Trimble R12 RTK'
+  instrumentSerialNo?: string;
+  calibrationDate?: string;
+  coordinateSystem: string;        // e.g. 'Lo29 WGS84 / Local Site Grid'
+  verticalDatum: string;           // e.g. 'Mean Sea Level (MSL) Bench Mark BM-04'
+  benchmarkRef?: string;
+  benchmarkElevation?: number;
+  
+  // Earthworks Volumetrics (if applicable)
+  surveyAreaM2?: number;
+  designCutVolumeM3?: number;
+  actualCutVolumeM3?: number;
+  designFillVolumeM3?: number;
+  actualFillVolumeM3?: number;
+  compactionFactor?: number;
+  netVolumeBalanceM3?: number;
+
+  // Tolerance thresholds
+  maxAllowedHorizontalToleranceMm: number;
+  maxAllowedVerticalToleranceMm: number;
+
+  points: SurveyPointRecord[];
+  cadDrawingReference?: string;
+  rawPointFileUrl?: string;
+  weatherConditions?: string;
+  surveyNotes?: string;
+}
+
+export interface WeeklyActivitySnapshot {
+  activityId: string;
+  activityName: string;
+  workPackage: string;
+  plannedThisWeek: number;
+  actualThisWeek: number;
+  unit: string;
+  cumulativeProgressPct: number;
+  status: string;
+  variancePct: number;
+  remarks?: string;
+}
+
+export interface WeeklyProgressReportData {
+  weekNumber: number;               // e.g. 34
+  year: number;                     // e.g. 2026
+  startDate: string;                // '2026-08-17'
+  endDate: string;                  // '2026-08-23'
+  executiveSummary: string;
+  plannedWeeklyProgressPct: number;
+  actualWeeklyProgressPct: number;
+  cumulativePlannedProgressPct: number;
+  cumulativeActualProgressPct: number;
+  safeManHoursThisWeek: number;
+  cumulativeSafeManHours: number;
+  workersPeakCount: number;
+  incidentsCount: number;
+  nearMissCount: number;
+  toolboxesConducted: number;
+  inspectionsConducted: number;
+  openNCRsCount: number;
+  closedNCRsCount: number;
+  activities: WeeklyActivitySnapshot[];
+  criticalDelaysAndBlockers?: string[];
+  lookaheadSchedule: {
+    activityName: string;
+    targetStartDate: string;
+    targetFinishDate: string;
+    plannedVolume: string;
+    resourcesRequired: string;
+  }[];
+  sitePhotos?: { url: string; caption: string; date: string }[];
+}
+
+export interface MonthlyProgressReportData {
+  monthNumber: number;              // 1 - 12
+  monthName: string;                // 'August 2026'
+  year: number;                     // 2026
+  startDate: string;
+  endDate: string;
+  executiveOverview: string;
+  overallPlannedProgressPct: number;
+  overallActualProgressPct: number;
+  scheduleVariancePct: number;
+  contractValue?: number;
+  certifiedProgressClaimToDate?: number;
+  pendingVariationsCount?: number;
+  milestones: {
+    name: string;
+    contractDate: string;
+    forecastDate: string;
+    status: 'On Track' | 'Delayed' | 'Completed';
+  }[];
+  earnedValueMetrics?: {
+    cpi: number; // Cost Performance Index
+    spi: number; // Schedule Performance Index
+  };
+  majorRisksAndMitigations?: {
+    risk: string;
+    impact: 'Low' | 'Medium' | 'High';
+    mitigation: string;
+  }[];
+}
+
+export interface UniversalReportItem<TData = any> {
+  id: string;
+  projectId: string;
+  reportType: string;               // 'DAILY_SITE' | 'WEEKLY_PROGRESS' | 'MONTHLY_PROGRESS' | 'SURVEY_ASBUILT' | 'SURVEY_CUT_FILL' | 'FINANCE_CLAIM' | 'FLEET_DAILY' | 'MATERIAL_RECON' | 'CAMP_AUDIT'
+  category: ReportCategory;
+  title: string;
+  documentNumber: string;           // e.g. 'PRG-WPR-2026-W34', 'SRV-ASB-2026-008'
+  revision: string;                 // 'Rev 0', 'Rev A'
+  date: string;
+  submissionDate: string;
+  dueDate?: string;
+  author: string;                   // Inspector / Lead / Author name
+  authorRole?: string;
+  status: ReportStatus;
+  
+  // Stakeholder & Contractual metadata
+  client?: string;
+  epc?: string;
+  subcontractor?: string;
+  location?: string;
+  chainage?: string;
+  referenceDrawingNumber?: string;
+  linkedActivityId?: string;
+
+  // Domain Specific Typed Payload
+  data: TData;
+
+  attachments?: {
+    id: string;
+    name: string;
+    url: string;
+    type: string;
+    size?: number;
+  }[];
+
+  signoffs?: ReportSignoff[];
+  tags?: string[];
+  summaryNotes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}

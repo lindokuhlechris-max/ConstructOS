@@ -20188,6 +20188,18 @@
       "entityType": "QA",
       "entityId": "QA-621",
       "actionType": "update"
+    },
+    {
+      "id": "AL-mt5lmmnb-v0h2",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T09:22:36.455Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
     }
   ],
   "allocations": [],
@@ -21216,7 +21228,8 @@
       "client": "Red Rocket",
       "subcontractor": "MBEU Engineering",
       "documentNumber": "MVT-HDEC-MBEU-RFI-002",
-      "referenceDrawingNumber": "RRT-HDC-08-IDR-PDE-CAB-002"
+      "referenceDrawingNumber": "RRT-HDC-08-IDR-PDE-CAB-002",
+      "submissionDate": "2026-07-31"
     }
   ],
   "userProfiles": [
