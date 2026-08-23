@@ -44,6 +44,7 @@ import { SyncConflictModal } from '../SyncConflictModal';
 import { LoginScreen } from '../LoginScreen';
 import { UserProfile, UserRole, Reminder } from '../../types';
 import { registerServiceWorker, checkDueReminders } from '../../lib/reminderNotificationService';
+import { recordCurrentRoute, navigateToPreviousRoute } from '../../lib/navigationHistory';
 
 export function AppLayout() {
   const { 
@@ -76,6 +77,11 @@ export function AppLayout() {
   const [activeReminderToast, setActiveReminderToast] = useState<Reminder | null>(null);
 
   const latestWeather = weatherLogs && weatherLogs.length > 0 ? weatherLogs[0] : null;
+
+  // Track session route history for smart back navigation
+  useEffect(() => {
+    recordCurrentRoute(location.pathname);
+  }, [location.pathname]);
 
   // Close side menu on Escape key
   useEffect(() => {
@@ -140,8 +146,8 @@ export function AppLayout() {
           }
 
           // 3. Fallback to navigating back to previous / recent page
-          if (canGoBack || (window.history.state && window.history.state.idx > 0) || window.history.length > 1) {
-            navigate(-1);
+          if (location.pathname !== '/') {
+            navigateToPreviousRoute(navigate, '/');
           } else {
             // If already on the root dashboard with no history, minimize app
             CapApp.minimizeApp();

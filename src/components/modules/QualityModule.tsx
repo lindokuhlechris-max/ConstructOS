@@ -40,6 +40,7 @@ import { QualityTotalsAnalytics } from '../QualityTotalsAnalytics';
 import { QAActivityMultiSelectModal } from '../quality/QAActivityMultiSelectModal';
 import { MultiDrawingInput } from '../quality/MultiDrawingInput';
 import { QAPrintRegisterModal } from '../quality/QAPrintRegisterModal';
+import { navigateToPreviousRoute } from '../../lib/navigationHistory';
 
 interface QualityModuleProps {
   onBack: () => void;
@@ -316,7 +317,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" onClick={() => onBack ? onBack() : (window.history.length > 1 ? navigate(-1) : navigate('/'))} className="rounded-xl h-10 w-10 shrink-0" title="Go back to previous page">
+          <Button variant="outline" size="icon" onClick={() => onBack ? onBack() : navigateToPreviousRoute(navigate, '/')} className="rounded-xl h-10 w-10 shrink-0" title="Go back to previous page">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
