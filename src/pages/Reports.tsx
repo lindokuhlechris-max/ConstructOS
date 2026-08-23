@@ -234,7 +234,7 @@ export function Reports() {
   // Render Sub-Views if a report is selected
   if (selectedProgressReport) {
     return (
-      <div className="p-4 md:p-8">
+      <div className="w-full p-4 sm:p-6 lg:p-8">
         <ProgressReportDetail
           report={selectedProgressReport as any}
           onClose={() => setSelectedProgressReport(null)}
@@ -256,7 +256,7 @@ export function Reports() {
 
   if (selectedUniversalReport) {
     return (
-      <div className="p-4 md:p-8">
+      <div className="w-full p-4 sm:p-6 lg:p-8">
         <UniversalReportDetail
           report={selectedUniversalReport}
           onClose={() => setSelectedUniversalReport(null)}
@@ -280,7 +280,7 @@ export function Reports() {
 
   if (selectedDailyReport) {
     return (
-      <div className="p-4 md:p-8">
+      <div className="w-full p-4 sm:p-6 lg:p-8">
         <ReportDetail
           report={selectedDailyReport}
           onSave={canEditReports ? (updated) => {
@@ -300,7 +300,7 @@ export function Reports() {
   // If creating a daily report
   if (isDailyCreating) {
     return (
-      <div className="p-4 md:p-8">
+      <div className="w-full p-4 sm:p-6 lg:p-8">
         <DailyLogForm
           onSubmit={(formData) => {
             const newReport: DailyReport = {
@@ -334,7 +334,7 @@ export function Reports() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full p-4 md:p-6 gap-6 overflow-y-auto">
+    <div className="flex flex-col h-full w-full p-4 sm:p-6 lg:p-8 gap-6 overflow-y-auto">
       
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

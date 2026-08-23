@@ -74,7 +74,7 @@ export function ProgressReportCompilerModal({ isOpen, onClose, onSave }: Progres
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-slate-950/75 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-[95vw] lg:max-w-7xl w-full max-h-[94vh] flex flex-col overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-[98vw] 2xl:max-w-[1600px] w-full max-h-[94vh] flex flex-col overflow-hidden">
         
         {/* Modal Header */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
