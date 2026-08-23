@@ -22,7 +22,8 @@ import {
   Sparkles,
   Sliders,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Clock
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { QAInspectionItem, QAMeasurementType } from '../../types';
@@ -96,6 +97,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   const [documentNumber, setDocumentNumber] = useState(`QA-ITR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
   const [inspectionDate, setInspectionDate] = useState(new Date().toISOString().split('T')[0]);
   const [inspectionTime, setInspectionTime] = useState(new Date().toTimeString().substring(0, 5));
+  const [dueDate, setDueDate] = useState(new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().split('T')[0]);
   const [referenceDrawingNumber, setReferenceDrawingNumber] = useState('');
 
   const [clientQCRepresentative, setClientQCRepresentative] = useState('');
@@ -155,6 +157,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       inspector: inspector || 'QA Inspector',
       date: inspectionDate || new Date().toISOString().split('T')[0],
       inspectionTime: inspectionTime || new Date().toTimeString().substring(0, 5),
+      dueDate: dueDate ? dueDate : undefined,
       status: initialStatus,
       category: category || 'Earthworks',
       
@@ -484,10 +487,23 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   </div>
                 </div>
 
-                {/* 6. Reference Drawing Number */}
+                {/* 6. Due Date / Signoff Deadline */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                    6. Reference Drawing Number
+                    6. Due Date / Signoff Target
+                  </label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono font-semibold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                  />
+                </div>
+
+                {/* 7. Reference Drawing Number */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                    7. Reference Drawing Number
                   </label>
                   <input
                     type="text"
@@ -749,6 +765,12 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                       </span>
                     )}
 
+                    {item.dueDate && (
+                      <span className="text-[10px] font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                        <Clock className="h-3 w-3" /> Due: {item.dueDate}
+                      </span>
+                    )}
+
                     <Badge variant="outline" className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold">
                       {item.category}
                     </Badge>
@@ -779,11 +801,12 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                     {item.title}
                   </h3>
 
-                  {/* Metadata: Location, Inspector, Date & Time, Stakeholders */}
+                  {/* Metadata: Location, Inspector, Date & Time, Due Date, Stakeholders */}
                   <div className="flex items-center gap-x-4 gap-y-1 text-xs text-slate-500 flex-wrap">
                     <span>Location: <strong className="text-slate-700 dark:text-slate-300">{item.location}</strong></span>
                     <span>Inspector: <strong className="text-slate-700 dark:text-slate-300">{item.inspector}</strong></span>
                     <span>Inspection Date: <strong className="text-slate-700 dark:text-slate-300">{item.date} {item.inspectionTime ? `@ ${item.inspectionTime}` : ''}</strong></span>
+                    {item.dueDate && <span>Due Date: <strong className="text-amber-600 dark:text-amber-400 font-mono">{item.dueDate}</strong></span>}
                     {item.client && <span>Client: <strong className="text-slate-700 dark:text-slate-300">{item.client}</strong></span>}
                     {item.epc && <span>EPC: <strong className="text-slate-700 dark:text-slate-300">{item.epc}</strong></span>}
                     {item.subcontractor && <span>Subcontractor: <strong className="text-slate-700 dark:text-slate-300">{item.subcontractor}</strong></span>}

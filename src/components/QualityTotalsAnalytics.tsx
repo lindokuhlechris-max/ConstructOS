@@ -201,6 +201,7 @@ export function QualityTotalsAnalytics({ onSelectInspection, onBackToInspections
       inspector: rfi.assignedReviewer || 'QA Inspector',
       date: new Date().toISOString().split('T')[0],
       inspectionTime: new Date().toTimeString().substring(0, 5),
+      dueDate: rfi.targetResponseDate,
       documentNumber: rfi.rfiNumber,
       epc: 'Scedih Engineering (EPC)',
       subcontractor: rfi.requestedBy,

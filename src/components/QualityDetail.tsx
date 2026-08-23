@@ -145,6 +145,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     inspector: inspection.inspector,
     date: inspection.date,
     inspectionTime: inspection.inspectionTime || '',
+    dueDate: inspection.dueDate || '',
     client: inspection.client || '',
     epc: inspection.epc || '',
     subcontractor: inspection.subcontractor || '',
@@ -341,6 +342,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       inspector: editForm.inspector || inspection.inspector,
       date: editForm.date || inspection.date,
       inspectionTime: editForm.inspectionTime || inspection.inspectionTime,
+      dueDate: editForm.dueDate !== undefined ? editForm.dueDate : inspection.dueDate,
       client: editForm.client !== undefined ? editForm.client : inspection.client,
       epc: editForm.epc !== undefined ? editForm.epc : inspection.epc,
       subcontractor: editForm.subcontractor !== undefined ? editForm.subcontractor : inspection.subcontractor,
@@ -698,7 +700,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <span className="text-xs font-semibold text-slate-400 uppercase block mb-1">Inspector</span>
                   <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -710,6 +712,13 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   <span className="text-xs font-semibold text-slate-400 uppercase block mb-1">Inspection Date & Time</span>
                   <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                     <Calendar className="h-4 w-4 text-[#0B5FFF]" /> {inspection.date} {inspection.inspectionTime ? `@ ${inspection.inspectionTime}` : ''}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-xs font-semibold text-slate-400 uppercase block mb-1">Due / Signoff Target</span>
+                  <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 font-mono">
+                    <Clock className="h-4 w-4 text-amber-500" /> {inspection.dueDate || 'Not Specified'}
                   </span>
                 </div>
 
@@ -761,10 +770,17 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">5. Inspection Schedule</span>
-                    <strong className="font-mono text-slate-700 dark:text-slate-300">
-                      {inspection.date} {inspection.inspectionTime ? `@ ${inspection.inspectionTime}` : ''}
-                    </strong>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">5. Inspection Schedule & Due Date</span>
+                    <div className="space-y-0.5">
+                      <div className="font-mono text-slate-700 dark:text-slate-300">
+                        Date: {inspection.date} {inspection.inspectionTime ? `@ ${inspection.inspectionTime}` : ''}
+                      </div>
+                      {inspection.dueDate && (
+                        <div className="font-mono text-amber-600 dark:text-amber-400 font-bold text-[11px]">
+                          Due: {inspection.dueDate}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -1993,7 +2009,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       {/* EDIT INSPECTION MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-2xl shadow-2xl border-slate-200 dark:border-slate-800">
+          <Card className="w-full max-w-4xl shadow-2xl border-slate-200 dark:border-slate-800">
             <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Edit3 className="h-5 w-5 text-[#0B5FFF]" /> Edit QA/QC Inspection
@@ -2096,8 +2112,8 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
               </div>
 
-              {/* Date & Time + Drawing Reference */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Date & Time, Due Date + Drawing Reference */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Inspection Date & Time</label>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -2114,6 +2130,16 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                       className="w-full h-10 px-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-mono"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Due Date / Signoff Target</label>
+                  <input
+                    type="date"
+                    value={editForm.dueDate || ''}
+                    onChange={e => setEditForm({ ...editForm, dueDate: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-mono"
+                  />
                 </div>
 
                 <div className="space-y-1.5">

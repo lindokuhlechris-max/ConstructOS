@@ -20140,6 +20140,30 @@
       "entityType": "QA",
       "entityId": "QA-621",
       "actionType": "update"
+    },
+    {
+      "id": "AL-mt5iy3ic-8sa5",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T08:07:32.676Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt5j0vge-8ss9",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T08:09:42.206Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
     }
   ],
   "allocations": [],
@@ -21145,7 +21169,7 @@
       "activityId": "ACT-6487",
       "title": "Survey and setting out of MV Cable Trench: PTS20 - PTS21",
       "location": "Block 20 to 21",
-      "inspector": "Advocate",
+      "inspector": "Advocate Khoza",
       "date": "2026-08-23",
       "status": "Pending Approval",
       "category": "Earthworks",
@@ -21161,7 +21185,8 @@
       "approvedQuantity": 0,
       "rejectedQuantity": 0,
       "toleranceSpec": "",
-      "measurementItems": []
+      "measurementItems": [],
+      "epc": "Carl"
     }
   ],
   "userProfiles": [
