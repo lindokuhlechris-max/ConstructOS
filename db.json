@@ -12937,6 +12937,46 @@
   ],
   "auditLogs": [
     {
+      "id": "AL-ggglgf8bm",
+      "projectId": "PRJ-5401",
+      "userId": "Current User",
+      "action": "Equipment Updated",
+      "details": "Updated equipment \"JCB 3CX\" (EQ-105)",
+      "timestamp": "2026-08-22T16:03:36.135Z"
+    },
+    {
+      "id": "AL-iw8l5bshk",
+      "projectId": "PRJ-5401",
+      "userId": "Current User",
+      "action": "Equipment Updated",
+      "details": "Updated equipment \"JCB 3CX\" (EQ-105)",
+      "timestamp": "2026-08-22T16:03:18.488Z"
+    },
+    {
+      "id": "AL-wlga1irj7",
+      "projectId": "PRJ-5401",
+      "userId": "Current User",
+      "action": "Equipment Updated",
+      "details": "Updated equipment \"JCB 3CX\" (EQ-105)",
+      "timestamp": "2026-08-22T16:02:27.867Z"
+    },
+    {
+      "id": "AL-a9q10li0a",
+      "projectId": "PRJ-5401",
+      "userId": "Current User",
+      "action": "Equipment Updated",
+      "details": "Updated equipment \"JCB 3CX\" (EQ-105)",
+      "timestamp": "2026-08-22T16:02:05.357Z"
+    },
+    {
+      "id": "AL-tvhir5xtc",
+      "projectId": "PRJ-5401",
+      "userId": "Doctor",
+      "action": "Equipment Log (Hours)",
+      "details": "Hours logged for equipment EQ-105: Logged 40 operating hours (07:00 - 15:00) @ R 450/hr",
+      "timestamp": "2026-08-22T16:01:35.394Z"
+    },
+    {
       "id": "AL-SHIFT-1787280524671",
       "projectId": "PRJ-9348",
       "userId": "Lindokuhle Chris (Admin) (Admin)",
@@ -20050,6 +20090,44 @@
       "previousValue": "In Progress",
       "newValue": "Not Started",
       "timestamp": "2026-08-20T04:48:20.446Z"
+    },
+    {
+      "id": "AL-mt5e71nk-jb8h",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Item Created",
+      "details": "Created QA inspection \"Survey and setting out of MV Cable Trench: PTS20 - PTS21\" (Earthworks)",
+      "timestamp": "2026-08-23T05:54:32.096Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "create"
+    },
+    {
+      "id": "AL-mt5e7blx-lcz4",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Deleted",
+      "details": "Deleted QA inspection \"dw\" (QA-574)",
+      "timestamp": "2026-08-23T05:54:44.997Z",
+      "entityType": "QA",
+      "entityId": "QA-574",
+      "actionType": "delete",
+      "previousValue": "Title: dw",
+      "newValue": "Inspection Record Removed"
+    },
+    {
+      "id": "AL-mt5e7ikt-kp64",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "timestamp": "2026-08-23T05:54:54.029Z",
+      "entityType": "QA",
+      "entityId": "QA-621",
+      "actionType": "update"
     }
   ],
   "allocations": [],
@@ -20689,7 +20767,7 @@
       "primaryMetric": "Engine Hours",
       "operator": "Doctor",
       "location": "Tournee Solar Park",
-      "engineHours": 0,
+      "engineHours": 1726,
       "mileage": 0,
       "totalLoads": 0,
       "totalPowerKWh": 0,
@@ -20713,7 +20791,12 @@
       "rentalAgreementNumber": "",
       "rentalStartDate": "2026-08-17",
       "rentalEndDate": "",
-      "rentalBillingCycle": "Hourly"
+      "rentalBillingCycle": "Hourly",
+      "initialHours": 40,
+      "initialMileage": 1746,
+      "initialLoads": 0,
+      "initialPowerKWh": 0,
+      "photos": []
     },
     {
       "id": "EQ-104",
@@ -20876,6 +20959,18 @@
   ],
   "equipmentLogs": [
     {
+      "id": "EQL-3847",
+      "equipmentId": "EQ-105",
+      "type": "Hours",
+      "date": "2026-08-22 07:00",
+      "loggedBy": "Doctor",
+      "notes": "Logged 40 operating hours (07:00 - 15:00) @ R 450/hr",
+      "hourlyRateApplied": 450,
+      "hoursAdded": 40,
+      "totalHours": 40,
+      "calculatedOperatingCost": 18000
+    },
+    {
       "id": "EQL-AUTO-1786956783471-ffef",
       "equipmentId": "EQ-1786956783471",
       "activityId": "ACT-3096",
@@ -21033,19 +21128,20 @@
   "ppeItems": [],
   "qaInspections": [
     {
-      "id": "QA-574",
+      "id": "QA-621",
       "projectId": "PRJ-5401",
-      "activityId": "ACT-1179",
-      "title": "dw",
-      "location": "dw",
-      "inspector": "David Smith (QA Engineer)",
-      "date": "2026-08-18",
+      "activityId": "ACT-6487",
+      "title": "Survey and setting out of MV Cable Trench: PTS20 - PTS21",
+      "location": "Block 20 to 21",
+      "inspector": "Advocate",
+      "date": "2026-08-23",
       "status": "Pending Approval",
-      "category": "Concrete",
-      "clientQCRepresentative": "dw",
+      "category": "Earthworks",
+      "clientQCRepresentative": "Obakeng Mogadi",
       "clientQCStatus": "Pending Client Review",
-      "clientQCSignoffDate": "2026-08-18",
-      "comments": []
+      "clientQCSignoffDate": "2026-08-23",
+      "linkedDocumentIds": [],
+      "clientQCNotes": ""
     }
   ],
   "userProfiles": [

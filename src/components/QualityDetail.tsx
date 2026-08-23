@@ -47,7 +47,12 @@ import {
   Save,
   MessageCircle,
   Sparkles,
-  Clock3
+  Clock3,
+  Ruler,
+  Scale,
+  Percent,
+  Sliders,
+  CheckSquare
 } from 'lucide-react';
 import { QAInspectionItem, DocumentItem, DocumentCategory, canManage, canUserEditSection, Comment } from '../types';
 import { useAppContext } from '../context/AppContext';
@@ -55,6 +60,7 @@ import { DocumentUploadModal } from './documents/DocumentUploadModal';
 import { DocumentPreviewModal } from './documents/DocumentPreviewModal';
 import { downloadDocument } from '../lib/documentStorage';
 import { formatFileSize } from '../lib/documentUtils';
+import { QAMeasurementModal } from './QAMeasurementModal';
 
 interface QualityDetailProps {
   inspection: QAInspectionItem;
@@ -67,8 +73,9 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
   const navigate = useNavigate();
   const { activities, projects, documents, addDocument, updateDocument, userRole, currentUserProfile } = useAppContext();
   const canEditQuality = canUserEditSection(currentUserProfile, 'quality');
-  const [activeTab, setActiveTab] = useState<'overview' | 'ncr' | 'tests' | 'documents' | 'photos'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'measurements' | 'ncr' | 'tests' | 'documents' | 'photos'>('overview');
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [isMeasurementModalOpen, setIsMeasurementModalOpen] = useState(false);
 
   // Comments and Notes State
   const [activeSideTab, setActiveSideTab] = useState<'comments' | 'notes'>('comments');
@@ -492,6 +499,16 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
           </button>
 
           {canEditQuality && (
+            <Button
+              onClick={() => setIsMeasurementModalOpen(true)}
+              variant="outline"
+              className="gap-1.5 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl text-xs font-semibold"
+            >
+              <Ruler className="h-4 w-4 text-emerald-600" /> Measurements & Quantities
+            </Button>
+          )}
+
+          {canEditQuality && (
             <button
               onClick={() => {
                 setUploadModalCategory('QA/QC Inspections');
@@ -566,6 +583,26 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
         >
           <ShieldCheck className="h-4 w-4 shrink-0" />
           <span>Overview & QA Specifications</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('measurements')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+            activeTab === 'measurements' 
+              ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/20' 
+              : 'text-slate-600 hover:bg-white dark:hover:bg-slate-800 dark:text-slate-400 bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60'
+          }`}
+        >
+          <Ruler className="h-4 w-4 shrink-0" />
+          <span>Measurements & Quantities</span>
+          {(inspection.targetQuantity || inspection.inspectedQuantity) ? (
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+              activeTab === 'measurements' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300'
+            }`}>
+              {inspection.approvedQuantity || 0}/{inspection.targetQuantity || inspection.inspectedQuantity || 0} {inspection.unit || 'm'}
+            </span>
+          ) : null}
         </button>
 
         <button
@@ -657,6 +694,85 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                     <MapPin className="h-4 w-4 text-red-500" /> {inspection.location}
                   </span>
+                </div>
+              </div>
+
+              {/* QA Measurement Scope & Quantity Card */}
+              <div className="bg-emerald-50/60 dark:bg-emerald-950/30 p-5 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 space-y-3.5">
+                <div className="flex justify-between items-center flex-wrap gap-2">
+                  <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
+                    <Ruler className="h-5 w-5 text-emerald-600" />
+                    <span>Inspection Scope & Measured Quantities</span>
+                    <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 dark:border-emerald-700 bg-white dark:bg-slate-900">
+                      {inspection.measurementType || 'Length'} ({inspection.unit || 'm'})
+                    </Badge>
+                  </div>
+                  {canEditQuality && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsMeasurementModalOpen(true)}
+                      className="h-7 text-xs font-bold gap-1 rounded-xl border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 bg-white dark:bg-slate-900 hover:bg-emerald-100"
+                    >
+                      <Ruler className="h-3 w-3" /> Log / Edit Measurements
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Required Scope</span>
+                    <span className="text-base font-black font-mono text-slate-900 dark:text-white">
+                      {inspection.targetQuantity || 0} <span className="text-xs font-normal text-slate-400">{inspection.unit || 'm'}</span>
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900">
+                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase block">Inspected</span>
+                    <span className="text-base font-black font-mono text-[#0B5FFF]">
+                      {inspection.inspectedQuantity || 0} <span className="text-xs font-normal text-blue-400">{inspection.unit || 'm'}</span>
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900">
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase block">Approved</span>
+                    <span className="text-base font-black font-mono text-emerald-600">
+                      {inspection.approvedQuantity || 0} <span className="text-xs font-normal text-emerald-400">{inspection.unit || 'm'}</span>
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900">
+                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase block">Rejected</span>
+                    <span className="text-base font-black font-mono text-rose-600">
+                      {inspection.rejectedQuantity || 0} <span className="text-xs font-normal text-rose-400">{inspection.unit || 'm'}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span className="text-slate-600 dark:text-slate-300">
+                      Clearance: <strong className="text-emerald-600 font-mono">
+                        {inspection.inspectedQuantity ? Math.round(((inspection.approvedQuantity || 0) / inspection.inspectedQuantity) * 100) : 0}% Pass Rate
+                      </strong>
+                    </span>
+                    {inspection.toleranceSpec && (
+                      <span className="text-slate-500 font-mono">
+                        Spec: {inspection.toleranceSpec}
+                      </span>
+                    )}
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                    <div 
+                      className="h-full bg-emerald-500 transition-all duration-300"
+                      style={{ width: `${inspection.targetQuantity ? ((inspection.approvedQuantity || 0) / inspection.targetQuantity) * 100 : ((inspection.approvedQuantity || 0) / (inspection.inspectedQuantity || 1)) * 100}%` }}
+                    />
+                    <div 
+                      className="h-full bg-rose-500 transition-all duration-300"
+                      style={{ width: `${inspection.targetQuantity ? ((inspection.rejectedQuantity || 0) / inspection.targetQuantity) * 100 : ((inspection.rejectedQuantity || 0) / (inspection.inspectedQuantity || 1)) * 100}%` }}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1098,6 +1214,218 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   </div>
                 </div>
               )}
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 1.5: MEASUREMENTS & QA QUANTITY CLEARANCE */}
+      {activeTab === 'measurements' && (
+        <div className="flex flex-col gap-6 w-full">
+          {/* Header Bar */}
+          <div className="flex justify-between items-center flex-wrap gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Ruler className="h-5 w-5 text-emerald-600" /> Quality Measurement Scope & Verification
+              </h2>
+              <p className="text-xs text-slate-500">
+                Track physical quantities, linear spans, weights, and tolerances inspected and approved on site.
+              </p>
+            </div>
+
+            {canEditQuality && (
+              <Button
+                onClick={() => setIsMeasurementModalOpen(true)}
+                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm"
+              >
+                <Sliders className="h-4 w-4" /> Log / Edit Measurements
+              </Button>
+            )}
+          </div>
+
+          {/* Primary KPI Metrics Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+            <Card className="p-4 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                Target Scope
+              </span>
+              <div className="text-2xl font-black font-mono text-slate-900 dark:text-white">
+                {inspection.targetQuantity || 0} <span className="text-xs font-normal text-slate-400">{inspection.unit || 'm'}</span>
+              </div>
+              <span className="text-[10px] text-slate-500 mt-1 block">Engineering Requirement</span>
+            </Card>
+
+            <Card className="p-4 border-blue-200 dark:border-blue-900/60 bg-blue-50/20 dark:bg-blue-950/20">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 block mb-1">
+                Inspected
+              </span>
+              <div className="text-2xl font-black font-mono text-[#0B5FFF]">
+                {inspection.inspectedQuantity || 0} <span className="text-xs font-normal text-blue-400">{inspection.unit || 'm'}</span>
+              </div>
+              <span className="text-[10px] text-blue-500 mt-1 block">
+                {inspection.targetQuantity ? `${Math.round(((inspection.inspectedQuantity || 0) / inspection.targetQuantity) * 100)}% of target` : 'Logged on site'}
+              </span>
+            </Card>
+
+            <Card className="p-4 border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/20">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block mb-1">
+                Approved / Passed
+              </span>
+              <div className="text-2xl font-black font-mono text-emerald-600">
+                {inspection.approvedQuantity || 0} <span className="text-xs font-normal text-emerald-400">{inspection.unit || 'm'}</span>
+              </div>
+              <span className="text-[10px] text-emerald-600 font-bold mt-1 block">
+                {inspection.inspectedQuantity ? `${Math.round(((inspection.approvedQuantity || 0) / inspection.inspectedQuantity) * 100)}% Pass Rate` : 'No defects'}
+              </span>
+            </Card>
+
+            <Card className="p-4 border-rose-200 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/20">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block mb-1">
+                Rejected / Defective
+              </span>
+              <div className="text-2xl font-black font-mono text-rose-600">
+                {inspection.rejectedQuantity || 0} <span className="text-xs font-normal text-rose-400">{inspection.unit || 'm'}</span>
+              </div>
+              <span className="text-[10px] text-rose-500 mt-1 block">
+                {(inspection.rejectedQuantity || 0) > 0 ? 'Requires NCR / Remediation' : 'Zero defects'}
+              </span>
+            </Card>
+
+            <Card className="p-4 border-slate-200 dark:border-slate-800 col-span-2 sm:col-span-1 bg-white dark:bg-slate-900">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                Remaining to Inspect
+              </span>
+              <div className="text-2xl font-black font-mono text-slate-700 dark:text-slate-300">
+                {Math.max((inspection.targetQuantity || 0) - (inspection.inspectedQuantity || 0), 0)} <span className="text-xs font-normal text-slate-400">{inspection.unit || 'm'}</span>
+              </div>
+              <span className="text-[10px] text-slate-500 mt-1 block">Uninspected Balance</span>
+            </Card>
+          </div>
+
+          {/* Visual Multi-Segment Gauge */}
+          <Card className="p-5 border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+                <span>Approved: {inspection.approvedQuantity || 0} {inspection.unit || 'm'}</span>
+                {Boolean(inspection.rejectedQuantity) && (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block ml-2" />
+                    <span className="text-rose-600">Rejected: {inspection.rejectedQuantity} {inspection.unit || 'm'}</span>
+                  </>
+                )}
+              </span>
+
+              {inspection.toleranceSpec && (
+                <span className="text-xs font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+                  Spec: {inspection.toleranceSpec}
+                </span>
+              )}
+            </div>
+
+            <div className="w-full h-3.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex border border-slate-200 dark:border-slate-700">
+              <div 
+                className="h-full bg-emerald-500 transition-all duration-300"
+                style={{ width: `${inspection.targetQuantity ? ((inspection.approvedQuantity || 0) / inspection.targetQuantity) * 100 : ((inspection.approvedQuantity || 0) / (inspection.inspectedQuantity || 1)) * 100}%` }}
+                title={`Approved: ${inspection.approvedQuantity || 0} ${inspection.unit || 'm'}`}
+              />
+              <div 
+                className="h-full bg-rose-500 transition-all duration-300"
+                style={{ width: `${inspection.targetQuantity ? ((inspection.rejectedQuantity || 0) / inspection.targetQuantity) * 100 : ((inspection.rejectedQuantity || 0) / (inspection.inspectedQuantity || 1)) * 100}%` }}
+                title={`Rejected: ${inspection.rejectedQuantity || 0} ${inspection.unit || 'm'}`}
+              />
+            </div>
+          </Card>
+
+          {/* Itemized Test Points & Sub-Measurements Table */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                  <CheckSquare className="h-4 w-4 text-emerald-600" />
+                  Itemized Measurement Records & Inspection Test Points ({inspection.measurementItems?.length || 0})
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Granular measurements per trench run, layer lift, test cube, or structural segment.
+                </p>
+              </div>
+
+              {canEditQuality && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsMeasurementModalOpen(true)}
+                  className="gap-1 text-xs font-bold rounded-xl border-emerald-300 text-emerald-700 dark:text-emerald-300"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Sub-Measurement
+                </Button>
+              )}
+            </div>
+
+            <Card className="border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-900 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="p-3.5">Test Point / Description</th>
+                      <th className="p-3.5">Target</th>
+                      <th className="p-3.5">Inspected</th>
+                      <th className="p-3.5">Approved</th>
+                      <th className="p-3.5">Rejected</th>
+                      <th className="p-3.5">Tolerance</th>
+                      <th className="p-3.5">Date</th>
+                      <th className="p-3.5 text-right">Clearance Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                    {inspection.measurementItems && inspection.measurementItems.length > 0 ? (
+                      inspection.measurementItems.map((rec) => (
+                        <tr key={rec.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                          <td className="p-3.5 font-bold text-slate-900 dark:text-white">
+                            {rec.itemDescription || 'General Test Point'}
+                          </td>
+                          <td className="p-3.5 font-mono text-slate-600 dark:text-slate-400">
+                            {rec.targetOrRequired} {rec.unit || inspection.unit || 'm'}
+                          </td>
+                          <td className="p-3.5 font-mono font-bold text-[#0B5FFF]">
+                            {rec.inspectedAmount} {rec.unit || inspection.unit || 'm'}
+                          </td>
+                          <td className="p-3.5 font-mono font-bold text-emerald-600">
+                            {rec.approvedAmount} {rec.unit || inspection.unit || 'm'}
+                          </td>
+                          <td className="p-3.5 font-mono font-bold text-rose-600">
+                            {rec.rejectedAmount || 0} {rec.unit || inspection.unit || 'm'}
+                          </td>
+                          <td className="p-3.5 text-slate-500 font-mono">
+                            {rec.tolerance || inspection.toleranceSpec || '—'}
+                          </td>
+                          <td className="p-3.5 text-slate-500">
+                            {rec.inspectionDate || inspection.date}
+                          </td>
+                          <td className="p-3.5 text-right">
+                            <Badge 
+                              variant={
+                                rec.status === 'Approved' ? 'success' : 
+                                rec.status === 'Rejected' ? 'danger' : 
+                                rec.status === 'Partially Approved' ? 'warning' : 'outline'
+                              }
+                              className="text-[10px]"
+                            >
+                              {rec.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center text-slate-400 text-xs">
+                          No sub-measurements added yet. Overall inspection scope is tracked above ({inspection.targetQuantity || 0} {inspection.unit || 'm'}).
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           </div>
         </div>
@@ -1928,6 +2256,19 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
             </div>
           </Card>
         </div>
+      )}
+
+      {/* QA Measurement & Scope Logging Modal */}
+      {isMeasurementModalOpen && (
+        <QAMeasurementModal
+          inspection={inspection}
+          isOpen={isMeasurementModalOpen}
+          onClose={() => setIsMeasurementModalOpen(false)}
+          onSave={(updated) => {
+            onSave(updated);
+            setIsMeasurementModalOpen(false);
+          }}
+        />
       )}
     </div>
   );

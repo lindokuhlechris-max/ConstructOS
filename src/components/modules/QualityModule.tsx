@@ -1,14 +1,48 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, CustomSelect } from '../ui';
-import { ShieldCheck, Plus, CheckCircle2, XCircle, AlertCircle, ArrowLeft, FileText, User, Search, Eye, Filter, FolderOpen, ExternalLink } from 'lucide-react';
+import { 
+  ShieldCheck, 
+  Plus, 
+  CheckCircle2, 
+  XCircle, 
+  AlertCircle, 
+  ArrowLeft, 
+  FileText, 
+  User, 
+  Search, 
+  Eye, 
+  Filter, 
+  FolderOpen, 
+  ExternalLink,
+  Ruler,
+  Scale,
+  Percent,
+  Layers,
+  Sparkles,
+  Sliders,
+  Check,
+  AlertTriangle
+} from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { QAInspectionItem } from '../../types';
+import { QAInspectionItem, QAMeasurementType } from '../../types';
 import { QualityDetail } from '../QualityDetail';
+import { QAMeasurementModal } from '../QAMeasurementModal';
 
 interface QualityModuleProps {
   onBack: () => void;
 }
+
+const MEASUREMENT_PRESETS: { type: QAMeasurementType; unit: string; label: string }[] = [
+  { type: 'Length', unit: 'm', label: 'Linear Length (m)' },
+  { type: 'Quantity', unit: 'Nos', label: 'Quantity / Count (Nos)' },
+  { type: 'Volume', unit: 'm³', label: 'Volume (m³)' },
+  { type: 'Area', unit: 'm²', label: 'Surface Area (m²)' },
+  { type: 'Weight', unit: 'tonnes', label: 'Weight / Mass (t)' },
+  { type: 'Thickness', unit: 'mm', label: 'Thickness / Depth (mm)' },
+  { type: 'Strength', unit: 'MPa', label: 'Strength / Compaction (MPa)' },
+  { type: 'Percentage', unit: '%', label: 'Extent / Progress (%)' }
+];
 
 export function QualityModule({ onBack }: QualityModuleProps) {
   const navigate = useNavigate();
@@ -20,13 +54,14 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     addQAInspection, 
     updateQAInspection, 
     deleteQAInspection, 
-    userRole,
+    userRole, 
     hasPermission 
   } = useAppContext();
 
   const canEditQuality = hasPermission('quality');
 
   const [selectedInspection, setSelectedInspection] = useState<QAInspectionItem | null>(null);
+  const [measuringInspection, setMeasuringInspection] = useState<QAInspectionItem | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Passed' | 'Failed' | 'Pending Approval'>('All');
@@ -37,22 +72,49 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   const [activityId, setActivityId] = useState(activities[0]?.id || '');
   const [location, setLocation] = useState('');
   const [inspector, setInspector] = useState('David Smith (QA Engineer)');
-  const [category, setCategory] = useState('Concrete');
+  const [category, setCategory] = useState('Earthworks');
   const [clientQCRepresentative, setClientQCRepresentative] = useState('');
   const [clientQCStatus, setClientQCStatus] = useState<'Approved' | 'Rejected' | 'Pending Client Review'>('Pending Client Review');
+
+  // Measurement form state
+  const [measurementType, setMeasurementType] = useState<QAMeasurementType>('Length');
+  const [unit, setUnit] = useState('m');
+  const [targetQuantity, setTargetQuantity] = useState<string>('150');
+  const [inspectedQuantity, setInspectedQuantity] = useState<string>('0');
+  const [approvedQuantity, setApprovedQuantity] = useState<string>('0');
+  const [rejectedQuantity, setRejectedQuantity] = useState<string>('0');
+  const [toleranceSpec, setToleranceSpec] = useState<string>('±10mm / SANS 1200');
 
   const filteredInspections = qaInspections.filter(item => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.inspector.toLowerCase().includes(searchTerm.toLowerCase());
+      item.inspector.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.location && item.location.toLowerCase().includes(searchTerm.toLowerCase()));
     
     if (statusFilter === 'All') return matchesSearch;
     return matchesSearch && item.status === statusFilter;
   });
 
+  // Calculate Overall Quality Scope and Clearance Stats
+  const totalTrackedTarget = qaInspections.reduce((acc, curr) => acc + (curr.targetQuantity || 0), 0);
+  const totalTrackedApproved = qaInspections.reduce((acc, curr) => acc + (curr.approvedQuantity || 0), 0);
+  const overallApprovalRate = totalTrackedTarget > 0 ? Math.round((totalTrackedApproved / totalTrackedTarget) * 100) : 0;
+
   const handleAddInspection = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title) return;
+
+    const tQty = parseFloat(targetQuantity) || 0;
+    const iQty = parseFloat(inspectedQuantity) || 0;
+    const aQty = parseFloat(approvedQuantity) || 0;
+    const rQty = parseFloat(rejectedQuantity) || 0;
+
+    let initialStatus: QAInspectionItem['status'] = 'Pending Approval';
+    if (rQty > 0) {
+      initialStatus = 'Failed';
+    } else if (aQty > 0 && (tQty === 0 || aQty >= tQty)) {
+      initialStatus = 'Passed';
+    }
 
     const newItem: QAInspectionItem = {
       id: `QA-${Math.floor(200 + Math.random() * 800)}`,
@@ -62,12 +124,26 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       location: location || 'Site Wide',
       inspector: inspector || 'QA Inspector',
       date: new Date().toISOString().split('T')[0],
-      status: 'Pending Approval',
-      category: category || 'Concrete',
+      status: initialStatus,
+      category: category || 'Earthworks',
       clientQCRepresentative,
       clientQCStatus,
       clientQCSignoffDate: new Date().toISOString().split('T')[0],
-      linkedDocumentIds: []
+      linkedDocumentIds: [],
+      // Measurement & Quality Scope
+      measurementType,
+      unit: unit || 'm',
+      targetQuantity: tQty,
+      inspectedQuantity: iQty,
+      approvedQuantity: aQty,
+      rejectedQuantity: rQty,
+      toleranceSpec,
+      ncrCode: rQty > 0 ? `NCR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}` : undefined,
+      ncrDetails: rQty > 0 ? {
+        ncrNumber: `NCR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+        deficiencySummary: `Defect noted during inspection: ${rQty} ${unit} rejected out of ${iQty} ${unit} inspected.`,
+        status: 'Open'
+      } : undefined
     };
 
     addQAInspection(newItem);
@@ -75,6 +151,10 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     setTitle('');
     setLocation('');
     setClientQCRepresentative('');
+    setTargetQuantity('100');
+    setInspectedQuantity('0');
+    setApprovedQuantity('0');
+    setRejectedQuantity('0');
   };
 
   const handleStatusChange = (id: string, newStatus: QAInspectionItem['status']) => {
@@ -84,9 +164,12 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     const updated: QAInspectionItem = {
       ...target,
       status: newStatus,
-      ncrCode: newStatus === 'Failed' ? (target.ncrCode || `NCR-2024-${Math.floor(100 + Math.random() * 900)}`) : target.ncrCode,
+      // If approved directly, set approvedQuantity = inspected or target
+      approvedQuantity: newStatus === 'Passed' ? (target.inspectedQuantity || target.targetQuantity || 1) : target.approvedQuantity,
+      rejectedQuantity: newStatus === 'Passed' ? 0 : target.rejectedQuantity,
+      ncrCode: newStatus === 'Failed' ? (target.ncrCode || `NCR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`) : target.ncrCode,
       ncrDetails: newStatus === 'Failed' ? (target.ncrDetails || {
-        ncrNumber: `NCR-2024-${Math.floor(100 + Math.random() * 900)}`,
+        ncrNumber: `NCR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
         deficiencySummary: 'Quality specification non-conformance identified during inspection.',
         status: 'Open'
       }) : target.ncrDetails
@@ -117,14 +200,16 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" onClick={onBack} className="rounded-xl h-10 w-10">
+          <Button variant="outline" size="icon" onClick={onBack} className="rounded-xl h-10 w-10 shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
               <ShieldCheck className="h-6 w-6 text-emerald-600" /> Quality & QA/QC Management
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">Site inspections, non-conformance reporting (NCR), laboratory test logs, and clearance sign-offs.</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">
+              Site inspections, quantity & measurement clearance, non-conformance reporting (NCR), and sign-offs.
+            </p>
           </div>
         </div>
 
@@ -133,7 +218,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search inspections or NCRs..." 
+              placeholder="Search inspections, locations, NCRs..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
@@ -149,25 +234,37 @@ export function QualityModule({ onBack }: QualityModuleProps) {
           </Button>
 
           {canEditQuality && (
-            <Button onClick={() => setIsAdding(!isAdding)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 shrink-0 text-xs font-semibold">
+            <Button onClick={() => setIsAdding(!isAdding)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 shrink-0 text-xs font-semibold shadow-xs">
               <Plus className="h-4 w-4" /> Log Inspection
             </Button>
           )}
         </div>
       </div>
 
+      {/* Log Inspection Form Modal/Drawer */}
       {isAdding && (
-        <Card className="p-6 border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20 w-full">
-          <form onSubmit={handleAddInspection} className="flex flex-col gap-4">
-            <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-emerald-600" /> New QA/QC Inspection Record
-            </h3>
+        <Card className="p-6 border-emerald-300 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 w-full shadow-md animate-in slide-in-from-top-4 duration-200">
+          <form onSubmit={handleAddInspection} className="flex flex-col gap-5">
+            <div className="flex items-center justify-between border-b border-emerald-200 dark:border-emerald-900/60 pb-3">
+              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-600" /> New QA/QC Inspection & Measurement Record
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setIsAdding(false)} 
+                className="text-slate-400 hover:text-slate-600 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {/* General Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">Inspection Title *</label>
                 <input
                   type="text"
-                  placeholder="e.g. Pre-Pour Formwork & Rebar Check"
+                  placeholder="e.g. Survey and setting out of MV Cable Trench: PTS20 - PTS21"
                   value={title}
                   onChange={e => setTitle(e.target.value)}
                   required
@@ -202,10 +299,10 @@ export function QualityModule({ onBack }: QualityModuleProps) {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">Location / Grid Line</label>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">Location / Chainage / Block</label>
                 <input
                   type="text"
-                  placeholder="e.g. Grid A1-D4 Level 2"
+                  placeholder="e.g. Block 20 to 21 / Chainage 0+000 to 0+150"
                   value={location}
                   onChange={e => setLocation(e.target.value)}
                   className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -216,7 +313,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">Inspector Name</label>
                 <input
                   type="text"
-                  placeholder="Inspector Name"
+                  placeholder="e.g. Advocate (QA Inspector)"
                   value={inspector}
                   onChange={e => setInspector(e.target.value)}
                   className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -228,34 +325,125 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                 <CustomSelect
                   value={category}
                   onChange={val => setCategory(val)}
-                  options={['Concrete', 'Structural Steel', 'Earthworks', 'Civil Utilities', 'Finishes', 'MEP Clearance']}
+                  options={['Earthworks', 'Concrete', 'Structural Steel', 'Civil Utilities', 'Finishes', 'MEP Clearance', 'Survey & Setting Out']}
                   className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   customPlaceholder="Enter custom category..."
                 />
               </div>
+            </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">Client QC Representative</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Acme Client Representative"
-                  value={clientQCRepresentative}
-                  onChange={e => setClientQCRepresentative(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
+            {/* QA/QC Measurement Logic Card */}
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
+                  <Ruler className="h-4 w-4 text-emerald-600" />
+                  <span>Quality Measurement & Scope Verification</span>
+                </h4>
+                <span className="text-[11px] text-slate-400">Specify what amount has to be or has been inspected</span>
+              </div>
+
+              {/* Preset Chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                {MEASUREMENT_PRESETS.map(preset => {
+                  const isSelected = measurementType === preset.type;
+                  return (
+                    <button
+                      key={preset.type}
+                      type="button"
+                      onClick={() => {
+                        setMeasurementType(preset.type);
+                        setUnit(preset.unit);
+                      }}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 border ${
+                        isSelected
+                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                          : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-300'
+                      }`}
+                    >
+                      <span>{preset.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Quantity Inputs */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1">Target / Total Scope</label>
+                  <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 150"
+                      value={targetQuantity}
+                      onChange={e => setTargetQuantity(e.target.value)}
+                      className="w-full text-sm font-bold bg-transparent outline-none font-mono"
+                    />
+                    <span className="text-xs text-slate-400 font-bold shrink-0">{unit}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 block mb-1">Amount Inspected</label>
+                  <div className="flex items-center gap-1 bg-blue-50/50 dark:bg-blue-950/40 px-3 py-2 rounded-xl border border-blue-200 dark:border-blue-800">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 120"
+                      value={inspectedQuantity}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setInspectedQuantity(val);
+                        if (!approvedQuantity || approvedQuantity === '0') {
+                          setApprovedQuantity(val);
+                        }
+                      }}
+                      className="w-full text-sm font-bold text-[#0B5FFF] bg-transparent outline-none font-mono"
+                    />
+                    <span className="text-xs text-blue-400 font-bold shrink-0">{unit}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 block mb-1">Amount Approved</label>
+                  <div className="flex items-center gap-1 bg-emerald-50/50 dark:bg-emerald-950/40 px-3 py-2 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 100"
+                      value={approvedQuantity}
+                      onChange={e => setApprovedQuantity(e.target.value)}
+                      className="w-full text-sm font-bold text-emerald-600 bg-transparent outline-none font-mono"
+                    />
+                    <span className="text-xs text-emerald-400 font-bold shrink-0">{unit}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 block mb-1">Amount Rejected / Defective</label>
+                  <div className="flex items-center gap-1 bg-rose-50/50 dark:bg-rose-950/40 px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-800">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 20"
+                      value={rejectedQuantity}
+                      onChange={e => setRejectedQuantity(e.target.value)}
+                      className="w-full text-sm font-bold text-rose-600 bg-transparent outline-none font-mono"
+                    />
+                    <span className="text-xs text-rose-400 font-bold shrink-0">{unit}</span>
+                  </div>
+                </div>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">Client QC Status</label>
-                <select
-                  value={clientQCStatus}
-                  onChange={e => setClientQCStatus(e.target.value as any)}
-                  className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="Pending Client Review">Pending Client Review</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Rejected">Rejected</option>
-                </select>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">Tolerance / Testing Specification</label>
+                <input
+                  type="text"
+                  placeholder="e.g. ±10mm level tolerance / SANS 1200 / Min 30 MPa"
+                  value={toleranceSpec}
+                  onChange={e => setToleranceSpec(e.target.value)}
+                  className="w-full h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold outline-none"
+                />
               </div>
             </div>
 
@@ -263,7 +451,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
               <Button type="button" variant="outline" onClick={() => setIsAdding(false)} className="rounded-xl text-xs">
                 Cancel
               </Button>
-              <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs">
+              <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm">
                 Submit Inspection Record
               </Button>
             </div>
@@ -272,18 +460,20 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       )}
 
       {/* Overview Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
         <Card 
           onClick={() => setStatusFilter(statusFilter === 'Passed' ? 'All' : 'Passed')}
           className={`p-4 flex items-center gap-3 cursor-pointer transition-all border ${
-            statusFilter === 'Passed' ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-slate-200 dark:border-slate-800 hover:border-emerald-300'
+            statusFilter === 'Passed' ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/20' : 'border-slate-200 dark:border-slate-800 hover:border-emerald-300'
           }`}
         >
           <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30">
             <CheckCircle2 className="h-6 w-6" />
           </div>
           <div>
-            <div className="text-2xl font-bold text-slate-900 dark:text-white">{qaInspections.filter(i => i.status === 'Passed').length}</div>
+            <div className="text-2xl font-bold text-slate-900 dark:text-white">
+              {qaInspections.filter(i => i.status === 'Passed').length}
+            </div>
             <div className="text-xs text-slate-500 font-semibold">Passed Inspections</div>
           </div>
         </Card>
@@ -291,14 +481,16 @@ export function QualityModule({ onBack }: QualityModuleProps) {
         <Card 
           onClick={() => setStatusFilter(statusFilter === 'Failed' ? 'All' : 'Failed')}
           className={`p-4 flex items-center gap-3 cursor-pointer transition-all border ${
-            statusFilter === 'Failed' ? 'border-rose-500 ring-2 ring-rose-500/20' : 'border-slate-200 dark:border-slate-800 hover:border-rose-300'
+            statusFilter === 'Failed' ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/20' : 'border-slate-200 dark:border-slate-800 hover:border-rose-300'
           }`}
         >
           <div className="p-3 rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/30">
             <XCircle className="h-6 w-6" />
           </div>
           <div>
-            <div className="text-2xl font-bold text-slate-900 dark:text-white">{qaInspections.filter(i => i.status === 'Failed').length}</div>
+            <div className="text-2xl font-bold text-slate-900 dark:text-white">
+              {qaInspections.filter(i => i.status === 'Failed').length}
+            </div>
             <div className="text-xs text-slate-500 font-semibold">Failed / Open NCRs</div>
           </div>
         </Card>
@@ -306,91 +498,218 @@ export function QualityModule({ onBack }: QualityModuleProps) {
         <Card 
           onClick={() => setStatusFilter(statusFilter === 'Pending Approval' ? 'All' : 'Pending Approval')}
           className={`p-4 flex items-center gap-3 cursor-pointer transition-all border ${
-            statusFilter === 'Pending Approval' ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-slate-200 dark:border-slate-800 hover:border-amber-300'
+            statusFilter === 'Pending Approval' ? 'border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/20' : 'border-slate-200 dark:border-slate-800 hover:border-amber-300'
           }`}
         >
           <div className="p-3 rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/30">
             <AlertCircle className="h-6 w-6" />
           </div>
           <div>
-            <div className="text-2xl font-bold text-slate-900 dark:text-white">{qaInspections.filter(i => i.status === 'Pending Approval').length}</div>
+            <div className="text-2xl font-bold text-slate-900 dark:text-white">
+              {qaInspections.filter(i => i.status === 'Pending Approval').length}
+            </div>
             <div className="text-xs text-slate-500 font-semibold">Pending QA Signoff</div>
+          </div>
+        </Card>
+
+        <Card className="p-4 flex items-center gap-3 border-slate-200 dark:border-slate-800 bg-blue-50/20 dark:bg-blue-950/20">
+          <div className="p-3 rounded-xl bg-blue-100 text-[#0B5FFF] dark:bg-blue-900/40">
+            <Ruler className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-slate-900 dark:text-white font-mono">
+              {totalTrackedApproved.toLocaleString()} <span className="text-xs text-slate-400 font-normal">units</span>
+            </div>
+            <div className="text-xs text-slate-500 font-semibold flex items-center gap-1.5">
+              <span>Approved Scope</span>
+              {totalTrackedTarget > 0 && (
+                <span className="text-emerald-600 font-bold font-mono">({overallApprovalRate}%)</span>
+              )}
+            </div>
           </div>
         </Card>
       </div>
 
       {/* Inspections List Grid */}
-      <div className="flex flex-col gap-3 w-full">
-        {filteredInspections.map(item => {
-          const attachedDocCount = (documents || []).filter(d => 
-            (item.linkedDocumentIds && item.linkedDocumentIds.includes(d.id)) ||
-            d.linkedQAInspectionId === item.id ||
-            (d.tags && d.tags.includes(item.id))
-          ).length;
+      <div className="flex flex-col gap-3.5 w-full">
+        {filteredInspections.length === 0 ? (
+          <Card className="p-8 text-center border-slate-200 dark:border-slate-800">
+            <ShieldCheck className="h-10 w-10 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
+            <p className="text-sm font-semibold text-slate-500">No QA/QC inspections match the active search or filters.</p>
+          </Card>
+        ) : (
+          filteredInspections.map(item => {
+            const attachedDocCount = (documents || []).filter(d => 
+              (item.linkedDocumentIds && item.linkedDocumentIds.includes(d.id)) ||
+              d.linkedQAInspectionId === item.id ||
+              (d.tags && d.tags.includes(item.id))
+            ).length;
 
-          return (
-            <Card 
-              key={item.id} 
-              onClick={() => setSelectedInspection(item)}
-              className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-md transition-all cursor-pointer"
-            >
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-mono font-bold text-emerald-600">{item.id}</span>
-                  <Badge variant="outline" className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">{item.category}</Badge>
-                  {item.ncrCode && (
-                    <Badge variant="danger" className="text-[10px] font-mono">{item.ncrCode}</Badge>
+            const targetQty = item.targetQuantity || 0;
+            const inspectedQty = item.inspectedQuantity || 0;
+            const approvedQty = item.approvedQuantity || 0;
+            const rejectedQty = item.rejectedQuantity || 0;
+            const itemUnit = item.unit || 'm';
+            const mType = item.measurementType || 'Length';
+
+            const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
+            const rejectionPercent = inspectedQty > 0 ? Math.round((rejectedQty / inspectedQty) * 100) : 0;
+
+            return (
+              <Card 
+                key={item.id} 
+                onClick={() => setSelectedInspection(item)}
+                className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-md transition-all cursor-pointer group"
+              >
+                <div className="flex flex-col gap-2 flex-1">
+                  {/* Tags line */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-mono font-bold text-emerald-600">{item.id}</span>
+                    <Badge variant="outline" className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold">
+                      {item.category}
+                    </Badge>
+                    
+                    {/* Measurement Badge */}
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                      <Ruler className="h-3 w-3" /> {mType} ({itemUnit})
+                    </span>
+
+                    {item.toleranceSpec && (
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                        {item.toleranceSpec}
+                      </span>
+                    )}
+
+                    {item.ncrCode && (
+                      <Badge variant="danger" className="text-[10px] font-mono">{item.ncrCode}</Badge>
+                    )}
+                    {attachedDocCount > 0 && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-[#0B5FFF] bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800">
+                        <FolderOpen className="h-3 w-3" /> {attachedDocCount} {attachedDocCount === 1 ? 'Doc' : 'Docs'}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Title */}
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors">
+                    {item.title}
+                  </h3>
+
+                  {/* Metadata: Location, Inspector, Date */}
+                  <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                    <span>Location: <strong className="text-slate-700 dark:text-slate-300">{item.location}</strong></span>
+                    <span>Inspector: <strong className="text-slate-700 dark:text-slate-300">{item.inspector}</strong></span>
+                    <span>Date: <strong className="text-slate-700 dark:text-slate-300">{item.date}</strong></span>
+                  </div>
+
+                  {/* QA Measurement Progress Breakdown */}
+                  {(targetQty > 0 || inspectedQty > 0) && (
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-850/80 border border-slate-200/80 dark:border-slate-800 mt-1 space-y-1.5 max-w-xl">
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                          <span className="text-slate-400 font-normal">Scope:</span>
+                          <span className="font-mono">{targetQty} {itemUnit}</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-blue-500 font-mono">Inspected: {inspectedQty} {itemUnit}</span>
+                        </span>
+                        
+                        <div className="flex items-center gap-2 text-xs font-mono">
+                          {approvedQty > 0 && (
+                            <span className="text-emerald-600 font-bold">
+                              ✓ {approvedQty} {itemUnit} ({approvalPercent}%)
+                            </span>
+                          )}
+                          {rejectedQty > 0 && (
+                            <span className="text-rose-600 font-bold">
+                              ✗ {rejectedQty} {itemUnit} ({rejectionPercent}%)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Visual segmented bar */}
+                      <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                        <div 
+                          className="h-full bg-emerald-500 transition-all duration-300"
+                          style={{ width: `${targetQty > 0 ? (approvedQty / targetQty) * 100 : approvalPercent}%` }}
+                          title={`Approved: ${approvedQty} ${itemUnit}`}
+                        />
+                        <div 
+                          className="h-full bg-rose-500 transition-all duration-300"
+                          style={{ width: `${targetQty > 0 ? (rejectedQty / targetQty) * 100 : rejectionPercent}%` }}
+                          title={`Rejected: ${rejectedQty} ${itemUnit}`}
+                        />
+                      </div>
+                    </div>
                   )}
-                  {attachedDocCount > 0 && (
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-[#0B5FFF] bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800">
-                      <FolderOpen className="h-3 w-3" /> {attachedDocCount} {attachedDocCount === 1 ? 'Doc' : 'Docs'}
+                </div>
+
+                {/* Right Actions & Status */}
+                <div className="flex items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
+                  {/* Measure & Log Button */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMeasuringInspection(item);
+                    }}
+                    className="h-8 px-2.5 rounded-xl text-xs font-bold gap-1 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                  >
+                    <Ruler className="h-3.5 w-3.5" /> Measure / Quantities
+                  </Button>
+
+                  {/* Status Pills or Direct Buttons */}
+                  {item.status === 'Passed' && (
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                      <CheckCircle2 className="h-4 w-4" /> Passed
                     </span>
                   )}
+                  {item.status === 'Failed' && (
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800">
+                      <XCircle className="h-4 w-4" /> Failed (NCR)
+                    </span>
+                  )}
+                  {item.status === 'Pending Approval' && (
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Passed'); }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded-xl h-8 px-3 font-bold"
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Failed'); }}
+                        className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs rounded-xl h-8 px-3 font-bold"
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 hover:text-emerald-600 transition-colors">{item.title}</h3>
-                <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-                  <span>Location: <strong className="text-slate-700 dark:text-slate-300">{item.location}</strong></span>
-                  <span>Inspector: <strong className="text-slate-700 dark:text-slate-300">{item.inspector}</strong></span>
-                  <span>Date: <strong className="text-slate-700 dark:text-slate-300">{item.date}</strong></span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 shrink-0">
-                {item.status === 'Passed' && (
-                  <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                    <CheckCircle2 className="h-4 w-4" /> Passed
-                  </span>
-                )}
-                {item.status === 'Failed' && (
-                  <span className="flex items-center gap-1.5 text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800">
-                    <XCircle className="h-4 w-4" /> Failed (NCR)
-                  </span>
-                )}
-                {item.status === 'Pending Approval' && (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Passed'); }}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded-xl h-8 px-3"
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Failed'); }}
-                      className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs rounded-xl h-8 px-3"
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </Card>
-          );
-        })}
+              </Card>
+            );
+          })
+        )}
       </div>
+
+      {/* Measurement Modal for Card Actions */}
+      {measuringInspection && (
+        <QAMeasurementModal
+          inspection={measuringInspection}
+          isOpen={Boolean(measuringInspection)}
+          onClose={() => setMeasuringInspection(null)}
+          onSave={(updated) => {
+            updateQAInspection(updated);
+            setMeasuringInspection(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
+export default QualityModule;

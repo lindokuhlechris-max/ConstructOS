@@ -659,6 +659,38 @@ export interface PPEMaterialItem {
   unit: string;
 }
 
+export type QAMeasurementType =
+  | 'Quantity'
+  | 'Length'
+  | 'Area'
+  | 'Volume'
+  | 'Weight'
+  | 'Percentage'
+  | 'Thickness'
+  | 'Strength'
+  | 'Temperature'
+  | 'Pressure'
+  | 'Count'
+  | 'Checklist'
+  | 'Pass/Fail'
+  | 'Custom';
+
+export interface QAMeasurementRecord {
+  id: string;
+  itemDescription: string;
+  measurementType: QAMeasurementType;
+  unit: string;
+  targetOrRequired: number;
+  inspectedAmount: number;
+  approvedAmount: number;
+  rejectedAmount: number;
+  tolerance?: string;
+  remarks?: string;
+  status: 'Approved' | 'Partially Approved' | 'Rejected' | 'Pending Inspection';
+  inspectionDate?: string;
+  testedBy?: string;
+}
+
 export interface QAInspectionItem {
   id: string;
   projectId: string;
@@ -669,6 +701,17 @@ export interface QAInspectionItem {
   inspector: string;
   date: string;
   status: 'Passed' | 'Failed' | 'Pending Approval';
+  
+  // Measurement & Quality Inspection Scope
+  measurementType?: QAMeasurementType;
+  unit?: string;
+  targetQuantity?: number;
+  inspectedQuantity?: number;
+  approvedQuantity?: number;
+  rejectedQuantity?: number;
+  toleranceSpec?: string;
+  measurementItems?: QAMeasurementRecord[];
+
   ncrCode?: string;
   ncrDetails?: {
     ncrNumber: string;
