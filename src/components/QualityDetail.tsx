@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, CustomSelect } from './ui';
+import { QAActivityMultiSelectModal } from './quality/QAActivityMultiSelectModal';
 import { 
   ArrowLeft, 
   CheckCircle2, 
@@ -127,6 +128,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
   const [isNCRModalOpen, setIsNCRModalOpen] = useState(false);
   const [isAddMetricModalOpen, setIsAddMetricModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isActivitySelectModalOpen, setIsActivitySelectModalOpen] = useState(false);
 
   // Document Integration state
   const [isUploadDocModalOpen, setIsUploadDocModalOpen] = useState(false);
@@ -153,6 +155,8 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     documentNumber: inspection.documentNumber || '',
     referenceDrawingNumber: inspection.referenceDrawingNumber || '',
     activityId: inspection?.activityId,
+    linkedActivityId: inspection?.linkedActivityId || inspection?.activityId,
+    linkedActivityIds: inspection.linkedActivityIds || (inspection.activityId ? [inspection.activityId] : []),
     clientQCRepresentative: inspection.clientQCRepresentative || '',
     clientQCStatus: inspection.clientQCStatus || 'Pending Client Review',
     clientQCNotes: inspection.clientQCNotes || '',
@@ -302,7 +306,22 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     pass: true
   });
 
-  const linkedActivity = activities.find(a => a.id === (editForm?.activityId || inspection?.activityId));
+  const linkedActivityIds = useMemo(() => {
+    if (editForm.linkedActivityIds && editForm.linkedActivityIds.length > 0) {
+      return editForm.linkedActivityIds;
+    }
+    if (inspection.linkedActivityIds && inspection.linkedActivityIds.length > 0) {
+      return inspection.linkedActivityIds;
+    }
+    const single = editForm.activityId || inspection.activityId || inspection.linkedActivityId;
+    return single ? [single] : [];
+  }, [editForm.linkedActivityIds, editForm.activityId, inspection.linkedActivityIds, inspection.activityId, inspection.linkedActivityId]);
+
+  const linkedActivities = useMemo(() => {
+    return activities.filter(a => linkedActivityIds.includes(a.id));
+  }, [activities, linkedActivityIds]);
+
+  const linkedActivity = linkedActivities[0] || activities.find(a => a.id === (editForm?.activityId || inspection?.activityId));
   const linkedProject = projects.find(p => p.id === inspection.projectId);
 
   // Compute attached documents from Document Hub
@@ -350,7 +369,9 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       subcontractor: editForm.subcontractor !== undefined ? editForm.subcontractor : inspection.subcontractor,
       documentNumber: editForm.documentNumber !== undefined ? editForm.documentNumber : inspection.documentNumber,
       referenceDrawingNumber: editForm.referenceDrawingNumber !== undefined ? editForm.referenceDrawingNumber : inspection.referenceDrawingNumber,
-      activityId: editForm?.activityId,
+      linkedActivityIds: editForm.linkedActivityIds !== undefined ? editForm.linkedActivityIds : inspection.linkedActivityIds,
+      linkedActivityId: editForm.linkedActivityIds?.[0] || editForm.activityId || inspection.linkedActivityId,
+      activityId: editForm.linkedActivityIds?.[0] || editForm.activityId || inspection.activityId,
       clientQCRepresentative: editForm.clientQCRepresentative,
       clientQCStatus: editForm.clientQCStatus as any,
       clientQCNotes: editForm.clientQCNotes,
@@ -951,17 +972,79 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
               </div>
 
-              {/* Linked Construction Activity */}
-              {linkedActivity && (
-                <div className="bg-blue-50/50 dark:bg-blue-950/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30 flex justify-between items-center">
-                  <div>
-                    <span className="text-xs font-bold text-blue-700 dark:text-blue-300 block mb-0.5">Linked Construction Activity</span>
-                    <span className="font-bold text-slate-900 dark:text-white text-base">{linkedActivity.name}</span>
-                    <p className="text-xs text-slate-500 mt-1">Discipline: {linkedActivity.discipline} • Work Package: {linkedActivity.workPackage}</p>
+              {/* Linked Construction Activities */}
+              {linkedActivities.length > 0 ? (
+                <div className="bg-blue-50/50 dark:bg-blue-950/20 p-5 rounded-2xl border border-blue-100 dark:border-blue-900/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5 uppercase tracking-wider">
+                      <Layers className="h-4 w-4" /> Linked Construction Activities ({linkedActivities.length})
+                    </span>
+                    {canEditQuality && (
+                      <button
+                        type="button"
+                        onClick={() => setIsActivitySelectModalOpen(true)}
+                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                      >
+                        <Plus className="h-3 w-3" /> Manage Activities
+                      </button>
+                    )}
                   </div>
-                  <Badge variant="outline" className="bg-white dark:bg-slate-900">{linkedActivity.id}</Badge>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {linkedActivities.map(act => {
+                      const progressVal = act.progress ?? 0;
+                      return (
+                        <div key={act.id} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-blue-200/80 dark:border-blue-900/50 flex items-center justify-between gap-3 shadow-2xs">
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded">
+                                {act.id}
+                              </span>
+                              {act.discipline && (
+                                <span className="text-[10px] text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                  {act.discipline}
+                                </span>
+                              )}
+                            </div>
+                            <div className="font-bold text-slate-900 dark:text-white text-xs truncate">
+                              {act.name}
+                            </div>
+                            <div className="text-[11px] text-slate-500 truncate">
+                              {act.location || act.workPackage || 'Site wide'}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
+                              {progressVal}%
+                            </span>
+                            <div className="w-12 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mt-1">
+                              <div 
+                                className="h-full bg-blue-500 rounded-full" 
+                                style={{ width: `${Math.min(100, Math.max(0, progressVal))}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
+              ) : canEditQuality ? (
+                <div className="bg-slate-50 dark:bg-slate-850 p-4 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <Layers className="h-4 w-4 text-slate-400" />
+                    <span>No construction activities linked to this inspection.</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsActivitySelectModalOpen(true)}
+                    className="h-7 text-xs font-bold gap-1 rounded-xl"
+                  >
+                    <Plus className="h-3 w-3" /> Link Activities
+                  </Button>
+                </div>
+              ) : null}
 
               {/* QA Approval Clearance Stamp */}
               {inspection.status === 'Passed' && (
@@ -2093,6 +2176,74 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 />
               </div>
 
+              {/* Linked Activities Multi-Select Field */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Linked Construction Activities ({(editForm.linkedActivityIds || []).length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsActivitySelectModalOpen(true)}
+                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="h-3 w-3" /> Select Activities
+                  </button>
+                </div>
+
+                <div 
+                  onClick={() => setIsActivitySelectModalOpen(true)}
+                  className="min-h-10 p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 flex items-center flex-wrap gap-1.5 cursor-pointer hover:border-emerald-500 transition-colors"
+                >
+                  {(!editForm.linkedActivityIds || editForm.linkedActivityIds.length === 0) ? (
+                    <span className="text-xs text-slate-400 px-2 py-1 flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-slate-400" />
+                      Click to select & link activities...
+                    </span>
+                  ) : (
+                    <>
+                      {editForm.linkedActivityIds.map(actId => {
+                        const act = activities.find(a => a.id === actId);
+                        return (
+                          <span
+                            key={actId}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800 group shadow-2xs"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <span className="font-mono font-bold">{actId}</span>
+                            {act?.name && <span className="truncate max-w-[140px]">{act.name}</span>}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditForm(prev => ({
+                                  ...prev,
+                                  linkedActivityIds: (prev.linkedActivityIds || []).filter(id => id !== actId)
+                                }));
+                              }}
+                              className="p-0.5 rounded-md hover:bg-emerald-200/60 dark:hover:bg-emerald-900 text-emerald-600 dark:text-emerald-400 hover:text-rose-600"
+                              title="Remove activity link"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsActivitySelectModalOpen(true);
+                        }}
+                        className="text-[11px] font-bold text-emerald-600 bg-emerald-100/60 dark:bg-emerald-950/40 hover:bg-emerald-200/80 px-2 py-0.5 rounded-lg border border-emerald-300 dark:border-emerald-800 flex items-center gap-1"
+                      >
+                        <Plus className="h-3 w-3" /> Add More
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Category</label>
@@ -2516,6 +2667,33 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
           }}
         />
       )}
+
+      {/* Activity Multi-Select Modal */}
+      <QAActivityMultiSelectModal
+        isOpen={isActivitySelectModalOpen}
+        onClose={() => setIsActivitySelectModalOpen(false)}
+        selectedActivityIds={editForm.linkedActivityIds || linkedActivityIds}
+        onApply={(ids) => {
+          setEditForm(prev => ({
+            ...prev,
+            linkedActivityIds: ids,
+            linkedActivityId: ids[0] || undefined,
+            activityId: ids[0] || undefined
+          }));
+          // If we are not in edit modal, directly persist the update
+          if (!isEditModalOpen) {
+            onSave({
+              ...inspection,
+              linkedActivityIds: ids,
+              linkedActivityId: ids[0] || undefined,
+              activityId: ids[0] || undefined
+            });
+          }
+        }}
+        activities={activities}
+        projectId={inspection.projectId}
+        projectName={linkedProject?.name}
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   Plus, 
   CheckCircle2, 
   XCircle, 
+  X,
   AlertCircle, 
   ArrowLeft, 
   FileText, 
@@ -33,6 +34,7 @@ import { QAInspectionItem, QAMeasurementType } from '../../types';
 import { QualityDetail } from '../QualityDetail';
 import { QAMeasurementModal } from '../QAMeasurementModal';
 import { QualityTotalsAnalytics } from '../QualityTotalsAnalytics';
+import { QAActivityMultiSelectModal } from '../quality/QAActivityMultiSelectModal';
 
 interface QualityModuleProps {
   onBack: () => void;
@@ -90,6 +92,8 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   const [title, setTitle] = useState('');
   const [projectId, setProjectId] = useState(projects[0]?.id || '');
   const [activityId, setActivityId] = useState(activities[0]?.id || '');
+  const [selectedActivityIds, setSelectedActivityIds] = useState<string[]>(activities[0]?.id ? [activities[0].id] : []);
+  const [isActivitySelectModalOpen, setIsActivitySelectModalOpen] = useState(false);
   const [location, setLocation] = useState('');
   const [inspector, setInspector] = useState('David Smith (QA Engineer)');
   const [category, setCategory] = useState('Earthworks');
@@ -155,7 +159,9 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     const newItem: QAInspectionItem = {
       id: `QA-${Math.floor(200 + Math.random() * 800)}`,
       projectId: projectId || projects[0]?.id || '',
-      activityId,
+      activityId: selectedActivityIds[0] || activityId || undefined,
+      linkedActivityId: selectedActivityIds[0] || activityId || undefined,
+      linkedActivityIds: selectedActivityIds.length > 0 ? selectedActivityIds : (activityId ? [activityId] : []),
       title,
       location: location || 'Site Wide',
       inspector: inspector || 'QA Inspector',
@@ -200,6 +206,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     setSubcontractor('');
     setReferenceDrawingNumber('');
     setClientQCRepresentative('');
+    setSelectedActivityIds(activities[0]?.id ? [activities[0].id] : []);
     setTargetQuantity('100');
     setInspectedQuantity('0');
     setApprovedQuantity('0');
@@ -384,16 +391,67 @@ export function QualityModule({ onBack }: QualityModuleProps) {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">Linked Activity</label>
-                <select
-                  value={activityId}
-                  onChange={e => setActivityId(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Linked Activities ({selectedActivityIds.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsActivitySelectModalOpen(true)}
+                    className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="h-3 w-3" /> Select Activities
+                  </button>
+                </div>
+
+                <div 
+                  onClick={() => setIsActivitySelectModalOpen(true)}
+                  className="min-h-10 p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 flex items-center flex-wrap gap-1.5 cursor-pointer hover:border-emerald-500 transition-colors"
                 >
-                  {activities.map(a => (
-                    <option key={a.id} value={a.id}>{a.id} - {a.name}</option>
-                  ))}
-                </select>
+                  {selectedActivityIds.length === 0 ? (
+                    <span className="text-xs text-slate-400 px-2 py-1 flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-slate-400" />
+                      Click to select & link activities to this inspection...
+                    </span>
+                  ) : (
+                    <>
+                      {selectedActivityIds.map(actId => {
+                        const act = activities.find(a => a.id === actId);
+                        return (
+                          <span
+                            key={actId}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800 group shadow-2xs"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <span className="font-mono font-bold">{actId}</span>
+                            {act?.name && <span className="truncate max-w-[120px]">{act.name}</span>}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedActivityIds(prev => prev.filter(id => id !== actId));
+                              }}
+                              className="p-0.5 rounded-md hover:bg-emerald-200/60 dark:hover:bg-emerald-900 text-emerald-600 dark:text-emerald-400 hover:text-rose-600"
+                              title="Remove activity link"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsActivitySelectModalOpen(true);
+                        }}
+                        className="text-[11px] font-bold text-emerald-600 bg-emerald-100/60 dark:bg-emerald-950/40 hover:bg-emerald-200/80 px-2 py-0.5 rounded-lg border border-emerald-300 dark:border-emerald-800 flex items-center gap-1"
+                      >
+                        <Plus className="h-3 w-3" /> Add More
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -1125,6 +1183,22 @@ export function QualityModule({ onBack }: QualityModuleProps) {
           }}
         />
       )}
+
+      {/* Activity Multi-Select Modal */}
+      <QAActivityMultiSelectModal
+        isOpen={isActivitySelectModalOpen}
+        onClose={() => setIsActivitySelectModalOpen(false)}
+        selectedActivityIds={selectedActivityIds}
+        onApply={(ids) => {
+          setSelectedActivityIds(ids);
+          if (ids.length > 0) {
+            setActivityId(ids[0]);
+          }
+        }}
+        activities={activities}
+        projectId={projectId}
+        projectName={projects.find(p => p.id === projectId)?.name}
+      />
     </div>
   );
 }

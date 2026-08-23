@@ -793,6 +793,8 @@ export interface QAInspectionItem {
   clientQCSignoffDate?: string;
   clientQCNotes?: string;
   linkedDocumentIds?: string[];
+  linkedActivityId?: string;
+  linkedActivityIds?: string[];
   comments?: Comment[];
   notes?: string;
 }
