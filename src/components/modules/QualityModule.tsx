@@ -52,6 +52,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     activities, 
     projects, 
     documents,
+    employees,
     addQAInspection, 
     updateQAInspection, 
     deleteQAInspection, 
@@ -60,6 +61,18 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   } = useAppContext();
 
   const canEditQuality = hasPermission('quality');
+
+  const employeeInspectorOptions = (employees && employees.length > 0)
+    ? employees.map(emp => ({
+        value: `${emp.firstName} ${emp.lastName}`.trim(),
+        label: `${emp.firstName} ${emp.lastName}${emp.position ? ` — ${emp.position}` : ''}${emp.department ? ` (${emp.department})` : ''}`
+      }))
+    : [
+        { value: 'Advocate', label: 'Advocate (QA/QC Inspector)' },
+        { value: 'David Smith (QA Engineer)', label: 'David Smith (Lead QA Engineer)' },
+        { value: 'Michael Moyo', label: 'Michael Moyo (Civil QC Foreman)' },
+        { value: 'Lerato Khumalo', label: 'Lerato Khumalo (QC Inspector)' }
+      ];
 
   const [activeView, setActiveView] = useState<'inspections' | 'analytics'>('inspections');
   const [selectedInspection, setSelectedInspection] = useState<QAInspectionItem | null>(null);
@@ -360,12 +373,13 @@ export function QualityModule({ onBack }: QualityModuleProps) {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">Inspector Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Advocate (QA Inspector)"
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">Inspector (QC/QA) *</label>
+                <CustomSelect
                   value={inspector}
-                  onChange={e => setInspector(e.target.value)}
+                  onChange={val => setInspector(val)}
+                  options={employeeInspectorOptions}
+                  placeholder="Select QC/QA Inspector..."
+                  customPlaceholder="Enter custom inspector name..."
                   className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>

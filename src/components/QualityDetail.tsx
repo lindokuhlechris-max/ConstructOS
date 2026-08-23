@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from './ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, CustomSelect } from './ui';
 import { 
   ArrowLeft, 
   CheckCircle2, 
@@ -71,8 +71,20 @@ interface QualityDetailProps {
 
 export function QualityDetail({ inspection, onSave, onClose, onDelete }: QualityDetailProps) {
   const navigate = useNavigate();
-  const { activities, projects, documents, addDocument, updateDocument, userRole, currentUserProfile } = useAppContext();
+  const { activities, projects, documents, employees, addDocument, updateDocument, userRole, currentUserProfile } = useAppContext();
   const canEditQuality = canUserEditSection(currentUserProfile, 'quality');
+
+  const employeeInspectorOptions = (employees && employees.length > 0)
+    ? employees.map(emp => ({
+        value: `${emp.firstName} ${emp.lastName}`.trim(),
+        label: `${emp.firstName} ${emp.lastName}${emp.position ? ` — ${emp.position}` : ''}${emp.department ? ` (${emp.department})` : ''}`
+      }))
+    : [
+        { value: 'Advocate', label: 'Advocate (QA/QC Inspector)' },
+        { value: 'David Smith (QA Engineer)', label: 'David Smith (Lead QA Engineer)' },
+        { value: 'Michael Moyo', label: 'Michael Moyo (Civil QC Foreman)' },
+        { value: 'Lerato Khumalo', label: 'Lerato Khumalo (QC Inspector)' }
+      ];
   const [activeTab, setActiveTab] = useState<'overview' | 'measurements' | 'ncr' | 'tests' | 'documents' | 'photos'>('overview');
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [isMeasurementModalOpen, setIsMeasurementModalOpen] = useState(false);
@@ -1981,7 +1993,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       {/* EDIT INSPECTION MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg shadow-2xl border-slate-200 dark:border-slate-800">
+          <Card className="w-full max-w-2xl shadow-2xl border-slate-200 dark:border-slate-800">
             <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Edit3 className="h-5 w-5 text-[#0B5FFF]" /> Edit QA/QC Inspection
@@ -2025,11 +2037,13 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Inspector Name</label>
-                  <input
-                    type="text"
-                    value={editForm.inspector}
-                    onChange={e => setEditForm({ ...editForm, inspector: e.target.value })}
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Inspector (QC/QA) *</label>
+                  <CustomSelect
+                    value={editForm.inspector || ''}
+                    onChange={val => setEditForm({ ...editForm, inspector: val })}
+                    options={employeeInspectorOptions}
+                    placeholder="Select QC/QA Inspector..."
+                    customPlaceholder="Enter custom inspector name..."
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
                   />
                 </div>
@@ -2154,7 +2168,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       {/* APPROVE QA SIGNOFF MODAL */}
       {isSignoffModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg shadow-2xl border-slate-200 dark:border-slate-800">
+          <Card className="w-full max-w-xl shadow-2xl border-slate-200 dark:border-slate-800">
             <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Digital QA Clearance Sign-Off
@@ -2164,7 +2178,14 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
             <form onSubmit={handleApproveInspection} className="p-6 space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Approving QA Engineer *</label>
-                <input type="text" required value={approvedBy} onChange={e => setApprovedBy(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm" />
+                <CustomSelect
+                  value={approvedBy}
+                  onChange={val => setApprovedBy(val)}
+                  options={employeeInspectorOptions}
+                  placeholder="Select Approving QA Engineer..."
+                  customPlaceholder="Enter custom engineer name..."
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Clearance Notes & Verification Summary</label>
@@ -2182,7 +2203,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       {/* ISSUE NCR MODAL */}
       {isNCRModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg shadow-2xl border-slate-200 dark:border-slate-800">
+          <Card className="w-full max-w-xl shadow-2xl border-slate-200 dark:border-slate-800">
             <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 text-rose-600">
                 <AlertTriangle className="h-5 w-5" /> Issue Non-Conformance Report (NCR)

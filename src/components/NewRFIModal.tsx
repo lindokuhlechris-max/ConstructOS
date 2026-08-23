@@ -45,7 +45,19 @@ const DISCIPLINES = [
 ];
 
 export function NewRFIModal({ isOpen, onClose, initialRFI }: NewRFIModalProps) {
-  const { projects, activities, addRFI, updateRFI, currentUserProfile, userRole } = useAppContext();
+  const { projects, activities, employees, addRFI, updateRFI, currentUserProfile, userRole } = useAppContext();
+
+  const employeeOptions = (employees && employees.length > 0)
+    ? employees.map(emp => ({
+        value: `${emp.firstName} ${emp.lastName}`.trim(),
+        label: `${emp.firstName} ${emp.lastName}${emp.position ? ` — ${emp.position}` : ''}`
+      }))
+    : [
+        { value: 'David Smith (Lead QA Consultant)', label: 'David Smith (Lead QA Consultant)' },
+        { value: 'Advocate', label: 'Advocate (QA/QC Inspector)' },
+        { value: 'Michael Moyo', label: 'Michael Moyo (Civil QC Foreman)' },
+        { value: 'Lerato Khumalo', label: 'Lerato Khumalo (QC Inspector)' }
+      ];
 
   const [rfiNumber, setRfiNumber] = useState(
     initialRFI?.rfiNumber || `WIR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`
@@ -252,11 +264,12 @@ export function NewRFIModal({ isOpen, onClose, initialRFI }: NewRFIModalProps) {
 
             <div>
               <label className="text-[11px] font-bold text-slate-500 block mb-1">Assigned QA Reviewer / Consultant</label>
-              <input
-                type="text"
-                placeholder="e.g. David Smith (Lead QA Consultant)"
+              <CustomSelect
                 value={assignedReviewer}
-                onChange={e => setAssignedReviewer(e.target.value)}
+                onChange={val => setAssignedReviewer(val)}
+                options={employeeOptions}
+                placeholder="Select QA Reviewer..."
+                customPlaceholder="Enter custom reviewer name..."
                 className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold outline-none"
               />
             </div>
