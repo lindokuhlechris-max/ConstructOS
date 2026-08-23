@@ -1186,11 +1186,15 @@ ${subtaskSummaryLines}
       {/* Top Header Bar (MD3 Top App Bar style) */}
       <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-3">
-          {onClose && (
-            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-xl">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          )}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => onClose ? onClose() : (window.history.length > 1 ? navigate(-1) : navigate('/activities'))} 
+            className="rounded-xl"
+            title="Go back to previous page"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-extrabold tracking-widest text-[#0B5FFF] dark:text-blue-400 uppercase">

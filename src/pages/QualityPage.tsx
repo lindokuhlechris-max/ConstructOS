@@ -7,7 +7,7 @@ export function QualityPage() {
 
   return (
     <div className="w-full h-full flex flex-col overflow-y-auto">
-      <QualityModule onBack={() => navigate('/')} />
+      <QualityModule onBack={() => window.history.length > 1 ? navigate(-1) : navigate('/')} />
     </div>
   );
 }

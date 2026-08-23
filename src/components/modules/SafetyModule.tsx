@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../ui';
 import { AlertTriangle, Plus, ShieldCheck, CheckCircle2, ArrowLeft, HeartPulse, FileText } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
@@ -9,6 +10,7 @@ interface SafetyModuleProps {
 }
 
 export function SafetyModule({ onBack }: SafetyModuleProps) {
+  const navigate = useNavigate();
   const { safetyIncidents, addSafetyIncident, updateSafetyIncident, projects } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
 
@@ -80,7 +82,7 @@ export function SafetyModule({ onBack }: SafetyModuleProps) {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" onClick={onBack} className="rounded-xl">
+          <Button variant="outline" size="icon" onClick={() => onBack ? onBack() : (window.history.length > 1 ? navigate(-1) : navigate('/'))} className="rounded-xl" title="Go back to previous page">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

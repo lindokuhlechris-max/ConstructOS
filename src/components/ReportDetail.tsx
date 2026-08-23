@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, CustomSelect, ProgressBar } from './ui';
 import { 
   ArrowLeft, 
@@ -49,6 +50,7 @@ interface ReportDetailProps {
 }
 
 export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetailProps) {
+  const navigate = useNavigate();
   const { activities, labourLogs, safetyIncidents, equipment, materialReceipts, projects, employees = [], currentUserProfile } = useAppContext();
 
   // Active Tab: 'overview' | 'activities' | 'manpower' | 'equipment' | 'safety' | 'attachments'
@@ -109,8 +111,9 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full">
         <div className="flex items-center gap-4">
           <button
-            onClick={onClose}
+            onClick={() => onClose ? onClose() : (window.history.length > 1 ? navigate(-1) : navigate('/reports'))}
             className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition-colors shrink-0"
+            title="Go back to previous page"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>

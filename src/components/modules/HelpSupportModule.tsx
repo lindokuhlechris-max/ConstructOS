@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../ui';
 import { 
   ArrowLeft, 
@@ -27,6 +28,7 @@ interface HelpSupportModuleProps {
 }
 
 export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
+  const navigate = useNavigate();
   const { isOffline, lastSyncedAt, userRole, currentUserProfile } = useAppContext();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [feedbackSent, setFeedbackSent] = useState(false);
@@ -70,7 +72,7 @@ export function HelpSupportModule({ onBack }: HelpSupportModuleProps) {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" onClick={onBack} className="rounded-xl h-10 w-10">
+          <Button variant="outline" size="icon" onClick={() => onBack ? onBack() : (window.history.length > 1 ? navigate(-1) : navigate('/'))} className="rounded-xl h-10 w-10" title="Go back to previous page">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

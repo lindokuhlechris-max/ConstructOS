@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, Button, Badge } from './ui';
 import { 
   Building2, Bed, Users, Zap, Droplets, Flame, Wifi, 
@@ -29,6 +30,7 @@ interface AccommodationDetailProps {
 }
 
 export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: AccommodationDetailProps) {
+  const navigate = useNavigate();
   const { 
     accommodationUtilities, 
     accommodationPayments,
@@ -442,9 +444,9 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
         <div className="flex items-start sm:items-center gap-4">
           <button
-            onClick={onClose}
+            onClick={() => onClose ? onClose() : (window.history.length > 1 ? navigate(-1) : navigate('/accommodation'))}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
-            title="Back to Accommodation Hub"
+            title="Go back to previous page"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '../ui';
 import { ArrowLeft, Building2, Edit3, Save, X, Globe, Mail, Phone, MapPin, ShieldCheck, Rocket, Eye, Award } from 'lucide-react';
 import { Button } from '../ui';
@@ -34,6 +35,7 @@ const defaultCompanyDetails: CompanyDetails = {
 };
 
 export function CompanyModule({ onBack }: CompanyModuleProps) {
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [newValueInput, setNewValueInput] = useState('');
   
@@ -83,8 +85,9 @@ export function CompanyModule({ onBack }: CompanyModuleProps) {
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
         <div className="flex items-center gap-4">
           <button
-            onClick={onBack}
+            onClick={() => onBack ? onBack() : (window.history.length > 1 ? navigate(-1) : navigate('/'))}
             className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+            title="Go back to previous page"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>

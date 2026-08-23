@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MaterialInventory, MaterialCertificate, MaterialDocument, MaterialReceipt, MaterialUsage } from '../types';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from './ui';
 import { useAppContext } from '../context/AppContext';
@@ -44,6 +45,7 @@ interface MaterialDetailProps {
 }
 
 export function MaterialDetail({ material: initialMaterial, onSave, onClose, onDelete, onDuplicate }: MaterialDetailProps) {
+  const navigate = useNavigate();
   const { 
     materials, currency, 
     materialReceipts, 
@@ -383,11 +385,9 @@ export function MaterialDetail({ material: initialMaterial, onSave, onClose, onD
       {/* Header Action Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-3">
-          {onClose && (
-            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-xl shrink-0">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          )}
+          <Button variant="ghost" size="icon" onClick={() => onClose ? onClose() : (window.history.length > 1 ? navigate(-1) : navigate('/materials'))} className="rounded-xl shrink-0" title="Go back to previous page">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-extrabold tracking-widest text-[#0B5FFF] uppercase">

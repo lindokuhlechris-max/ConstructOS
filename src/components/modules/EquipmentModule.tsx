@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, Button, Badge, CustomSelect } from '../ui';
 import { Truck, Plus, Wrench, Fuel, Clock, CheckCircle2, ArrowLeft, Edit3, Trash2, ClipboardList, X, Building2, Handshake, CircleDollarSign, Calendar } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
@@ -11,6 +12,7 @@ interface EquipmentModuleProps {
 }
 
 export function EquipmentModule({ onBack }: EquipmentModuleProps) {
+  const navigate = useNavigate();
   const { equipment, equipmentLogs, addEquipment, updateEquipment, deleteEquipment, addEquipmentLog } = useAppContext();
 
   const [isAdding, setIsAdding] = useState(false);
@@ -228,7 +230,7 @@ export function EquipmentModule({ onBack }: EquipmentModuleProps) {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" onClick={onBack} className="rounded-xl">
+          <Button variant="outline" size="icon" onClick={() => onBack ? onBack() : (window.history.length > 1 ? navigate(-1) : navigate('/'))} className="rounded-xl" title="Go back to previous page">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

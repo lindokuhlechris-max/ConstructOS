@@ -7,7 +7,7 @@ export function SettingsPage() {
 
   return (
     <div className="w-full h-full flex flex-col overflow-y-auto">
-      <SettingsModule onBack={() => navigate('/')} />
+      <SettingsModule onBack={() => window.history.length > 1 ? navigate(-1) : navigate('/')} />
     </div>
   );
 }

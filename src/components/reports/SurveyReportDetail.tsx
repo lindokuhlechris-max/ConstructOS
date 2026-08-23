@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../ui';
 import { 
   Compass, 
@@ -37,6 +38,7 @@ interface SurveyReportDetailProps {
 }
 
 export function SurveyReportDetail({ report, onClose, onEdit, onDelete, onSave }: SurveyReportDetailProps) {
+  const navigate = useNavigate();
   const { userRole, currentUserProfile } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Pass' | 'Out of Tolerance'>('All');
@@ -121,8 +123,9 @@ export function SurveyReportDetail({ report, onClose, onEdit, onDelete, onSave }
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">
               <button 
-                onClick={onClose}
+                onClick={() => onClose ? onClose() : (window.history.length > 1 ? navigate(-1) : navigate('/reports'))}
                 className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition-colors mr-2"
+                title="Go back to previous page"
               >
                 <ArrowLeft className="h-4 w-4" /> Back to Reports
               </button>

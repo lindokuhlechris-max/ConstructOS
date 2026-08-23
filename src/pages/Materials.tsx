@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, CustomSelect } from '../components/ui';
 import { Upload, UserCheck, Camera, Package, Search, Filter, Plus, ArrowLeft, ArrowDownToLine, ArrowUpFromLine, AlertCircle, Edit3, Trash2, X, Eye, ShoppingCart, AlertTriangle, Bell, Send, CheckCircle2, Zap, Printer, FileSpreadsheet, Download, Copy, PieChart as PieChartIcon } from 'lucide-react';
@@ -26,7 +27,12 @@ import { exportMaterialsToCSV, exportMaterialRequestsToCSV } from '../lib/csvExp
 import { generateRequestsPDF, generateCostsPDF } from '../lib/pdfMaterials';
 import { exportCsvFile } from '../lib/fileExportService';
 
-export function Materials({ onBack }: { onBack?: () => void } = {}) {
+interface MaterialsProps {
+  onBack?: () => void;
+}
+
+export function Materials({ onBack }: MaterialsProps = {}) {
+  const navigate = useNavigate();
   const { 
     materials, 
     addMaterial,
@@ -757,14 +763,13 @@ export function Materials({ onBack }: { onBack?: () => void } = {}) {
 
   return (
     <div className="p-4 md:p-6 w-full h-full space-y-6 pb-24 relative">
-      {onBack && (
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back to Modules
-        </button>
-      )}
+      <button
+        onClick={() => onBack ? onBack() : (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+        className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+        title="Go back to previous page"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back to Modules
+      </button>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">

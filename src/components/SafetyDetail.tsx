@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, CustomSelect } from './ui';
 import { 
   ArrowLeft, 
@@ -34,6 +35,7 @@ interface SafetyDetailProps {
 }
 
 export function SafetyDetail({ incident, onSave, onClose, onDelete }: SafetyDetailProps) {
+  const navigate = useNavigate();
   const { userRole, employees, currentUserProfile } = useAppContext();
   const canEditSafety = canUserEditSection(currentUserProfile, 'safety');
 
@@ -176,8 +178,9 @@ export function SafetyDetail({ incident, onSave, onClose, onDelete }: SafetyDeta
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full">
         <div className="flex items-center gap-4">
           <button
-            onClick={onClose}
+            onClick={() => onClose ? onClose() : (window.history.length > 1 ? navigate(-1) : navigate('/safety'))}
             className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition-colors shrink-0"
+            title="Go back to previous page"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>

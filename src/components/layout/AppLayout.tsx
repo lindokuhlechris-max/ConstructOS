@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { App as CapApp } from '@capacitor/app';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { 
   LayoutDashboard, 
@@ -81,11 +82,93 @@ export function AppLayout() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsSideMenuOpen(false);
+        setShowProfileMenu(false);
+        setIsProjectExpanded(false);
+        setIsWeatherExpanded(false);
+        setShowCreateProfileModal(false);
+        setShowProjectDetails(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Android Capacitor hardware back button and smart navigation handler
+  useEffect(() => {
+    let backListenerHandle: any;
+
+    const setupBackButton = async () => {
+      try {
+        backListenerHandle = await CapApp.addListener('backButton', ({ canGoBack }) => {
+          // 1. Close open drawers/menus/popups in AppLayout
+          if (isSideMenuOpen) {
+            setIsSideMenuOpen(false);
+            return;
+          }
+          if (showProfileMenu) {
+            setShowProfileMenu(false);
+            return;
+          }
+          if (isProjectExpanded) {
+            setIsProjectExpanded(false);
+            return;
+          }
+          if (isWeatherExpanded) {
+            setIsWeatherExpanded(false);
+            return;
+          }
+          if (showCreateProfileModal) {
+            setShowCreateProfileModal(false);
+            return;
+          }
+          if (showProjectDetails) {
+            setShowProjectDetails(false);
+            return;
+          }
+          if (activeReminderToast) {
+            setActiveReminderToast(null);
+            return;
+          }
+
+          // 2. Dismiss any active modal close button if visible
+          const activeCloseModalBtn = document.querySelector<HTMLButtonElement>(
+            '[data-dialog-close], [aria-label="Close dialog"], [aria-label="Close modal"]'
+          );
+          if (activeCloseModalBtn) {
+            activeCloseModalBtn.click();
+            return;
+          }
+
+          // 3. Fallback to navigating back to previous / recent page
+          if (canGoBack || (window.history.state && window.history.state.idx > 0) || window.history.length > 1) {
+            navigate(-1);
+          } else {
+            // If already on the root dashboard with no history, minimize app
+            CapApp.minimizeApp();
+          }
+        });
+      } catch (e) {
+        console.warn('Capacitor App backButton listener init:', e);
+      }
+    };
+
+    setupBackButton();
+
+    return () => {
+      if (backListenerHandle && typeof backListenerHandle.remove === 'function') {
+        backListenerHandle.remove();
+      }
+    };
+  }, [
+    isSideMenuOpen,
+    showProfileMenu,
+    isProjectExpanded,
+    isWeatherExpanded,
+    showCreateProfileModal,
+    showProjectDetails,
+    activeReminderToast,
+    navigate
+  ]);
 
   // Initialize Service Worker and set up periodic reminder checking
   useEffect(() => {

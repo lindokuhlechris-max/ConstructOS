@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, Button, Badge } from '../ui';
 import { 
   Building2, Plus, Bed, Users, Zap, Droplets, Flame, Wifi, 
@@ -21,6 +22,7 @@ interface AccommodationModuleProps {
 }
 
 export function AccommodationModule({ onBack }: AccommodationModuleProps) {
+  const navigate = useNavigate();
   const { 
     accommodations, 
     accommodationUtilities, 
@@ -533,15 +535,13 @@ export function AccommodationModule({ onBack }: AccommodationModuleProps) {
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
-              title="Back to Dashboard"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-          )}
+          <button
+            onClick={() => onBack ? onBack() : (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+            title="Go back to previous page"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
           <div>
             <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Home className="h-6 w-6 text-[#0B5FFF]" />

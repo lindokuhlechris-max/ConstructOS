@@ -520,7 +520,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       {/* Top Navigation & Status Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200">
+          <Button variant="ghost" size="icon" onClick={() => onClose ? onClose() : (window.history.length > 1 ? navigate(-1) : navigate('/quality'))} className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200" title="Go back to previous page">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
