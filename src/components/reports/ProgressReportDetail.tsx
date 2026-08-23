@@ -22,6 +22,7 @@ import {
 import { UniversalReportItem, WeeklyProgressReportData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { UniversalReportPrintStudioModal } from './UniversalReportPrintStudioModal';
+import { ReportAttachmentSection } from './ReportAttachmentSection';
 
 interface ProgressReportDetailProps {
   report: UniversalReportItem<WeeklyProgressReportData>;
@@ -282,6 +283,25 @@ export function ProgressReportDetail({ report, onClose, onEdit, onDelete, onSave
           </div>
         </div>
       )}
+
+      {/* Attached Documents and Site Photos */}
+      <ReportAttachmentSection
+        attachments={report.attachments}
+        photos={report.photos}
+        currentUser={currentUserProfile?.name || 'Progress Lead'}
+        readOnly={!onSave}
+        title="Weekly Progress Documents & Aerial Photos"
+        description="Attach drone orthomosaics, site progress photos, contractor submittal documents, and lookahead schedule sheets."
+        onChange={(updatedAttachments, updatedPhotos) => {
+          if (onSave) {
+            onSave({
+              ...report,
+              attachments: updatedAttachments,
+              photos: updatedPhotos
+            });
+          }
+        }}
+      />
 
       {/* Multi-Signatory Sign-Off Sheet */}
       <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">

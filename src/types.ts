@@ -1057,11 +1057,23 @@ export interface DailyReport {
   labourLogged?: { name: string; role: string; hours: number }[];
   equipmentLogged?: { equipmentId: string; hours: number; status: string }[];
   photos?: string[];
+  attachments?: ReportAttachment[];
   supervisorNotes?: string;
   pinnedSubtaskMap?: Record<string, 'all' | string[]>;
   activityProgress?: Record<string, { dailyQuantity?: number; unit?: string; notes?: string; completedSubtasks?: string[] }>;
   createdAt?: string;
   status?: string;
+}
+
+export interface ReportAttachment {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  size?: number;
+  caption?: string;
+  uploadedBy?: string;
+  uploadedAt?: string;
 }
 
 export interface EmployeeCertificate {
@@ -1616,13 +1628,8 @@ export interface UniversalReportItem<TData = any> {
   // Domain Specific Typed Payload
   data: TData;
 
-  attachments?: {
-    id: string;
-    name: string;
-    url: string;
-    type: string;
-    size?: number;
-  }[];
+  attachments?: ReportAttachment[];
+  photos?: string[];
 
   signoffs?: ReportSignoff[];
   tags?: string[];

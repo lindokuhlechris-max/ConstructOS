@@ -27,6 +27,7 @@ import {
 import { UniversalReportItem, FinanceReportData, SurveyReportData, FleetReportData, MaterialsReportData, AccommodationReportData, CustomReportData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
 import { UniversalReportPrintStudioModal } from './UniversalReportPrintStudioModal';
+import { ReportAttachmentSection } from './ReportAttachmentSection';
 
 interface UniversalReportDetailProps {
   report: UniversalReportItem;
@@ -471,6 +472,23 @@ export function UniversalReportDetail({ report, onClose, onEdit, onDelete, onSav
           </p>
         </div>
       )}
+
+      {/* Attached Documents and Site Photos */}
+      <ReportAttachmentSection
+        attachments={report.attachments}
+        photos={report.photos}
+        currentUser={currentUserProfile?.name || 'Inspector'}
+        readOnly={!onSave}
+        onChange={(updatedAttachments, updatedPhotos) => {
+          if (onSave) {
+            onSave({
+              ...report,
+              attachments: updatedAttachments,
+              photos: updatedPhotos
+            });
+          }
+        }}
+      />
 
       {/* Multi-Signatory Sign-Off Sheet */}
       <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">

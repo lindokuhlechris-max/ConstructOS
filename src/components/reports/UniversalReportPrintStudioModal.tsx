@@ -36,7 +36,8 @@ import {
   QrCode,
   Sliders,
   Type,
-  Palette
+  Palette,
+  Paperclip
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../ui';
 import { DailyReport, UniversalReportItem, Activity, SubTask } from '../../types';
@@ -95,6 +96,7 @@ export function UniversalReportPrintStudioModal({
   const [includeEnvironment, setIncludeEnvironment] = useState<boolean>(true);
   const [includeDiaryNarrative, setIncludeDiaryNarrative] = useState<boolean>(true);
   const [includeWorkforceMachinery, setIncludeWorkforceMachinery] = useState<boolean>(true);
+  const [includeAttachments, setIncludeAttachments] = useState<boolean>(true);
   const [includeSignoffs, setIncludeSignoffs] = useState<boolean>(true);
   const [includeVerificationQr, setIncludeVerificationQr] = useState<boolean>(true);
 
@@ -714,6 +716,16 @@ export function UniversalReportPrintStudioModal({
                 )}
 
                 <label className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 cursor-pointer">
+                  <span>Attached Documents & Site Photos</span>
+                  <input
+                    type="checkbox"
+                    checked={includeAttachments}
+                    onChange={e => setIncludeAttachments(e.target.checked)}
+                    className="rounded text-[#0B5FFF] h-4 w-4"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 cursor-pointer">
                   <span>Formal Sign-Off & Verification Box</span>
                   <input
                     type="checkbox"
@@ -996,7 +1008,68 @@ export function UniversalReportPrintStudioModal({
                   </div>
                 )}
 
-                {/* 6. Multi-Party Formal Sign-Off Matrix */}
+                {/* 6. Attached Documents & Site Photos Preview */}
+                {includeAttachments && ((report.attachments && report.attachments.length > 0) || (report.photos && report.photos.length > 0)) && (
+                  <div className="space-y-3 pt-2 border-t border-slate-200">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                        <Paperclip className="h-4 w-4 text-blue-600" />
+                        <span>Attached Site Evidence, Documents & Photos</span>
+                      </h4>
+                      <span className="text-[10px] font-mono text-slate-500 font-bold">
+                        {(report.attachments?.length || 0) + (report.photos?.length || 0)} Attachments
+                      </span>
+                    </div>
+
+                    {/* Photos Grid in Print Sheet */}
+                    {((report.photos && report.photos.length > 0) || (report.attachments && report.attachments.some(a => a.type.startsWith('image/')))) && (
+                      <div className="grid grid-cols-3 gap-2.5">
+                        {(report.attachments?.filter(a => a.type.startsWith('image/')) || []).map((att, aIdx) => (
+                          <div key={att.id || aIdx} className="rounded-lg border border-slate-200 overflow-hidden bg-slate-100">
+                            <img src={att.url} alt={att.name} className="h-24 w-full object-cover" />
+                            <div className="p-1.5 bg-white text-[9px] font-medium text-slate-700 truncate">
+                              {att.caption || att.name}
+                            </div>
+                          </div>
+                        ))}
+                        {(report.photos || []).filter(p => !report.attachments?.some(a => a.url === p)).map((photoUrl, pIdx) => (
+                          <div key={pIdx} className="rounded-lg border border-slate-200 overflow-hidden bg-slate-100">
+                            <img src={photoUrl} alt={`Photo ${pIdx + 1}`} className="h-24 w-full object-cover" />
+                            <div className="p-1.5 bg-white text-[9px] font-medium text-slate-700 truncate">
+                              Site Photo #{pIdx + 1}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Non-Image Document Index List */}
+                    {report.attachments && report.attachments.filter(a => !a.type.startsWith('image/')).length > 0 && (
+                      <div className="rounded-xl border border-slate-200 overflow-hidden text-[11px]">
+                        <table className="w-full text-left">
+                          <thead className="bg-slate-100 text-slate-600 font-bold uppercase text-[9px]">
+                            <tr>
+                              <th className="px-3 py-1.5">Document Name</th>
+                              <th className="px-3 py-1.5">Type</th>
+                              <th className="px-3 py-1.5">Description</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 bg-white">
+                            {report.attachments.filter(a => !a.type.startsWith('image/')).map(doc => (
+                              <tr key={doc.id}>
+                                <td className="px-3 py-1 font-semibold text-slate-900">{doc.name}</td>
+                                <td className="px-3 py-1 uppercase text-[10px] font-mono text-slate-500">{doc.name.split('.').pop() || 'DOC'}</td>
+                                <td className="px-3 py-1 text-slate-600 italic">{doc.caption || 'Attached technical submittal'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 7. Multi-Party Formal Sign-Off Matrix */}
                 {includeSignoffs && (
                   <div className="pt-2 border-t border-slate-200 space-y-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 text-center">

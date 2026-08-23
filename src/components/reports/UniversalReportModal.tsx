@@ -29,6 +29,7 @@ import {
   FolderPlus
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { ReportAttachmentSection } from './ReportAttachmentSection';
 import { 
   UniversalReportItem, 
   ReportCategory, 
@@ -45,7 +46,8 @@ import {
   AccommodationReportData, 
   AccommodationInspectionItem, 
   CustomReportData,
-  CustomReportSection
+  CustomReportSection,
+  ReportAttachment
 } from '../../types';
 
 interface UniversalReportModalProps {
@@ -95,6 +97,8 @@ export function UniversalReportModal({
   const [epc, setEpc] = useState(initialReport?.epc || 'Scedih Engineering (EPC)');
   const [subcontractor, setSubcontractor] = useState(initialReport?.subcontractor || 'Apex Geomatics Subcontractor');
   const [summaryNotes, setSummaryNotes] = useState(initialReport?.summaryNotes || '');
+  const [attachments, setAttachments] = useState<ReportAttachment[]>(initialReport?.attachments || []);
+  const [photos, setPhotos] = useState<string[]>(initialReport?.photos || []);
 
   // -------------------------------------------------------------
   // Discipline 1: Survey & Geospatial State
@@ -520,6 +524,8 @@ export function UniversalReportModal({
       epc,
       subcontractor,
       summaryNotes,
+      attachments,
+      photos,
       data: compiledPayload,
       signoffs: initialReport?.signoffs || [
         {
@@ -1441,6 +1447,20 @@ export function UniversalReportModal({
               placeholder="Record technical observations, QA clearances, or site constraints..."
             />
           </div>
+
+          {/* Section 4: Attachments & Site Evidence */}
+          <ReportAttachmentSection
+            attachments={attachments}
+            photos={photos}
+            currentUser={author || 'Inspector'}
+            compact
+            title="Upload & Attach Documents and Pictures"
+            description="Attach relevant certificates, survey deliverables, contractor invoices, or site photos to this report."
+            onChange={(updatedAttachments, updatedPhotos) => {
+              setAttachments(updatedAttachments);
+              setPhotos(updatedPhotos);
+            }}
+          />
 
           {/* Modal Footer Actions */}
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">

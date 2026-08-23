@@ -29,13 +29,15 @@ import {
   FileCheck,
   Package,
   TrendingUp,
-  Target
+  Target,
+  Paperclip
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { DailyReport, Activity, LabourLog, SafetyIncident, Equipment, MaterialReceipt } from '../types';
 import { exportSingleReportPDF, parseSupervisorNotes } from '../lib/pdfReportExport';
 import { normalizeLabourAssignments, getSubtaskProgressionNumber, getPersonInitials } from '../lib/labourUtils';
 import { UniversalReportPrintStudioModal } from './reports/UniversalReportPrintStudioModal';
+import { ReportAttachmentSection } from './reports/ReportAttachmentSection';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -47,10 +49,10 @@ interface ReportDetailProps {
 }
 
 export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetailProps) {
-  const { activities, labourLogs, safetyIncidents, equipment, materialReceipts, projects, employees = [] } = useAppContext();
+  const { activities, labourLogs, safetyIncidents, equipment, materialReceipts, projects, employees = [], currentUserProfile } = useAppContext();
 
-  // Active Tab: 'overview' | 'activities' | 'manpower' | 'equipment' | 'safety'
-  const [activeTab, setActiveTab] = useState<'overview' | 'activities' | 'manpower' | 'equipment' | 'safety'>('overview');
+  // Active Tab: 'overview' | 'activities' | 'manpower' | 'equipment' | 'safety' | 'attachments'
+  const [activeTab, setActiveTab] = useState<'overview' | 'activities' | 'manpower' | 'equipment' | 'safety' | 'attachments'>('overview');
 
   // Edit Report Modal State
   const [showEditModal, setShowEditModal] = useState(false);
@@ -222,7 +224,18 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          <ShieldAlert className="h-4 w-4" /> Safety & Inspection ({report.incidents})
+          <ShieldAlert className="h-4 w-4" /> Safety & Incidents ({daySafetyIncidents.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('attachments')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-colors ${
+            activeTab === 'attachments'
+              ? 'border-[#0B5FFF] text-[#0B5FFF]'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Paperclip className="h-4 w-4" /> Documents & Photos ({(report.attachments?.length || 0) + (report.photos?.length || 0)})
         </button>
       </div>
 
@@ -721,6 +734,20 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
               </div>
             </CardContent>
           </Card>
+
+          {/* Attached Documents and Site Photos */}
+          <ReportAttachmentSection
+            attachments={report.attachments}
+            photos={report.photos}
+            currentUser={currentUserProfile?.name || 'Site Supervisor'}
+            onChange={(updatedAttachments, updatedPhotos) => {
+              onSave({
+                ...report,
+                attachments: updatedAttachments,
+                photos: updatedPhotos
+              });
+            }}
+          />
         </div>
       )}
 
@@ -906,6 +933,24 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* TAB 6: ATTACHMENTS & PHOTOS */}
+      {activeTab === 'attachments' && (
+        <div className="space-y-6">
+          <ReportAttachmentSection
+            attachments={report.attachments}
+            photos={report.photos}
+            currentUser={currentUserProfile?.name || 'Site Supervisor'}
+            onChange={(updatedAttachments, updatedPhotos) => {
+              onSave({
+                ...report,
+                attachments: updatedAttachments,
+                photos: updatedPhotos
+              });
+            }}
+          />
+        </div>
       )}
 
       {/* MODAL: EDIT REPORT MODAL */}

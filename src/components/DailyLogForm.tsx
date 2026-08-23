@@ -39,10 +39,12 @@ import {
   SlidersHorizontal,
   ListTodo,
   Lock,
-  Eye
+  Eye,
+  Paperclip
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { normalizeLabourAssignments, getSubtaskProgressionNumber, getPersonInitials } from '../lib/labourUtils';
+import { ReportAttachmentSection } from './reports/ReportAttachmentSection';
 
 interface DailyLogFormProps {
   onSubmit: (report: Partial<DailyReport>) => void;
@@ -1374,6 +1376,25 @@ export function DailyLogForm({ onSubmit, onCancel, initialData }: DailyLogFormPr
                 Summarize the day's key production activities, milestones, and site notes.
               </span>
             </div>
+          </div>
+
+          {/* Section 5: Documents & Site Photos Attachments */}
+          <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <ReportAttachmentSection
+              attachments={formData.attachments}
+              photos={formData.photos}
+              compact
+              currentUser={formData.submittedBy || 'Field Supervisor'}
+              title="5. Upload & Attach Documents and Pictures"
+              description="Attach daily site photos, inspection sign-off sheets, material delivery notes, and technical files."
+              onChange={(updatedAttachments, updatedPhotos) => {
+                setFormData(prev => ({
+                  ...prev,
+                  attachments: updatedAttachments,
+                  photos: updatedPhotos
+                }));
+              }}
+            />
           </div>
 
           {/* Form Action Buttons */}
