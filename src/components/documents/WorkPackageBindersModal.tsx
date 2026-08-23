@@ -75,8 +75,6 @@ export function WorkPackageBindersModal({
   const [isCompilingZip, setIsCompilingZip] = useState(false);
   const [compileProgress, setCompileProgress] = useState('');
 
-  if (!isOpen) return null;
-
   const filteredBinders = useMemo(() => {
     return binders.filter(b => {
       if (selectedDiscipline !== 'All' && b.discipline !== selectedDiscipline) return false;
@@ -98,6 +96,8 @@ export function WorkPackageBindersModal({
     if (!activeBinder) return [];
     return documents.filter(d => activeBinder.documentIds.includes(d.id));
   }, [activeBinder, documents]);
+
+  if (!isOpen) return null;
 
   // Open Create Form
   const handleOpenCreate = () => {

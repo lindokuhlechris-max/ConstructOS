@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   X, 
   Send, 
@@ -53,12 +53,22 @@ export function DocumentTransmittalModal({
   const [transmissionMethod, setTransmissionMethod] = useState<'Digital Portal' | 'Email Package' | 'Hard Copy Delivery'>('Digital Portal');
   const [subject, setSubject] = useState('Submission of Engineering Drawings and Specifications');
   const [remarks, setRemarks] = useState('Please review and confirm receipt / approval within 14 calendar days per contractual requirements.');
-  
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(() => {
     return new Set(initialSelectedDocIds.length > 0 ? initialSelectedDocIds : documents.slice(0, 5).map(d => d.id));
   });
 
   const [isSuccess, setIsSuccess] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialSelectedDocIds && initialSelectedDocIds.length > 0) {
+        setSelectedDocIds(new Set(initialSelectedDocIds));
+      } else {
+        setSelectedDocIds(new Set(documents.slice(0, 5).map(d => d.id)));
+      }
+      setIsSuccess(false);
+    }
+  }, [isOpen, initialSelectedDocIds, documents]);
 
   if (!isOpen) return null;
 

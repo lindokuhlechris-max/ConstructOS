@@ -45,8 +45,6 @@ export function TransmittalRegisterModal({
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedTransmittal, setSelectedTransmittal] = useState<DocumentTransmittal | null>(null);
 
-  if (!isOpen) return null;
-
   const activeProject = projects[0] || { id: 'PRJ-001', name: 'Standard Project' };
 
   const filteredTransmittals = useMemo(() => {
@@ -62,6 +60,8 @@ export function TransmittalRegisterModal({
   }, [transmittals, selectedStatus, searchQuery]);
 
   const active = selectedTransmittal || filteredTransmittals[0] || null;
+
+  if (!isOpen) return null;
 
   // Re-generate vector PDF
   const handlePrintPDF = (t: DocumentTransmittal) => {
