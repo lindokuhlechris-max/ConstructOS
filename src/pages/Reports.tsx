@@ -761,18 +761,16 @@ export function Reports() {
                     {(() => {
                       const docs = (item.documentNumbers && item.documentNumbers.length > 0)
                         ? item.documentNumbers
-                        : (item.documentNumber ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
-                      const dwgs = (item.referenceDrawingNumbers && item.referenceDrawingNumbers.length > 0)
-                        ? item.referenceDrawingNumbers
-                        : (item.referenceDrawingNumber ? item.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
-                      const allSubjectNumbers = Array.from(new Set([...docs, ...dwgs]));
+                        : (item.documentNumber 
+                            ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) 
+                            : (item.referenceDrawingNumber ? [item.referenceDrawingNumber] : []));
 
                       return (
                         <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-[#0B5FFF] transition-colors flex items-center gap-2 flex-wrap">
-                          {allSubjectNumbers.length > 0 ? (
+                          {docs.length > 0 ? (
                             <>
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                {allSubjectNumbers.map((num, i) => (
+                                {docs.map((num, i) => (
                                   <span key={i} className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 text-xs font-bold shadow-2xs">
                                     {num}
                                   </span>
@@ -873,15 +871,13 @@ export function Reports() {
                     {(() => {
                       const docs = (item.documentNumbers && item.documentNumbers.length > 0)
                         ? item.documentNumbers
-                        : (item.documentNumber ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
-                      const dwgs = (item.referenceDrawingNumbers && item.referenceDrawingNumbers.length > 0)
-                        ? item.referenceDrawingNumbers
-                        : (item.referenceDrawingNumber ? item.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
-                      const allSubjectNumbers = Array.from(new Set([...docs, ...dwgs]));
+                        : (item.documentNumber 
+                            ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) 
+                            : (item.referenceDrawingNumber ? [item.referenceDrawingNumber] : []));
 
-                      return allSubjectNumbers.length > 0 ? (
+                      return docs.length > 0 ? (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {allSubjectNumbers.map((num, i) => (
+                          {docs.map((num, i) => (
                             <span key={i} className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 text-[11px] font-bold">
                               {num}
                             </span>

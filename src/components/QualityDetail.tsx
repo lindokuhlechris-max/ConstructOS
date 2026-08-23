@@ -539,20 +539,18 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
             
             {/* Primary Subject Line */}
             {(() => {
-              const detailDocNumbers = (inspection.documentNumbers && inspection.documentNumbers.length > 0)
+              const docNumbers = (inspection.documentNumbers && inspection.documentNumbers.length > 0)
                 ? inspection.documentNumbers
-                : (inspection.documentNumber ? inspection.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
-              const detailDwgNumbers = (inspection.referenceDrawingNumbers && inspection.referenceDrawingNumbers.length > 0)
-                ? inspection.referenceDrawingNumbers
-                : (inspection.referenceDrawingNumber ? inspection.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
-              const allDetailSubjectNumbers = Array.from(new Set([...detailDocNumbers, ...detailDwgNumbers]));
+                : (inspection.documentNumber 
+                    ? inspection.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) 
+                    : (inspection.referenceDrawingNumber ? [inspection.referenceDrawingNumber] : []));
 
               return (
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-                  {allDetailSubjectNumbers.length > 0 ? (
+                  {docNumbers.length > 0 ? (
                     <>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {allDetailSubjectNumbers.map((num, i) => (
+                        {docNumbers.map((num, i) => (
                           <span key={i} className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-xl border border-blue-200 dark:border-blue-800 text-base sm:text-lg font-bold shadow-2xs">
                             {num}
                           </span>

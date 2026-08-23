@@ -834,11 +834,10 @@ export function QualityModule({ onBack }: QualityModuleProps) {
 
             const docNumbers = (item.documentNumbers && item.documentNumbers.length > 0)
               ? item.documentNumbers
-              : (item.documentNumber ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
-            const dwgNumbers = (item.referenceDrawingNumbers && item.referenceDrawingNumbers.length > 0)
-              ? item.referenceDrawingNumbers
-              : (item.referenceDrawingNumber ? item.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
-            const allSubjectNumbers = Array.from(new Set([...docNumbers, ...dwgNumbers]));
+              : (item.documentNumber 
+                  ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) 
+                  : (item.referenceDrawingNumber ? [item.referenceDrawingNumber] : []));
+            const subjectNumbers = docNumbers;
 
             return (
               <Card 
@@ -884,10 +883,10 @@ export function QualityModule({ onBack }: QualityModuleProps) {
 
                   {/* Primary Subject Heading (Drawing/Doc Numbers as Subject) */}
                   <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors flex items-center gap-2 flex-wrap">
-                    {allSubjectNumbers.length > 0 ? (
+                    {subjectNumbers.length > 0 ? (
                       <>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {allSubjectNumbers.map((num, i) => (
+                          {subjectNumbers.map((num, i) => (
                             <span key={i} className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 text-sm font-bold shadow-2xs">
                               {num}
                             </span>
@@ -1026,11 +1025,10 @@ export function QualityModule({ onBack }: QualityModuleProps) {
 
             const docNumbers = (item.documentNumbers && item.documentNumbers.length > 0)
               ? item.documentNumbers
-              : (item.documentNumber ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
-            const dwgNumbers = (item.referenceDrawingNumbers && item.referenceDrawingNumbers.length > 0)
-              ? item.referenceDrawingNumbers
-              : (item.referenceDrawingNumber ? item.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : []);
-            const allSubjectNumbers = Array.from(new Set([...docNumbers, ...dwgNumbers]));
+              : (item.documentNumber 
+                  ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) 
+                  : (item.referenceDrawingNumber ? [item.referenceDrawingNumber] : []));
+            const subjectNumbers = docNumbers;
 
             return (
               <Card 
@@ -1070,9 +1068,9 @@ export function QualityModule({ onBack }: QualityModuleProps) {
 
                   {/* Primary Subject Line */}
                   <div className="space-y-1.5">
-                    {allSubjectNumbers.length > 0 && (
+                    {subjectNumbers.length > 0 && (
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {allSubjectNumbers.map((num, i) => (
+                        {subjectNumbers.map((num, i) => (
                           <span key={i} className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 text-xs font-bold shadow-2xs">
                             {num}
                           </span>
