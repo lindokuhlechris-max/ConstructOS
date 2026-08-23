@@ -20870,6 +20870,30 @@
       "entityType": "QA",
       "entityId": "QA-903",
       "actionType": "create"
+    },
+    {
+      "id": "AL-mt61k9yd-gg6b",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and Excavation of MV Cable Trench: PTS19 - Road crossing (240mm²)",
+      "timestamp": "2026-08-23T16:48:40.549Z",
+      "entityType": "QA",
+      "entityId": "QA-903",
+      "actionType": "update"
+    },
+    {
+      "id": "AL-mt61m2mi-irlm",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Updated",
+      "details": "Updated QA inspection status to \"Pending Approval\" for Survey and Excavation of MV Cable Trench: PTS19 - Road crossing (240mm²)",
+      "timestamp": "2026-08-23T16:50:04.362Z",
+      "entityType": "QA",
+      "entityId": "QA-903",
+      "actionType": "update"
     }
   ],
   "allocations": [],
@@ -22077,26 +22101,26 @@
     {
       "id": "QA-903",
       "projectId": "PRJ-5401",
-      "activityId": "ACT-6487",
-      "linkedActivityId": "ACT-6487",
+      "activityId": "ACT-1584",
+      "linkedActivityId": "ACT-1584",
       "linkedActivityIds": [
-        "ACT-6487"
+        "ACT-1584"
       ],
       "title": "Survey and Excavation of MV Cable Trench: PTS19 - Road crossing (240mm²)",
-      "location": "Block 20 to Block 21",
+      "location": "Block 19",
       "inspector": "Advocate Khoza",
-      "date": "2026-08-23",
-      "inspectionTime": "18:26",
-      "submissionDate": "2026-08-23",
+      "date": "2026-08-01",
+      "inspectionTime": "11:00",
+      "submissionDate": "2026-07-31",
       "status": "Pending Approval",
       "category": "Survey",
       "client": "Red Rocket",
       "epc": "HDEC",
       "subcontractor": "MBEU Engineering",
-      "documentNumber": "MVT-HDEC-MBEU-RFI-003, MVT-HDEC-MBEU-RFI-006",
+      "documentNumber": "MVT-HDEC-MBEU-RFI-001, MVT-HDEC-MBEU-RFI-008",
       "documentNumbers": [
-        "MVT-HDEC-MBEU-RFI-003",
-        "MVT-HDEC-MBEU-RFI-006"
+        "MVT-HDEC-MBEU-RFI-001",
+        "MVT-HDEC-MBEU-RFI-008"
       ],
       "referenceDrawingNumber": "RRT-HDC-08-IDR-PDE-CAB-002",
       "referenceDrawingNumbers": [
@@ -22108,11 +22132,14 @@
       "linkedDocumentIds": [],
       "measurementType": "Length",
       "unit": "m",
-      "targetQuantity": 433,
-      "inspectedQuantity": 0,
+      "targetQuantity": 152,
+      "inspectedQuantity": 152,
       "approvedQuantity": 0,
       "rejectedQuantity": 0,
-      "toleranceSpec": "±10mm / SANS 1200"
+      "toleranceSpec": "±10mm / SANS 1200",
+      "measurementItems": [],
+      "dueDate": "",
+      "clientQCNotes": ""
     }
   ],
   "userProfiles": [

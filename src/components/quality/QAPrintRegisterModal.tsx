@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Printer, 
   Download, 
@@ -22,7 +22,10 @@ import {
   FileText,
   Sliders,
   Palette,
-  Eye
+  Eye,
+  LayoutGrid,
+  List as ListIcon,
+  Table as TableIcon
 } from 'lucide-react';
 import { Card, Button, Badge } from '../ui';
 import { QAInspectionItem, Project } from '../../types';
@@ -35,10 +38,12 @@ export interface QAPrintRegisterModalProps {
   inspections: QAInspectionItem[];
   allInspections?: QAInspectionItem[];
   activeProject?: Project;
+  initialLayoutMode?: 'table' | 'grid' | 'list';
 }
 
 type ThemeColor = 'emerald' | 'navy' | 'slate' | 'monochrome';
 type PageOrientation = 'landscape' | 'portrait';
+type PrintLayoutMode = 'table' | 'grid' | 'list';
 
 export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
   isOpen,
@@ -46,9 +51,11 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
   inspections,
   allInspections,
   activeProject,
+  initialLayoutMode = 'table'
 }) => {
+  const [printLayoutMode, setPrintLayoutMode] = useState<PrintLayoutMode>(initialLayoutMode);
   const [themeColor, setThemeColor] = useState<ThemeColor>('emerald');
-  const [orientation, setOrientation] = useState<PageOrientation>('landscape');
+  const [orientation, setOrientation] = useState<PageOrientation>(initialLayoutMode === 'table' ? 'landscape' : 'portrait');
   const [zoom, setZoom] = useState<number>(100);
   const [statusFilter, setStatusFilter] = useState<'All' | 'Passed' | 'Failed' | 'Pending Approval'>('All');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
@@ -60,6 +67,16 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
   const [includeContractors, setIncludeContractors] = useState<boolean>(true);
 
   const printAreaRef = useRef<HTMLDivElement>(null);
+
+  // Sync initial layout mode when opened
+  useEffect(() => {
+    if (isOpen) {
+      setPrintLayoutMode(initialLayoutMode);
+      if (initialLayoutMode === 'table') {
+        setOrientation('landscape');
+      }
+    }
+  }, [isOpen, initialLayoutMode]);
 
   // Available categories
   const categories = useMemo(() => {
@@ -170,7 +187,7 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
     await printQAInspectionRegisterSummary({
       project: activeProject,
       inspections: filteredData,
-      filterLabel: `${statusFilter !== 'All' ? statusFilter : 'All Statuses'} • ${categoryFilter !== 'All' ? categoryFilter : 'All Disciplines'}`,
+      filterLabel: `${statusFilter !== 'All' ? statusFilter : 'All Statuses'} • ${categoryFilter !== 'All' ? categoryFilter : 'All Disciplines'} (${printLayoutMode.toUpperCase()} Layout)`,
       totalCount: (allInspections || inspections).length,
       orientation,
       includeSignoffs
@@ -269,14 +286,14 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  QA/QC Inspection Register Print Studio
+                  QA/QC Inspection Print Studio
                 </h3>
                 <Badge variant="outline" className="text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
-                  {filteredData.length} records selected
+                  {filteredData.length} records • {printLayoutMode.toUpperCase()} Layout
                 </Badge>
               </div>
               <p className="text-xs text-slate-500">
-                Official contractor & client compliance sign-off printout with physical quantity clearance.
+                Official contractor & client compliance sign-off printout in Table, Grid, or List formats.
               </p>
             </div>
           </div>
@@ -322,8 +339,62 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
           {/* Controls & Customization Sidebar - Hidden on Print */}
           <div className="w-full lg:w-80 bg-white dark:bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 p-4 space-y-5 overflow-y-auto shrink-0 print:hidden text-xs">
             
-            {/* Filter Scope */}
+            {/* 1. Printout Layout Mode: Table, Grid, List */}
             <div className="space-y-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Sliders className="h-3.5 w-3.5" /> Printout Format / Layout
+              </label>
+
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintLayoutMode('table');
+                    setOrientation('landscape');
+                  }}
+                  className={`py-2 px-1.5 rounded-xl font-bold text-xs flex flex-col items-center gap-1 transition-all ${
+                    printLayoutMode === 'table'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                  title="Table View Layout"
+                >
+                  <TableIcon className="h-4 w-4 text-emerald-600" />
+                  <span className="text-[10px]">Table</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPrintLayoutMode('grid')}
+                  className={`py-2 px-1.5 rounded-xl font-bold text-xs flex flex-col items-center gap-1 transition-all ${
+                    printLayoutMode === 'grid'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                  title="Grid / Card View Layout"
+                >
+                  <LayoutGrid className="h-4 w-4 text-blue-600" />
+                  <span className="text-[10px]">Grid</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPrintLayoutMode('list')}
+                  className={`py-2 px-1.5 rounded-xl font-bold text-xs flex flex-col items-center gap-1 transition-all ${
+                    printLayoutMode === 'list'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                  title="List Banner Layout"
+                >
+                  <ListIcon className="h-4 w-4 text-purple-600" />
+                  <span className="text-[10px]">List</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Filter Scope */}
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Filter className="h-3.5 w-3.5" /> Scope & Filters
               </label>
@@ -369,10 +440,10 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
               </div>
             </div>
 
-            {/* Layout & Orientation */}
+            {/* 3. Orientation */}
             <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Sliders className="h-3.5 w-3.5" /> Layout & Orientation
+                <FileText className="h-3.5 w-3.5" /> Paper Orientation
               </label>
 
               <div className="grid grid-cols-2 gap-2">
@@ -401,7 +472,7 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
               </div>
             </div>
 
-            {/* Color Theme */}
+            {/* 4. Color Theme */}
             <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Palette className="h-3.5 w-3.5" /> Color Accent Theme
@@ -430,7 +501,7 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
               </div>
             </div>
 
-            {/* Content Toggles */}
+            {/* 5. Content Sections */}
             <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Layers className="h-3.5 w-3.5" /> Document Sections
@@ -479,7 +550,7 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
               </div>
             </div>
 
-            {/* Zoom Controls */}
+            {/* 6. Zoom Controls */}
             <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
                 <span>Preview Zoom</span>
@@ -550,7 +621,7 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
                       {activeProject?.name || 'Main Construction Site'}
                     </div>
                     <div>Date: {currentDateFormatted}</div>
-                    <div>Ref: QA-REG-{new Date().getFullYear()}</div>
+                    <div className="uppercase">Layout: {printLayoutMode} View</div>
                   </div>
                 </div>
               </div>
@@ -601,143 +672,376 @@ export const QAPrintRegisterModal: React.FC<QAPrintRegisterModalProps> = ({
                 </div>
               )}
 
-              {/* Main Inspections Table */}
-              <div className="overflow-x-auto border border-slate-200 rounded-xl mb-6">
-                <table className="w-full text-left border-collapse text-[11px]">
-                  <thead>
-                    <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px] tracking-wider">
-                      <th className="py-2.5 px-3 whitespace-nowrap">ID & Date</th>
-                      <th className="py-2.5 px-3 min-w-[200px]">Subject & Reference Drawings</th>
-                      <th className="py-2.5 px-3">Discipline & Spec</th>
-                      <th className="py-2.5 px-3">Location & Inspector</th>
-                      {includeScopeQuantities && <th className="py-2.5 px-3 min-w-[170px]">Scope & Measured Clearance</th>}
-                      <th className="py-2.5 px-3 text-center">Status</th>
-                      {includeContractors && <th className="py-2.5 px-3">Contractors</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {filteredData.map(item => {
-                      const targetQty = item.targetQuantity || 0;
-                      const inspectedQty = item.inspectedQuantity || 0;
-                      const approvedQty = item.approvedQuantity || 0;
-                      const itemUnit = item.unit || 'm';
-                      const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
-                      const overallPercent = targetQty > 0 ? Math.round((approvedQty / targetQty) * 100) : 0;
+              {/* ==================================================================== */}
+              {/* PRINT FORMAT 1: TABLE VIEW */}
+              {/* ==================================================================== */}
+              {printLayoutMode === 'table' && (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl mb-6">
+                  <table className="w-full text-left border-collapse text-[11px]">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px] tracking-wider">
+                        <th className="py-2.5 px-3 whitespace-nowrap">ID & Date</th>
+                        <th className="py-2.5 px-3 min-w-[200px]">Subject & Reference Drawings</th>
+                        <th className="py-2.5 px-3">Discipline & Spec</th>
+                        <th className="py-2.5 px-3">Location & Inspector</th>
+                        {includeScopeQuantities && <th className="py-2.5 px-3 min-w-[170px]">Scope & Measured Clearance</th>}
+                        <th className="py-2.5 px-3 text-center">Status</th>
+                        {includeContractors && <th className="py-2.5 px-3">Contractors</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {filteredData.map(item => {
+                        const targetQty = item.targetQuantity || 0;
+                        const inspectedQty = item.inspectedQuantity || 0;
+                        const approvedQty = item.approvedQuantity || 0;
+                        const rejectedQty = item.rejectedQuantity || 0;
+                        const itemUnit = item.unit || 'm';
+                        const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
+                        const overallPercent = targetQty > 0 ? Math.round((approvedQty / targetQty) * 100) : 0;
 
-                      const docNumbers = (item.documentNumbers && item.documentNumbers.length > 0)
-                        ? item.documentNumbers
-                        : (item.documentNumber ? [item.documentNumber] : (item.referenceDrawingNumber ? [item.referenceDrawingNumber] : []));
+                        const docNumbers = (item.documentNumbers && item.documentNumbers.length > 0)
+                          ? item.documentNumbers
+                          : (item.documentNumber ? [item.documentNumber] : (item.referenceDrawingNumber ? [item.referenceDrawingNumber] : []));
 
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50">
-                          {/* 1. ID & Date */}
-                          <td className="py-2.5 px-3 align-top">
-                            <div className="font-mono font-bold text-emerald-700">{item.id}</div>
-                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.date}</div>
-                            {item.submissionDate && (
-                              <div className="text-[9px] text-blue-600 font-mono">Sub: {item.submissionDate}</div>
-                            )}
-                          </td>
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50 break-inside-avoid">
+                            {/* 1. ID & Date */}
+                            <td className="py-2.5 px-3 align-top">
+                              <div className="font-mono font-bold text-emerald-700">{item.id}</div>
+                              <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.date}</div>
+                              {item.submissionDate && (
+                                <div className="text-[9px] text-blue-600 font-mono">Sub: {item.submissionDate}</div>
+                              )}
+                            </td>
 
-                          {/* 2. Subject & Drawing */}
-                          <td className="py-2.5 px-3 align-top">
-                            {docNumbers.length > 0 && (
-                              <div className="flex items-center gap-1 flex-wrap mb-0.5">
-                                {docNumbers.map((num, idx) => (
-                                  <span key={idx} className="font-mono text-blue-800 bg-blue-50 px-1 py-0.2 rounded border border-blue-200 text-[9px] font-bold">
-                                    {num}
-                                  </span>
-                                ))}
+                            {/* 2. Subject & Drawing */}
+                            <td className="py-2.5 px-3 align-top">
+                              {docNumbers.length > 0 && (
+                                <div className="flex items-center gap-1 flex-wrap mb-0.5">
+                                  {docNumbers.map((num, idx) => (
+                                    <span key={idx} className="font-mono text-blue-800 bg-blue-50 px-1 py-0.2 rounded border border-blue-200 text-[9px] font-bold">
+                                      {num}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="font-bold text-slate-900 leading-snug">
+                                {item.title}
                               </div>
-                            )}
-                            <div className="font-bold text-slate-900 leading-snug">
-                              {item.title}
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* 3. Discipline */}
-                          <td className="py-2.5 px-3 align-top">
-                            <span className="font-semibold text-slate-700 block">{item.category}</span>
-                            <span className="text-[10px] text-emerald-700 font-mono">
-                              {item.measurementType || 'Length'} ({itemUnit})
+                            {/* 3. Discipline */}
+                            <td className="py-2.5 px-3 align-top">
+                              <span className="font-semibold text-slate-700 block">{item.category}</span>
+                              <span className="text-[10px] text-emerald-700 font-mono">
+                                {item.measurementType || 'Length'} ({itemUnit})
+                              </span>
+                              {item.toleranceSpec && (
+                                <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                                  Spec: {item.toleranceSpec}
+                                </div>
+                              )}
+                              {item.ncrCode && (
+                                <span className="inline-block mt-0.5 px-1 bg-rose-100 text-rose-800 font-mono font-bold rounded text-[9px]">
+                                  {item.ncrCode}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* 4. Location & Inspector */}
+                            <td className="py-2.5 px-3 align-top">
+                              <div className="font-medium text-slate-800">{item.location}</div>
+                              <div className="text-[10px] text-slate-500 mt-0.5">{item.inspector}</div>
+                            </td>
+
+                            {/* 5. Physical Scope & Quantities */}
+                            {includeScopeQuantities && (
+                              <td className="py-2.5 px-3 align-top font-mono">
+                                {(targetQty > 0 || inspectedQty > 0) ? (
+                                  <div className="space-y-0.5 text-[10px]">
+                                    <div className="flex justify-between text-slate-600">
+                                      <span>Scope: {targetQty} {itemUnit}</span>
+                                      <span className="text-blue-600">Insp: {inspectedQty} {itemUnit}</span>
+                                    </div>
+                                    <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden flex my-0.5">
+                                      <div 
+                                        className="h-full bg-emerald-500" 
+                                        style={{ width: `${targetQty > 0 ? (approvedQty / targetQty) * 100 : approvalPercent}%` }}
+                                      />
+                                      <div 
+                                        className="h-full bg-rose-500" 
+                                        style={{ width: `${targetQty > 0 ? (rejectedQty / targetQty) * 100 : 0}%` }}
+                                      />
+                                    </div>
+                                    <div className="font-bold text-emerald-700 flex items-center justify-between">
+                                      <span>✓ {approvedQty} {itemUnit}</span>
+                                      <span>{overallPercent}% overall ({approvalPercent}% insp.)</span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 italic text-[10px]">No quantity</span>
+                                )}
+                              </td>
+                            )}
+
+                            {/* 6. Status */}
+                            <td className="py-2.5 px-3 align-top text-center">
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                item.status === 'Passed'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : item.status === 'Failed'
+                                  ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                  : 'bg-amber-100 text-amber-800 border border-amber-200'
+                              }`}>
+                                {item.status}
+                              </span>
+                            </td>
+
+                            {/* 7. Contractors */}
+                            {includeContractors && (
+                              <td className="py-2.5 px-3 align-top text-[10px] text-slate-600">
+                                {item.epc && <div>EPC: <strong>{item.epc}</strong></div>}
+                                {item.subcontractor && <div>Sub: {item.subcontractor}</div>}
+                                {item.client && <div>Client: {item.client}</div>}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+
+                      {filteredData.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-400">
+                            No QA/QC inspection records found for the selected criteria.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* ==================================================================== */}
+              {/* PRINT FORMAT 2: GRID / CARD VIEW */}
+              {/* ==================================================================== */}
+              {printLayoutMode === 'grid' && (
+                <div className={`grid gap-4 mb-6 ${orientation === 'landscape' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                  {filteredData.map(item => {
+                    const targetQty = item.targetQuantity || 0;
+                    const inspectedQty = item.inspectedQuantity || 0;
+                    const approvedQty = item.approvedQuantity || 0;
+                    const rejectedQty = item.rejectedQuantity || 0;
+                    const itemUnit = item.unit || 'm';
+                    const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
+                    const overallPercent = targetQty > 0 ? Math.round((approvedQty / targetQty) * 100) : 0;
+
+                    const docNumbers = (item.documentNumbers && item.documentNumbers.length > 0)
+                      ? item.documentNumbers
+                      : (item.documentNumber ? [item.documentNumber] : (item.referenceDrawingNumber ? [item.referenceDrawingNumber] : []));
+
+                    return (
+                      <div key={item.id} className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3 break-inside-avoid shadow-2xs">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            {item.id}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            item.status === 'Passed' ? 'bg-emerald-100 text-emerald-800' :
+                            item.status === 'Failed' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </div>
+
+                        {/* Subject numbers */}
+                        {docNumbers.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {docNumbers.map((num, idx) => (
+                              <span key={idx} className="font-mono text-blue-800 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200 text-[10px] font-bold">
+                                {num}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="font-bold text-xs text-slate-900 leading-snug line-clamp-2">
+                          {item.title}
+                        </div>
+
+                        {/* Discipline & Spec */}
+                        <div className="flex items-center justify-between text-[10px] text-slate-600">
+                          <span className="font-semibold">{item.category} • {item.measurementType || 'Length'}</span>
+                          {item.toleranceSpec && <span className="font-mono text-slate-500">Spec: {item.toleranceSpec}</span>}
+                        </div>
+
+                        {/* Progress Bar & Scope */}
+                        {includeScopeQuantities && (targetQty > 0 || inspectedQty > 0) && (
+                          <div className="space-y-1 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                            <div className="flex justify-between text-[10px] font-mono text-slate-600 font-bold">
+                              <span>Scope: {targetQty} {itemUnit}</span>
+                              <span className="text-blue-600">Insp: {inspectedQty} {itemUnit}</span>
+                            </div>
+                            <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex">
+                              <div 
+                                className="h-full bg-emerald-500" 
+                                style={{ width: `${targetQty > 0 ? (approvedQty / targetQty) * 100 : approvalPercent}%` }}
+                              />
+                              <div 
+                                className="h-full bg-rose-500" 
+                                style={{ width: `${targetQty > 0 ? (rejectedQty / targetQty) * 100 : 0}%` }}
+                              />
+                            </div>
+                            <div className="flex justify-between items-center text-[9px] font-mono font-bold">
+                              <span className="text-emerald-700">✓ {approvedQty} {itemUnit}</span>
+                              <span className="text-emerald-800 bg-emerald-100 px-1 py-0.2 rounded border border-emerald-300">
+                                {overallPercent}% overall ({approvalPercent}% insp.)
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Location & Inspector */}
+                        <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-600 space-y-0.5">
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Location:</span>
+                            <strong className="text-slate-800 truncate max-w-[140px]">{item.location}</strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Inspector:</span>
+                            <strong className="text-slate-800 truncate max-w-[140px]">{item.inspector}</strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Date:</span>
+                            <span className="font-mono text-slate-700">{item.date}</span>
+                          </div>
+                          {includeContractors && item.epc && (
+                            <div className="flex justify-between text-[9px] text-slate-500">
+                              <span>EPC:</span>
+                              <span className="truncate max-w-[140px]">{item.epc}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* ==================================================================== */}
+              {/* PRINT FORMAT 3: LIST / WIDE BANNER VIEW */}
+              {/* ==================================================================== */}
+              {printLayoutMode === 'list' && (
+                <div className="space-y-3 mb-6">
+                  {filteredData.map(item => {
+                    const targetQty = item.targetQuantity || 0;
+                    const inspectedQty = item.inspectedQuantity || 0;
+                    const approvedQty = item.approvedQuantity || 0;
+                    const rejectedQty = item.rejectedQuantity || 0;
+                    const itemUnit = item.unit || 'm';
+                    const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
+                    const overallPercent = targetQty > 0 ? Math.round((approvedQty / targetQty) * 100) : 0;
+
+                    const docNumbers = (item.documentNumbers && item.documentNumbers.length > 0)
+                      ? item.documentNumbers
+                      : (item.documentNumber ? [item.documentNumber] : (item.referenceDrawingNumber ? [item.referenceDrawingNumber] : []));
+
+                    return (
+                      <div key={item.id} className="p-4 rounded-2xl border border-slate-200 bg-white flex flex-col md:flex-row md:items-center justify-between gap-4 break-inside-avoid shadow-2xs">
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              {item.id}
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                              {item.category}
                             </span>
                             {item.toleranceSpec && (
-                              <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                              <span className="text-[10px] font-mono text-slate-500">
                                 Spec: {item.toleranceSpec}
-                              </div>
+                              </span>
                             )}
                             {item.ncrCode && (
-                              <span className="inline-block mt-0.5 px-1 bg-rose-100 text-rose-800 font-mono font-bold rounded text-[9px]">
+                              <span className="px-1.5 py-0.2 bg-rose-100 text-rose-800 font-mono font-bold rounded text-[10px]">
                                 {item.ncrCode}
                               </span>
                             )}
-                          </td>
+                          </div>
 
-                          {/* 4. Location & Inspector */}
-                          <td className="py-2.5 px-3 align-top">
-                            <div className="font-medium text-slate-800">{item.location}</div>
-                            <div className="text-[10px] text-slate-500 mt-0.5">{item.inspector}</div>
-                          </td>
-
-                          {/* 5. Physical Scope & Quantities */}
-                          {includeScopeQuantities && (
-                            <td className="py-2.5 px-3 align-top font-mono">
-                              {(targetQty > 0 || inspectedQty > 0) ? (
-                                <div className="space-y-0.5 text-[10px]">
-                                  <div className="flex justify-between text-slate-600">
-                                    <span>Scope: {targetQty} {itemUnit}</span>
-                                    <span className="text-blue-600">Insp: {inspectedQty} {itemUnit}</span>
-                                  </div>
-                                  <div className="font-bold text-emerald-700 flex items-center justify-between">
-                                    <span>✓ {approvedQty} {itemUnit}</span>
-                                    <span>{overallPercent}% overall ({approvalPercent}% insp.)</span>
-                                  </div>
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 italic text-[10px]">No quantity</span>
-                              )}
-                            </td>
+                          {docNumbers.length > 0 && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {docNumbers.map((num, idx) => (
+                                <span key={idx} className="font-mono text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-xs font-bold">
+                                  {num}
+                                </span>
+                              ))}
+                            </div>
                           )}
 
-                          {/* 6. Status */}
-                          <td className="py-2.5 px-3 align-top text-center">
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              item.status === 'Passed'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                : item.status === 'Failed'
-                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                          <div className="font-bold text-sm text-slate-900 leading-snug">
+                            {item.title}
+                          </div>
+
+                          <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                            <span>Loc: <strong className="text-slate-700">{item.location}</strong></span>
+                            <span>•</span>
+                            <span>Insp: <strong className="text-slate-700">{item.inspector}</strong></span>
+                            <span>•</span>
+                            <span>Date: <span className="font-mono text-slate-700">{item.date}</span></span>
+                            {includeContractors && item.epc && (
+                              <>
+                                <span>•</span>
+                                <span>EPC: <strong>{item.epc}</strong></span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right side Scope & Status */}
+                        <div className="shrink-0 w-full md:w-64 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-slate-500">Inspection Status:</span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                              item.status === 'Passed' ? 'bg-emerald-100 text-emerald-800' :
+                              item.status === 'Failed' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
                             }`}>
                               {item.status}
                             </span>
-                          </td>
+                          </div>
 
-                          {/* 7. Contractors */}
-                          {includeContractors && (
-                            <td className="py-2.5 px-3 align-top text-[10px] text-slate-600">
-                              {item.epc && <div>EPC: <strong>{item.epc}</strong></div>}
-                              {item.subcontractor && <div>Sub: {item.subcontractor}</div>}
-                              {item.client && <div>Client: {item.client}</div>}
-                            </td>
+                          {includeScopeQuantities && (targetQty > 0 || inspectedQty > 0) && (
+                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+                              <div className="flex justify-between text-[11px] font-mono font-bold text-slate-600">
+                                <span>Scope: {targetQty} {itemUnit}</span>
+                                <span className="text-blue-600">Insp: {inspectedQty} {itemUnit}</span>
+                              </div>
+                              <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex">
+                                <div 
+                                  className="h-full bg-emerald-500" 
+                                  style={{ width: `${targetQty > 0 ? (approvedQty / targetQty) * 100 : approvalPercent}%` }}
+                                />
+                                <div 
+                                  className="h-full bg-rose-500" 
+                                  style={{ width: `${targetQty > 0 ? (rejectedQty / targetQty) * 100 : 0}%` }}
+                                />
+                              </div>
+                              <div className="flex justify-between items-center text-[10px] font-mono font-bold">
+                                <span className="text-emerald-700">✓ {approvedQty} {itemUnit}</span>
+                                <span className="text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
+                                  {overallPercent}% overall ({approvalPercent}% insp.)
+                                </span>
+                              </div>
+                            </div>
                           )}
-                        </tr>
-                      );
-                    })}
-
-                    {filteredData.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="py-8 text-center text-slate-400">
-                          No QA/QC inspection records found for the selected criteria.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Official Sign-off Signature Section */}
               {includeSignoffs && (
-                <div className="mt-8 pt-4 border-t-2 border-slate-300">
+                <div className="mt-8 pt-4 border-t-2 border-slate-300 break-inside-avoid">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-6">
                     Official Quality Compliance & Verification Endorsements
                   </h4>

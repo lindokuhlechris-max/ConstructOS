@@ -1574,6 +1574,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
         inspections={filteredInspections}
         allInspections={qaInspections}
         activeProject={projects.find(p => p.id === projectId) || projects[0]}
+        initialLayoutMode={viewMode}
       />
     </div>
   );
