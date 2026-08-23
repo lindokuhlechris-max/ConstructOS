@@ -298,8 +298,8 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     return (
       <QualityDetail
         inspection={selectedInspection}
-        onSave={canEditQuality ? (updated) => {
-          updateQAInspection(updated);
+        onSave={canEditQuality ? (updated, oldId) => {
+          updateQAInspection(updated, oldId);
           setSelectedInspection(updated);
         } : undefined}
         onClose={() => setSelectedInspection(null)}

@@ -163,7 +163,7 @@ interface AppContextType {
   updatePPEItem: (item: PPEMaterialItem) => void;
   deletePPEItem: (idOrItem: string | PPEMaterialItem) => void;
   addQAInspection: (inspection: QAInspectionItem) => void;
-  updateQAInspection: (inspection: QAInspectionItem) => void;
+  updateQAInspection: (inspection: QAInspectionItem, oldId?: string) => void;
   deleteQAInspection: (id: string) => void;
   addReminder: (reminder: Reminder) => void;
   updateReminder: (reminder: Reminder) => void;
@@ -2741,9 +2741,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const updateQAInspection = (inspection: QAInspectionItem) => {
-    setQAInspections(prev => prev.map(i => i.id === inspection.id ? inspection : i));
-    syncToServer('update_qa_inspection', inspection);
+  const updateQAInspection = (inspection: QAInspectionItem, oldId?: string) => {
+    const targetId = oldId || inspection.id;
+    setQAInspections(prev => prev.map(i => (i.id === targetId || i.id === inspection.id) ? inspection : i));
+    syncToServer('update_qa_inspection', { ...inspection, originalId: targetId });
 
     const userName = currentUserProfile?.name || 'Current User';
     const userRoleStr = currentUserProfile?.role || userRole || 'User';

@@ -67,7 +67,7 @@ import { QAMeasurementModal } from './QAMeasurementModal';
 
 interface QualityDetailProps {
   inspection: QAInspectionItem;
-  onSave: (updated: QAInspectionItem) => void;
+  onSave?: (updated: QAInspectionItem, oldId?: string) => void;
   onClose: () => void;
   onDelete?: (id: string) => void;
 }
@@ -143,6 +143,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
 
   // Edit Inspection State
   const [editForm, setEditForm] = useState<Partial<QAInspectionItem>>({
+    id: inspection.id,
     title: inspection.title,
     category: inspection.category,
     location: inspection.location,
@@ -361,31 +362,37 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     const docNums = editForm.documentNumbers || (editForm.documentNumber ? editForm.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : inspection.documentNumbers);
     const dwgNums = editForm.referenceDrawingNumbers || (editForm.referenceDrawingNumber ? editForm.referenceDrawingNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) : inspection.referenceDrawingNumbers);
 
-    onSave({
-      ...inspection,
-      title: editForm.title || inspection.title,
-      category: editForm.category || inspection.category,
-      location: editForm.location || inspection.location,
-      inspector: editForm.inspector || inspection.inspector,
-      date: editForm.date || inspection.date,
-      inspectionTime: editForm.inspectionTime || inspection.inspectionTime,
-      submissionDate: editForm.submissionDate !== undefined ? editForm.submissionDate : (inspection.submissionDate || inspection.date),
-      dueDate: editForm.dueDate !== undefined ? editForm.dueDate : inspection.dueDate,
-      client: editForm.client !== undefined ? editForm.client : inspection.client,
-      epc: editForm.epc !== undefined ? editForm.epc : inspection.epc,
-      subcontractor: editForm.subcontractor !== undefined ? editForm.subcontractor : inspection.subcontractor,
-      documentNumber: docNums && docNums.length > 0 ? docNums.join(', ') : (editForm.documentNumber !== undefined ? editForm.documentNumber : inspection.documentNumber),
-      documentNumbers: docNums,
-      referenceDrawingNumber: dwgNums && dwgNums.length > 0 ? dwgNums.join(', ') : (editForm.referenceDrawingNumber !== undefined ? editForm.referenceDrawingNumber : inspection.referenceDrawingNumber),
-      referenceDrawingNumbers: dwgNums,
-      linkedActivityIds: editForm.linkedActivityIds !== undefined ? editForm.linkedActivityIds : inspection.linkedActivityIds,
-      linkedActivityId: editForm.linkedActivityIds?.[0] || editForm.activityId || inspection.linkedActivityId,
-      activityId: editForm.linkedActivityIds?.[0] || editForm.activityId || inspection.activityId,
-      clientQCRepresentative: editForm.clientQCRepresentative,
-      clientQCStatus: editForm.clientQCStatus as any,
-      clientQCNotes: editForm.clientQCNotes,
-      clientQCSignoffDate: editForm.clientQCSignoffDate
-    });
+    const oldId = inspection.id;
+    const newId = (editForm.id && editForm.id.trim()) ? editForm.id.trim() : inspection.id;
+
+    if (onSave) {
+      onSave({
+        ...inspection,
+        id: newId,
+        title: editForm.title || inspection.title,
+        category: editForm.category || inspection.category,
+        location: editForm.location || inspection.location,
+        inspector: editForm.inspector || inspection.inspector,
+        date: editForm.date || inspection.date,
+        inspectionTime: editForm.inspectionTime || inspection.inspectionTime,
+        submissionDate: editForm.submissionDate !== undefined ? editForm.submissionDate : (inspection.submissionDate || inspection.date),
+        dueDate: editForm.dueDate !== undefined ? editForm.dueDate : inspection.dueDate,
+        client: editForm.client !== undefined ? editForm.client : inspection.client,
+        epc: editForm.epc !== undefined ? editForm.epc : inspection.epc,
+        subcontractor: editForm.subcontractor !== undefined ? editForm.subcontractor : inspection.subcontractor,
+        documentNumber: docNums && docNums.length > 0 ? docNums.join(', ') : (editForm.documentNumber !== undefined ? editForm.documentNumber : inspection.documentNumber),
+        documentNumbers: docNums,
+        referenceDrawingNumber: dwgNums && dwgNums.length > 0 ? dwgNums.join(', ') : (editForm.referenceDrawingNumber !== undefined ? editForm.referenceDrawingNumber : inspection.referenceDrawingNumber),
+        referenceDrawingNumbers: dwgNums,
+        linkedActivityIds: editForm.linkedActivityIds !== undefined ? editForm.linkedActivityIds : inspection.linkedActivityIds,
+        linkedActivityId: editForm.linkedActivityIds?.[0] || editForm.activityId || inspection.linkedActivityId,
+        activityId: editForm.linkedActivityIds?.[0] || editForm.activityId || inspection.activityId,
+        clientQCRepresentative: editForm.clientQCRepresentative || '',
+        clientQCStatus: editForm.clientQCStatus as any,
+        clientQCNotes: editForm.clientQCNotes,
+        clientQCSignoffDate: editForm.clientQCSignoffDate
+      }, oldId);
+    }
     setIsEditModalOpen(false);
   };
 
@@ -619,6 +626,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
             <button
               onClick={() => {
                 setEditForm({
+                  id: inspection.id,
                   title: inspection.title,
                   category: inspection.category,
                   location: inspection.location,
@@ -2310,15 +2318,33 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
             </div>
 
             <form onSubmit={handleSaveEditInspection} className="p-6 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Inspection Title *</label>
-                <input
-                  type="text"
-                  required
-                  value={editForm.title}
-                  onChange={e => setEditForm({ ...editForm, title: e.target.value })}
-                  className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5 md:col-span-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>Inspection ID / Doc No. *</span>
+                    <span className="text-[10px] text-emerald-600 font-mono font-bold">Editable</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.id || ''}
+                    onChange={e => setEditForm({ ...editForm, id: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 font-mono font-bold text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    placeholder="e.g. QA-903"
+                  />
+                </div>
+
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Inspection Title *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.title || ''}
+                    onChange={e => setEditForm({ ...editForm, title: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Inspection description & scope title..."
+                  />
+                </div>
               </div>
 
               {/* Linked Activities Multi-Select Field */}
@@ -2394,7 +2420,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Category</label>
                   <input
                     type="text"
-                    value={editForm.category}
+                    value={editForm.category || ''}
                     onChange={e => setEditForm({ ...editForm, category: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
                   />
@@ -2404,7 +2430,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Site Location</label>
                   <input
                     type="text"
-                    value={editForm.location}
+                    value={editForm.location || ''}
                     onChange={e => setEditForm({ ...editForm, location: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
                   />
@@ -2440,16 +2466,30 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
               </div>
 
-              {/* Stakeholders: Client, EPC, Subcontractor */}
-              <div className="grid grid-cols-3 gap-3">
+              {/* Stakeholders: Client, Client Representative, EPC, Subcontractor */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">1. Client</label>
                   <input
                     type="text"
                     placeholder="Client Name"
-                    value={editForm.client}
+                    value={editForm.client || ''}
                     onChange={e => setEditForm({ ...editForm, client: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                    <User className="h-3.5 w-3.5 text-purple-600" />
+                    <span>Client Representative</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Obakeng Mogadi"
+                    value={editForm.clientQCRepresentative || ''}
+                    onChange={e => setEditForm({ ...editForm, clientQCRepresentative: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/40 dark:bg-purple-950/20 text-purple-900 dark:text-purple-200 font-semibold text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
                   />
                 </div>
 
@@ -2458,7 +2498,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   <input
                     type="text"
                     placeholder="EPC Contractor"
-                    value={editForm.epc}
+                    value={editForm.epc || ''}
                     onChange={e => setEditForm({ ...editForm, epc: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs"
                   />
@@ -2469,7 +2509,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   <input
                     type="text"
                     placeholder="Subcontractor"
-                    value={editForm.subcontractor}
+                    value={editForm.subcontractor || ''}
                     onChange={e => setEditForm({ ...editForm, subcontractor: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs"
                   />
