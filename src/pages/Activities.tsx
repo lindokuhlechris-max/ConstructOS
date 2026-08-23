@@ -25,6 +25,7 @@ import {
   Trash2, 
   MoreVertical, 
   Layers, 
+  ChevronLeft,
   ChevronRight,
   ChevronDown, 
   FileSpreadsheet, 
@@ -67,6 +68,7 @@ import { useAppContext } from '../context/AppContext';
 import { exportActivitiesToExcel } from '../lib/excelExport';
 import { printActivitiesSummary } from '../lib/pdfPrint';
 import { findActivityResourceConflicts, ActivityResourceVitality } from '../lib/resourceConflictUtils';
+import { calculateSubtaskDailyAverage, recordSubtaskProgress, calculateActivityRollupFromSubtasks } from '../lib/subtaskProgressUtils';
 import { WORKSTREAMS, WorkstreamType } from '../types';
 import { ActivityKanbanBoard } from '../components/ActivityKanbanBoard';
 import { ActivityDataTable } from '../components/ActivityDataTable';
@@ -160,8 +162,24 @@ export function Activities() {
     localStorage.setItem('activityViewMode', viewMode);
   }, [viewMode]);
 
-  // Quick Log Progress Modal State
+  // Quick Log Progress Modal State & Granular Subtask Engine
   const [loggingProgressActivity, setLoggingProgressActivity] = useState<Activity | null>(null);
+  const [logProgressIsGranularMode, setLogProgressIsGranularMode] = useState<boolean>(true);
+  const [logProgressActiveSubtaskId, setLogProgressActiveSubtaskId] = useState<string>('');
+  const [isSubtaskDropdownOpen, setIsSubtaskDropdownOpen] = useState<boolean>(false);
+  const [subtaskDropdownSearch, setSubtaskDropdownSearch] = useState<string>('');
+  const [subtaskDropdownFilter, setSubtaskDropdownFilter] = useState<'all' | 'incomplete' | 'staged' | 'holdPoint'>('all');
+  const subtaskDropdownRef = useRef<HTMLDivElement>(null);
+  const [logProgressSubtaskInputs, setLogProgressSubtaskInputs] = useState<Record<string, {
+    mode: 'shift' | 'cumulative';
+    shiftOutput: number;
+    cumulativeOutput: number;
+    status: 'Not Started' | 'In Progress' | 'Completed';
+    notes: string;
+    chainageSpan: string;
+    holdPointApproved: boolean;
+    holdPointSignedBy: string;
+  }>>({});
   const [logProgressActualQty, setLogProgressActualQty] = useState<number>(0);
   const [logProgressPercent, setLogProgressPercent] = useState<number>(0);
   const [logProgressStatus, setLogProgressStatus] = useState<ActivityStatus>('Not Started');
@@ -171,8 +189,26 @@ export function Activities() {
   const [logProgressTemp, setLogProgressTemp] = useState<string>('24°C');
   const [logProgressSiteConditions, setLogProgressSiteConditions] = useState<string>('Site dry and fully accessible');
   const [logProgressSubtasks, setLogProgressSubtasks] = useState<SubTask[]>([]);
+  const [logProgressPostReport, setLogProgressPostReport] = useState<boolean>(true);
+  const [logProgressDelayReason, setLogProgressDelayReason] = useState<string>('');
+
+  // Click outside listener for subtask select popout
+  useEffect(() => {
+    function handleClickOutsideSubtaskDropdown(event: MouseEvent) {
+      if (subtaskDropdownRef.current && !subtaskDropdownRef.current.contains(event.target as Node)) {
+        setIsSubtaskDropdownOpen(false);
+      }
+    }
+    if (isSubtaskDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutsideSubtaskDropdown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideSubtaskDropdown);
+    };
+  }, [isSubtaskDropdownOpen]);
 
   const handleOpenLogProgress = (act: Activity) => {
+    const subtasks = act.subtasks ? JSON.parse(JSON.stringify(act.subtasks)) : [];
     setLoggingProgressActivity(act);
     setLogProgressActualQty(act.actualQuantity || 0);
     setLogProgressPercent(act.progress || 0);
@@ -182,39 +218,140 @@ export function Activities() {
     setLogProgressWeather('Sunny');
     setLogProgressTemp('24°C');
     setLogProgressSiteConditions('Site dry and fully accessible');
-    setLogProgressSubtasks(act.subtasks ? JSON.parse(JSON.stringify(act.subtasks)) : []);
-  };
+    setLogProgressSubtasks(subtasks);
+    setLogProgressPostReport(true);
+    setLogProgressDelayReason('');
 
-  const handleToggleLogSubtask = (stId: string) => {
-    setLogProgressSubtasks(prev => prev.map(st => {
-      if (st.id === stId) {
-        const nextStatus = st.status === 'Completed' ? 'In Progress' : 'Completed';
-        const nextCompleted = nextStatus === 'Completed';
-        const completedQty = nextCompleted ? (st.targetQuantity || 1) : 0;
-        return {
-          ...st,
-          status: nextStatus,
-          completed: nextCompleted,
-          completedQuantity: completedQty
-        };
-      }
-      return st;
-    }));
+    // Granular Subtask Inputs Initialization
+    const initialInputs: Record<string, any> = {};
+    subtasks.forEach((st: SubTask) => {
+      initialInputs[st.id] = {
+        mode: 'shift',
+        shiftOutput: 0,
+        cumulativeOutput: st.completedQuantity || 0,
+        status: st.status || 'Not Started',
+        notes: '',
+        chainageSpan: st.chainage || '',
+        holdPointApproved: st.holdPointSignOff?.approved || false,
+        holdPointSignedBy: st.holdPointSignOff?.signedBy || currentUserProfile?.name || ''
+      };
+    });
+
+    const firstIncomplete = subtasks.find((st: SubTask) => st.status !== 'Completed');
+    const initialActiveId = firstIncomplete ? firstIncomplete.id : (subtasks[0]?.id || '');
+
+    setLogProgressSubtaskInputs(initialInputs);
+    setLogProgressActiveSubtaskId(initialActiveId);
+    setIsSubtaskDropdownOpen(false);
+    setSubtaskDropdownSearch('');
+    setSubtaskDropdownFilter('all');
+    setLogProgressIsGranularMode(subtasks.length > 0);
   };
 
   const handleQuickLogProgressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!loggingProgressActivity) return;
+    const todayStr = logProgressDate || new Date().toISOString().split('T')[0];
+
+    let finalStatus = logProgressStatus;
+    let finalProgress = Number(logProgressPercent) || 0;
+    let finalActualQty = Number(logProgressActualQty) || 0;
+
+    let subtasksToSave: SubTask[] = logProgressSubtasks && logProgressSubtasks.length > 0
+      ? logProgressSubtasks
+      : (loggingProgressActivity.subtasks || []);
+
+    // 1. Process Granular Subtasks if in Granular Mode
+    if (logProgressIsGranularMode && subtasksToSave.length > 0) {
+      subtasksToSave = subtasksToSave.map(st => {
+        const input = logProgressSubtaskInputs[st.id];
+        if (!input) return st;
+
+        const hasShiftChange = input.mode === 'shift' && Number(input.shiftOutput) > 0;
+        const hasCumulativeChange = input.mode === 'cumulative' && Number(input.cumulativeOutput) !== (st.completedQuantity || 0);
+        const hasStatusChange = Boolean(input.status && input.status !== (st.status || 'Not Started'));
+        const hasNotes = Boolean(input.notes && input.notes.trim());
+        const hasHoldApproval = Boolean(input.holdPointApproved && !st.holdPointSignOff?.approved);
+
+        if (!hasShiftChange && !hasCumulativeChange && !hasStatusChange && !hasNotes && !hasHoldApproval) {
+          return st;
+        }
+
+        let updatedSt = { ...st };
+
+        // QA Hold Point Sign-Off Handling
+        if (st.isHoldPoint && input.holdPointApproved) {
+          updatedSt.holdPointSignOff = {
+            signedBy: input.holdPointSignedBy || currentUserProfile?.name || 'Site Supervisor',
+            signedAt: todayStr,
+            signatureNote: input.notes || 'Inspection cleared and approved on site.',
+            approved: true
+          };
+          updatedSt.status = 'Completed';
+        } else if (input.status) {
+          updatedSt.status = input.status;
+        }
+
+        // Apply Shift Output or Cumulative change
+        if (hasShiftChange || hasCumulativeChange || hasNotes) {
+          updatedSt = recordSubtaskProgress(updatedSt, {
+            date: todayStr,
+            shiftOutput: input.mode === 'shift' ? Number(input.shiftOutput) : Number(input.cumulativeOutput),
+            mode: input.mode,
+            status: input.status,
+            notes: input.notes ? input.notes.trim() : '',
+            loggedBy: currentUserProfile?.name || 'Site Supervisor',
+            weather: logProgressWeather,
+            chainageSpan: input.chainageSpan
+          });
+        }
+
+        return updatedSt;
+      });
+
+      // Automatically calculate master activity rollup
+      const rollup = calculateActivityRollupFromSubtasks(loggingProgressActivity, subtasksToSave);
+      finalProgress = rollup.overallProgress;
+      finalActualQty = rollup.actualQuantity;
+      finalStatus = rollup.status;
+    }
+
+    // Strict validation: Parent activity cannot be Completed if any subtask or milestone is incomplete
+    if (subtasksToSave.length > 0) {
+      const incomplete = subtasksToSave.filter(s => s.status !== 'Completed');
+      if (incomplete.length > 0 && (finalStatus === 'Completed' || finalProgress >= 100)) {
+        finalStatus = 'In Progress';
+        finalProgress = Math.min(99, finalProgress);
+      }
+    }
+
+    const updatedRemarks = logProgressNotes.trim() 
+      ? `${loggingProgressActivity.remarks ? loggingProgressActivity.remarks + '\n' : ''}[Progress Log ${todayStr}${logProgressDelayReason ? ` • Blocker: ${logProgressDelayReason}` : ''}]: ${logProgressNotes.trim()}`
+      : loggingProgressActivity.remarks;
 
     const totalLabourHours = (loggingProgressActivity.assignedLabour || []).reduce((sum, l) => sum + (l.hours || 0), 0);
     const workersCount = (loggingProgressActivity.assignedLabour || []).length;
     const equipmentCount = (loggingProgressActivity.assignedEquipment || []).length;
 
     // Structured subtasks summary
-    const subtaskSummary = logProgressSubtasks.length > 0 
-      ? logProgressSubtasks.map((st, idx) => 
-          `[${st.status === 'Completed' ? 'x' : ' '}] #${idx + 1} ${st.title} (${st.category || 'General'}) - ${st.completedQuantity || 0}/${st.targetQuantity || 0} ${st.unit || 'units'} [${st.status}]`
-        ).join('\n')
+    const subtaskSummary = subtasksToSave.length > 0 
+      ? subtasksToSave.map((s, idx) => {
+          const input = logProgressSubtaskInputs[s.id];
+          const wasLoggedToday = input && (
+            (input.mode === 'shift' && Number(input.shiftOutput) > 0) ||
+            (input.mode === 'cumulative' && Number(input.cumulativeOutput) !== (s.completedQuantity || 0)) ||
+            (input.status !== s.status) ||
+            Boolean(input.notes?.trim()) ||
+            Boolean(input.holdPointApproved)
+          );
+          const metrics = calculateSubtaskDailyAverage(s);
+          const shiftGain = wasLoggedToday && input?.mode === 'shift' && input.shiftOutput > 0 ? ` (+${input.shiftOutput} ${s.unit || 'units'} today)` : '';
+          const runRateStr = metrics.dailyAverage > 0 ? ` [Avg: ${metrics.formattedRate}]` : '';
+          const holdStr = s.isHoldPoint ? (s.holdPointSignOff?.approved ? ` [🔒 QA Cleared: ${s.holdPointSignOff.signedBy}]` : ' [🔒 QA Hold Point Pending]') : '';
+          const noteStr = input?.notes?.trim() ? `\n      Remarks: "${input.notes.trim()}"` : '';
+
+          return `  ${s.status === 'Completed' ? '[✓]' : s.status === 'In Progress' ? '[►]' : '[ ]'} #${idx + 1} ${s.title} (${s.category || 'General'}) - ${s.status}${shiftGain} [Total: ${s.completedQuantity || 0}/${s.targetQuantity || 0} ${s.unit || ''}]${runRateStr}${s.isMilestone ? ' 🎯 Milestone' : ''}${holdStr}${noteStr}`;
+        }).join('\n')
       : 'No subtasks configured.';
 
     // Structured resource allocations
@@ -231,10 +368,10 @@ export function Activities() {
       : 'Standard material stock.';
 
     const fullSupervisorNotes = `=== DAILY PROGRESS LOG: ${loggingProgressActivity.name} (${loggingProgressActivity.id}) ===
-Discipline / Package: ${loggingProgressActivity.workPackage} | ${loggingProgressActivity.discipline}
-Overall Activity Progress: ${logProgressPercent}% | Output: ${logProgressActualQty} / ${loggingProgressActivity.targetQuantity || 0} ${loggingProgressActivity.unit || ''}
+Discipline / Package: ${loggingProgressActivity.workPackage || 'N/A'} | ${loggingProgressActivity.discipline || 'General'}
+Overall Activity Progress: ${finalProgress}% | Output: ${finalActualQty} / ${loggingProgressActivity.targetQuantity || 0} ${loggingProgressActivity.unit || ''}
 Priority: ${loggingProgressActivity.priority || 'Normal'} | Shift Hours: ${totalLabourHours} hrs
-
+${logProgressDelayReason ? `Identified Blocker / Delay Cause: ${logProgressDelayReason}\n` : ''}
 --- SUBTASK & METHOD EXECUTION STATUS ---
 ${subtaskSummary}
 
@@ -252,47 +389,44 @@ ${materialSummary}
 ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets executed in accordance with method statement and QA/QC specifications.'}`;
 
     const reportId = `RPT-${Math.floor(10000 + Math.random() * 90000)}`;
-    const newDailyReport: DailyReport = {
-      id: reportId,
-      date: logProgressDate,
-      projectId: loggingProgressActivity.projectId || projects[0]?.id || 'PROJ-001',
-      weather: logProgressWeather,
-      temperature: logProgressTemp,
-      siteConditions: logProgressSiteConditions,
-      significantEvents: `Progress logged on ${loggingProgressActivity.name}: advanced to ${logProgressPercent}% (${logProgressActualQty} / ${loggingProgressActivity.targetQuantity || 0} ${loggingProgressActivity.unit || ''}). ${logProgressNotes ? logProgressNotes.slice(0, 100) : ''}`,
-      workersOnSite: workersCount || 1,
-      equipmentRunning: equipmentCount || 0,
-      incidents: 0,
-      ncr: 0,
-      activitiesLogged: [loggingProgressActivity.id],
-      manpowerBreakdown: (loggingProgressActivity.assignedLabour || []).map(l => ({
-        trade: l.role || 'General Worker',
-        count: 1,
-        hours: l.hours || 8
-      })),
-      equipmentLogged: (loggingProgressActivity.assignedEquipment || []).map(e => ({
-        equipmentId: e.equipmentId,
-        hours: 8,
-        status: 'Operating'
-      })),
-      photos: loggingProgressActivity.photos ? [...loggingProgressActivity.photos] : [],
-      supervisorNotes: fullSupervisorNotes
-    };
-
-    if (addReport) {
+    if (logProgressPostReport && addReport) {
+      const newDailyReport: DailyReport = {
+        id: reportId,
+        date: todayStr,
+        projectId: loggingProgressActivity.projectId || projects[0]?.id || 'PROJ-001',
+        weather: logProgressWeather,
+        temperature: logProgressTemp,
+        siteConditions: logProgressSiteConditions,
+        significantEvents: `Progress logged on ${loggingProgressActivity.name}: advanced to ${finalProgress}% (${finalActualQty} / ${loggingProgressActivity.targetQuantity || 0} ${loggingProgressActivity.unit || ''}). ${logProgressDelayReason ? `[Blocker: ${logProgressDelayReason}] ` : ''}${logProgressNotes ? logProgressNotes.slice(0, 100) : ''}`,
+        workersOnSite: workersCount || 1,
+        equipmentRunning: equipmentCount || 0,
+        incidents: 0,
+        ncr: 0,
+        activitiesLogged: [loggingProgressActivity.id],
+        manpowerBreakdown: (loggingProgressActivity.assignedLabour || []).map(l => ({
+          trade: l.role || 'General Worker',
+          count: 1,
+          hours: l.hours || 8
+        })),
+        equipmentLogged: (loggingProgressActivity.assignedEquipment || []).map(e => ({
+          equipmentId: e.equipmentId,
+          hours: 8,
+          status: 'Operating'
+        })),
+        photos: loggingProgressActivity.photos ? [...loggingProgressActivity.photos] : [],
+        supervisorNotes: fullSupervisorNotes
+      };
       addReport(newDailyReport);
     }
 
     const updatedActivity: Activity = {
       ...loggingProgressActivity,
-      progress: logProgressPercent,
-      actualQuantity: logProgressActualQty,
-      status: logProgressStatus,
-      subtasks: logProgressSubtasks,
-      updatedAt: new Date().toISOString().split('T')[0],
-      remarks: logProgressNotes.trim()
-        ? `[${logProgressDate} Progress Log (${logProgressPercent}%)]: ${logProgressNotes.trim()}\n${loggingProgressActivity.remarks || ''}`
-        : loggingProgressActivity.remarks
+      progress: finalProgress,
+      actualQuantity: finalActualQty,
+      status: finalStatus,
+      subtasks: subtasksToSave,
+      updatedAt: todayStr,
+      remarks: updatedRemarks
     };
 
     if (updateActivity) {
@@ -303,9 +437,9 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
       addAuditLog({
         id: `AL-${Math.random().toString(36).substr(2, 9)}`,
         projectId: loggingProgressActivity.projectId || projects[0]?.id || 'PROJ-001',
-        userId: userRole === 'Manager' ? 'Current User' : 'Current User',
+        userId: currentUserProfile?.name || 'Current User',
         action: 'Progress Logged & Report Posted',
-        details: `Logged progress on "${loggingProgressActivity.name}" (${logProgressPercent}%, ${logProgressActualQty} ${loggingProgressActivity.unit || ''}) and posted Daily Report #${reportId}.`,
+        details: `Logged progress on "${loggingProgressActivity.name}" (${finalProgress}%, ${finalActualQty} ${loggingProgressActivity.unit || ''})${logProgressPostReport ? ` and posted Daily Report #${reportId}` : ''}.`,
         timestamp: new Date().toISOString()
       });
     }
@@ -1422,24 +1556,24 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
 
       {/* Quick Log Progress & Daily Report Modal (from List View) */}
       {loggingProgressActivity && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-4xl max-h-[92vh] shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 rounded-3xl w-full max-w-4xl max-h-[94vh] shadow-2xl flex flex-col overflow-hidden">
             {/* Modal Header */}
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-blue-50/80 via-indigo-50/40 to-white dark:from-slate-800/80 dark:via-slate-800/40 dark:to-slate-900 flex-shrink-0">
-              <div className="flex items-center gap-3.5">
-                <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-sm">
-                  <TrendingUp className="h-6 w-6" />
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/40 flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs shrink-0">
+                  <TrendingUp className="h-5 w-5" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                      Log Progress & Daily Report
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white truncate">
+                      Quick Log Progress & Daily Report
                     </h3>
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                       {loggingProgressActivity.id}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5 flex-wrap truncate">
                     <span className="font-semibold text-slate-700 dark:text-slate-200">{loggingProgressActivity.name}</span>
                     {loggingProgressActivity.workPackage && (
                       <>
@@ -1450,7 +1584,7 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
                     {loggingProgressActivity.discipline && (
                       <>
                         <span>•</span>
-                        <span className="text-indigo-600 dark:text-indigo-400 font-medium">{loggingProgressActivity.discipline}</span>
+                        <span className="text-[#0B5FFF] font-medium">{loggingProgressActivity.discipline}</span>
                       </>
                     )}
                   </p>
@@ -1458,323 +1592,1026 @@ ${logProgressNotes.trim() ? logProgressNotes.trim() : 'Daily production targets 
               </div>
               <button 
                 onClick={() => setLoggingProgressActivity(null)}
-                className="p-2.5 rounded-2xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
                 title="Close"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Modal Form */}
+            {/* Modal Form Body */}
             <form onSubmit={handleQuickLogProgressSubmit} className="flex flex-col flex-1 overflow-hidden">
-              <div className="p-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
+              <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1 custom-scrollbar">
                 
-                {/* 2-Column Responsive Layout */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  
-                  {/* Left Column: Progress Metrics, Sliders & Site Data (7 Cols) */}
-                  <div className="lg:col-span-7 space-y-5">
-                    
-                    {/* Primary Progress Metrics Card */}
-                    <div className="p-4 sm:p-5 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                        
-                        {/* Completion Percentage */}
-                        <div className="space-y-1.5">
-                          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            Progress Completion
-                          </label>
-                          <div className="relative">
-                            <input 
-                              type="number"
-                              min="0"
-                              max="100"
-                              required
-                              value={logProgressPercent}
-                              onChange={(e) => setLogProgressPercent(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
-                              className="w-full h-11 px-3.5 pr-8 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-black text-base text-[#0B5FFF] focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none transition-shadow"
-                            />
-                            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                {/* Granular vs Direct Mode Switcher */}
+                {logProgressSubtasks.length > 0 && (
+                  <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                    <button
+                      type="button"
+                      onClick={() => setLogProgressIsGranularMode(true)}
+                      className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        logProgressIsGranularMode 
+                          ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' 
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                      }`}
+                    >
+                      <CheckSquare className="h-3.5 w-3.5" />
+                      <span>Granular Subtasks & Shift Output</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-100 dark:bg-blue-950 text-[#0B5FFF]">
+                        {logProgressSubtasks.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLogProgressIsGranularMode(false)}
+                      className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        !logProgressIsGranularMode 
+                          ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs' 
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                      }`}
+                    >
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      <span>Direct Master Activity Progress</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* GRANULAR SUBTASKS LOGGING ENGINE */}
+                {logProgressIsGranularMode && logProgressSubtasks && logProgressSubtasks.length > 0 ? (
+                  <div className="space-y-4">
+                    {(() => {
+                      const activeSubtaskIndex = Math.max(0, logProgressSubtasks.findIndex(s => s.id === logProgressActiveSubtaskId));
+                      const currentActiveSubtask = logProgressSubtasks[activeSubtaskIndex] || logProgressSubtasks[0];
+
+                      // Identify all subtasks with staged/remembered modifications in current session
+                      const stagedSubtasks = logProgressSubtasks.filter(st => {
+                        const input = logProgressSubtaskInputs[st.id];
+                        if (!input) return false;
+                        const hasShiftChange = input.mode === 'shift' && Number(input.shiftOutput) > 0;
+                        const hasCumulativeChange = input.mode === 'cumulative' && Number(input.cumulativeOutput) !== (st.completedQuantity || 0);
+                        const hasStatusChange = Boolean(input.status && input.status !== (st.status || 'Not Started'));
+                        const hasNotes = Boolean(input.notes && input.notes.trim());
+                        const hasHoldApproval = Boolean(input.holdPointApproved && !st.holdPointSignOff?.approved);
+                        return hasShiftChange || hasCumulativeChange || hasStatusChange || hasNotes || hasHoldApproval;
+                      }).map(st => {
+                        const input = logProgressSubtaskInputs[st.id];
+                        let label = '';
+                        if (input.mode === 'shift' && Number(input.shiftOutput) > 0) {
+                          label = `+${input.shiftOutput} ${st.unit || 'units'}`.trim();
+                        } else if (input.mode === 'cumulative' && Number(input.cumulativeOutput) !== (st.completedQuantity || 0)) {
+                          label = `Total: ${input.cumulativeOutput} ${st.unit || ''}`.trim();
+                        } else if (input.status && input.status !== st.status) {
+                          label = input.status;
+                        } else if (input.holdPointApproved) {
+                          label = 'QA Cleared';
+                        } else {
+                          label = 'Notes Staged';
+                        }
+                        return { subtask: st, input, changeLabel: label };
+                      });
+
+                      // Live auto-rollup calculation across all staged subtasks
+                      const simulatedSubtasks = logProgressSubtasks.map(st => {
+                        const input = logProgressSubtaskInputs[st.id];
+                        if (!input) return st;
+                        const hasShiftChange = input.mode === 'shift' && Number(input.shiftOutput) > 0;
+                        const hasCumulativeChange = input.mode === 'cumulative' && Number(input.cumulativeOutput) !== (st.completedQuantity || 0);
+                        const hasStatusChange = Boolean(input.status && input.status !== st.status);
+                        const hasNotes = Boolean(input.notes && input.notes.trim());
+                        const hasHoldApproval = Boolean(input.holdPointApproved && !st.holdPointSignOff?.approved);
+
+                        if (hasShiftChange || hasCumulativeChange || hasStatusChange || hasNotes || hasHoldApproval) {
+                          const prev = st.completedQuantity || 0;
+                          const newTot = input.mode === 'shift' ? prev + (Number(input.shiftOutput) || 0) : (Number(input.cumulativeOutput) || 0);
+                          let newStatus = input.status || st.status;
+                          if (st.isHoldPoint && input.holdPointApproved) newStatus = 'Completed';
+                          else if (st.targetQuantity && newTot >= st.targetQuantity && newStatus !== 'Completed') newStatus = 'Completed';
+
+                          return {
+                            ...st,
+                            completedQuantity: newTot,
+                            status: newStatus
+                          };
+                        }
+                        return st;
+                      });
+                      const previewRollup = calculateActivityRollupFromSubtasks(loggingProgressActivity, simulatedSubtasks);
+
+                      return (
+                        <div className="space-y-4">
+                          {/* Subtask Select Popout Bar */}
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                              <label className="font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                                <CheckSquare className="h-4 w-4 text-[#0B5FFF]" /> Select & Update Subtask
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+                                  Subtask {activeSubtaskIndex + 1} of {logProgressSubtasks.length}
+                                </span>
+                                {stagedSubtasks.length > 0 && (
+                                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                    <Check className="h-3 w-3" /> {stagedSubtasks.length} Remembered for Today
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Popout Selector Bar with Prev / Next Navigation */}
+                            <div className="flex items-center gap-2 relative" ref={subtaskDropdownRef}>
+                              {/* Prev Subtask Button */}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                disabled={activeSubtaskIndex <= 0}
+                                onClick={() => {
+                                  if (activeSubtaskIndex > 0) {
+                                    setLogProgressActiveSubtaskId(logProgressSubtasks[activeSubtaskIndex - 1].id);
+                                  }
+                                }}
+                                className="h-12 w-12 rounded-2xl shrink-0 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-35 cursor-pointer shadow-xs"
+                                title="Previous Subtask"
+                              >
+                                <ChevronLeft className="h-4 w-4" />
+                              </Button>
+
+                              {/* Main Dropdown Popout Trigger Button */}
+                              <button
+                                type="button"
+                                onClick={() => setIsSubtaskDropdownOpen(!isSubtaskDropdownOpen)}
+                                className="flex-1 min-h-[48px] px-4 py-2 rounded-2xl bg-white dark:bg-slate-800/90 border-2 border-slate-200 dark:border-slate-700 hover:border-[#0B5FFF]/60 focus:border-[#0B5FFF] flex items-center justify-between gap-3 text-left shadow-xs transition-all cursor-pointer"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <span className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                    currentActiveSubtask?.status === 'Completed'
+                                      ? 'bg-emerald-500 text-white'
+                                      : 'bg-blue-100 dark:bg-blue-950 text-[#0B5FFF]'
+                                  }`}>
+                                    {activeSubtaskIndex + 1}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                                        {currentActiveSubtask?.title || 'Select Subtask'}
+                                      </span>
+                                      {currentActiveSubtask?.category && (
+                                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 px-1.5 py-0.2 bg-slate-100 dark:bg-slate-700 rounded-md">
+                                          {currentActiveSubtask.category}
+                                        </span>
+                                      )}
+                                      {currentActiveSubtask?.targetQuantity ? (
+                                        <span className="text-[11px] font-mono text-slate-400">
+                                          ({currentActiveSubtask.completedQuantity || 0}/{currentActiveSubtask.targetQuantity}{currentActiveSubtask.unit ? ` ${currentActiveSubtask.unit}` : ''})
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {(() => {
+                                    const stagedEntry = stagedSubtasks.find(s => s.subtask.id === currentActiveSubtask?.id);
+                                    if (stagedEntry) {
+                                      return (
+                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 shrink-0 flex items-center gap-1 shadow-xs">
+                                          <Zap className="h-2.5 w-2.5 text-emerald-600" />
+                                          {stagedEntry.changeLabel}
+                                        </span>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
+                                  <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${isSubtaskDropdownOpen ? 'rotate-180 text-[#0B5FFF]' : ''}`} />
+                                </div>
+                              </button>
+
+                              {/* Next Subtask Button */}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                disabled={activeSubtaskIndex >= logProgressSubtasks.length - 1}
+                                onClick={() => {
+                                  if (activeSubtaskIndex < logProgressSubtasks.length - 1) {
+                                    setLogProgressActiveSubtaskId(logProgressSubtasks[activeSubtaskIndex + 1].id);
+                                  }
+                                }}
+                                className="h-12 w-12 rounded-2xl shrink-0 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-35 cursor-pointer shadow-xs"
+                                title="Next Subtask"
+                              >
+                                <ChevronRight className="h-4 w-4" />
+                              </Button>
+
+                              {/* The Floating Popout Menu Panel */}
+                              {isSubtaskDropdownOpen && (
+                                <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[380px]">
+                                  {/* Search & Category Tabs */}
+                                  <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 space-y-2">
+                                    <div className="relative">
+                                      <Search className="h-4 w-4 absolute left-3 top-2.5 text-slate-400" />
+                                      <input
+                                        type="text"
+                                        placeholder="Filter subtasks by title, number, or category..."
+                                        value={subtaskDropdownSearch}
+                                        onChange={(e) => setSubtaskDropdownSearch(e.target.value)}
+                                        className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#0B5FFF]"
+                                        autoFocus
+                                      />
+                                    </div>
+                                    
+                                    {/* Filter Buttons */}
+                                    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => setSubtaskDropdownFilter('all')}
+                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                          subtaskDropdownFilter === 'all'
+                                            ? 'bg-[#0B5FFF] text-white shadow-xs'
+                                            : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300'
+                                        }`}
+                                      >
+                                        All ({logProgressSubtasks.length})
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSubtaskDropdownFilter('incomplete')}
+                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                          subtaskDropdownFilter === 'incomplete'
+                                            ? 'bg-[#0B5FFF] text-white shadow-xs'
+                                            : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300'
+                                        }`}
+                                      >
+                                        Incomplete ({logProgressSubtasks.filter(s => s.status !== 'Completed').length})
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSubtaskDropdownFilter('staged')}
+                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                          subtaskDropdownFilter === 'staged'
+                                            ? 'bg-emerald-600 text-white shadow-xs'
+                                            : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800'
+                                        }`}
+                                      >
+                                        Staged for Shift ({stagedSubtasks.length})
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSubtaskDropdownFilter('holdPoint')}
+                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                                          subtaskDropdownFilter === 'holdPoint'
+                                            ? 'bg-rose-600 text-white shadow-xs'
+                                            : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 hover:bg-rose-100 border border-rose-200 dark:border-rose-800'
+                                        }`}
+                                      >
+                                        QA Hold Points ({logProgressSubtasks.filter(s => s.isHoldPoint).length})
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Subtasks Scroll List */}
+                                  <div className="overflow-y-auto p-1.5 divide-y divide-slate-100 dark:divide-slate-800/60">
+                                    {(() => {
+                                      const filtered = logProgressSubtasks.filter((st, idx) => {
+                                        if (subtaskDropdownSearch.trim()) {
+                                          const q = subtaskDropdownSearch.toLowerCase();
+                                          const matchTitle = st.title.toLowerCase().includes(q);
+                                          const matchCat = (st.category || '').toLowerCase().includes(q);
+                                          const matchIdx = (idx + 1).toString().includes(q);
+                                          if (!matchTitle && !matchCat && !matchIdx) return false;
+                                        }
+                                        if (subtaskDropdownFilter === 'incomplete') return st.status !== 'Completed';
+                                        if (subtaskDropdownFilter === 'staged') return stagedSubtasks.some(s => s.subtask.id === st.id);
+                                        if (subtaskDropdownFilter === 'holdPoint') return st.isHoldPoint;
+                                        return true;
+                                      });
+
+                                      if (filtered.length === 0) {
+                                        return (
+                                          <div className="p-6 text-center text-xs text-slate-400">
+                                            No subtasks match the search/filter criteria.
+                                          </div>
+                                        );
+                                      }
+
+                                      return filtered.map((st) => {
+                                        const idx = logProgressSubtasks.findIndex(s => s.id === st.id);
+                                        const isActive = st.id === currentActiveSubtask?.id;
+                                        const stagedEntry = stagedSubtasks.find(s => s.subtask.id === st.id);
+
+                                        return (
+                                          <button
+                                            key={st.id || idx}
+                                            type="button"
+                                            onClick={() => {
+                                              setLogProgressActiveSubtaskId(st.id);
+                                              setIsSubtaskDropdownOpen(false);
+                                            }}
+                                            className={`w-full p-2.5 rounded-xl flex items-center justify-between gap-3 text-left transition-all cursor-pointer ${
+                                              isActive 
+                                                ? 'bg-blue-50/90 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-800/80 shadow-xs' 
+                                                : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                              <span className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                                st.status === 'Completed' 
+                                                  ? 'bg-emerald-500 text-white' 
+                                                  : isActive 
+                                                    ? 'bg-[#0B5FFF] text-white' 
+                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                              }`}>
+                                                {idx + 1}
+                                              </span>
+                                              <div className="min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                  <span className={`text-xs font-bold truncate ${isActive ? 'text-[#0B5FFF] dark:text-blue-300' : 'text-slate-900 dark:text-white'}`}>
+                                                    {st.title}
+                                                  </span>
+                                                  {st.isHoldPoint && (
+                                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200">
+                                                      🔒 QA Gate
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium mt-0.5">
+                                                  <span>{st.category || 'General'}</span>
+                                                  <span>•</span>
+                                                  <span>{st.completedQuantity || 0}/{st.targetQuantity || 0} {st.unit || ''}</span>
+                                                  <span>•</span>
+                                                  <span className={`${st.status === 'Completed' ? 'text-emerald-600' : st.status === 'In Progress' ? 'text-blue-600' : 'text-slate-400'}`}>
+                                                    {st.status || 'Not Started'}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            <div className="shrink-0 flex items-center gap-1.5">
+                                              {stagedEntry && (
+                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 flex items-center gap-1">
+                                                  <Check className="h-3 w-3 text-emerald-600" /> {stagedEntry.changeLabel}
+                                                </span>
+                                              )}
+                                              {isActive && <Check className="h-4 w-4 text-[#0B5FFF]" />}
+                                            </div>
+                                          </button>
+                                        );
+                                      });
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Staged Subtasks Quick Ribbon (Remembered Tasks Summary) */}
+                            {stagedSubtasks.length > 0 && (
+                              <div className="p-2.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-900/60 flex flex-col gap-1.5">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Staged For Today ({stagedSubtasks.length} Subtasks Remembered)
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const resetInputs: Record<string, any> = {};
+                                      logProgressSubtasks.forEach(st => {
+                                        resetInputs[st.id] = {
+                                          mode: 'shift',
+                                          shiftOutput: 0,
+                                          cumulativeOutput: st.completedQuantity || 0,
+                                          status: st.status || 'Not Started',
+                                          notes: '',
+                                          chainageSpan: st.chainage || '',
+                                          holdPointApproved: st.holdPointSignOff?.approved || false,
+                                          holdPointSignedBy: st.holdPointSignOff?.signedBy || currentUserProfile?.name || ''
+                                        };
+                                      });
+                                      setLogProgressSubtaskInputs(resetInputs);
+                                    }}
+                                    className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                                  >
+                                    Clear All Staged
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                                  {stagedSubtasks.map(({ subtask: st, changeLabel }) => {
+                                    const idx = logProgressSubtasks.findIndex(s => s.id === st.id);
+                                    const isCurrentlyActive = st.id === currentActiveSubtask?.id;
+                                    return (
+                                      <div
+                                        key={st.id}
+                                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
+                                          isCurrentlyActive
+                                            ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                                            : 'bg-white dark:bg-slate-800 text-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100/50'
+                                        }`}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => setLogProgressActiveSubtaskId(st.id)}
+                                          className="flex items-center gap-1 text-left cursor-pointer"
+                                        >
+                                          <span className="font-mono font-bold">#{idx + 1}</span>
+                                          <span className="truncate max-w-[140px]">{st.title}</span>
+                                          <span className="opacity-90 font-mono text-[10px]">({changeLabel})</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const updated = { ...logProgressSubtaskInputs };
+                                            updated[st.id] = {
+                                              mode: 'shift',
+                                              shiftOutput: 0,
+                                              cumulativeOutput: st.completedQuantity || 0,
+                                              status: st.status || 'Not Started',
+                                              notes: '',
+                                              chainageSpan: st.chainage || '',
+                                              holdPointApproved: st.holdPointSignOff?.approved || false,
+                                              holdPointSignedBy: st.holdPointSignOff?.signedBy || currentUserProfile?.name || ''
+                                            };
+                                            setLogProgressSubtaskInputs(updated);
+                                          }}
+                                          className="hover:opacity-70 p-0.5 rounded ml-0.5 cursor-pointer"
+                                          title="Clear this subtask from today's shift"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Single Active Subtask Editor Card */}
+                          {currentActiveSubtask && (() => {
+                            const st = currentActiveSubtask;
+                            const idx = activeSubtaskIndex;
+                            const input = logProgressSubtaskInputs[st.id] || {
+                              mode: 'shift',
+                              shiftOutput: 0,
+                              cumulativeOutput: st.completedQuantity || 0,
+                              status: st.status || 'Not Started',
+                              notes: '',
+                              chainageSpan: st.chainage || '',
+                              holdPointApproved: st.holdPointSignOff?.approved || false,
+                              holdPointSignedBy: st.holdPointSignOff?.signedBy || currentUserProfile?.name || ''
+                            };
+
+                            const metrics = calculateSubtaskDailyAverage(st);
+                            const prevQty = st.completedQuantity || 0;
+                            const targetQty = st.targetQuantity || 0;
+                            const newCalculatedTotal = input.mode === 'shift' 
+                              ? prevQty + (Number(input.shiftOutput) || 0)
+                              : (Number(input.cumulativeOutput) || 0);
+                            const newPct = targetQty > 0 ? Math.min(100, Math.round((newCalculatedTotal / targetQty) * 100)) : 0;
+
+                            return (
+                              <div className="p-4 sm:p-5 rounded-3xl bg-slate-50/90 dark:bg-slate-800/70 border-2 border-slate-200/90 dark:border-slate-700/80 shadow-sm flex flex-col gap-4">
+                                {/* Card Header */}
+                                <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80 dark:border-slate-700/80">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className="px-2.5 py-1 rounded-xl bg-[#0B5FFF] text-white font-extrabold text-xs font-mono shrink-0 shadow-xs">
+                                      #{idx + 1}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                                        {st.title}
+                                      </h4>
+                                      <div className="flex items-center gap-2 mt-0.5">
+                                        <Badge variant="outline" className="text-[10px]">{st.category || 'General'}</Badge>
+                                        {st.isMilestone && (
+                                          <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950 px-1.5 py-0.2 rounded border border-purple-200">
+                                            🎯 Milestone
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {metrics.dailyAverage > 0 && (
+                                      <span 
+                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800"
+                                        title={`Average Daily Output: ${metrics.formattedRate}${metrics.projectedDaysLeft !== undefined ? ` • Est. ${metrics.projectedDaysLeft} shift(s) remaining` : ''}`}
+                                      >
+                                        <Zap className="h-3 w-3 text-emerald-500" />
+                                        {metrics.formattedRate}
+                                      </span>
+                                    )}
+
+                                    <select
+                                      value={input.status}
+                                      onChange={(e) => {
+                                        const updated = { ...logProgressSubtaskInputs };
+                                        updated[st.id] = { ...input, status: e.target.value as any };
+                                        setLogProgressSubtaskInputs(updated);
+                                      }}
+                                      className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 shadow-xs focus:outline-none focus:border-[#0B5FFF]"
+                                    >
+                                      <option value="Not Started">Not Started</option>
+                                      <option value="In Progress">In Progress</option>
+                                      <option value="Completed">Completed</option>
+                                    </select>
+                                  </div>
+                                </div>
+
+                                {/* Shift Output Mode & Quantity Inputs */}
+                                <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3 shadow-xs">
+                                  <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-xs font-semibold">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const updated = { ...logProgressSubtaskInputs };
+                                          updated[st.id] = { ...input, mode: 'shift' };
+                                          setLogProgressSubtaskInputs(updated);
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                                          input.mode === 'shift' 
+                                            ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] font-bold shadow-xs' 
+                                            : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                      >
+                                        + Today's Shift (+Δ)
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const updated = { ...logProgressSubtaskInputs };
+                                          updated[st.id] = { ...input, mode: 'cumulative' };
+                                          setLogProgressSubtaskInputs(updated);
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                                          input.mode === 'cumulative' 
+                                            ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] font-bold shadow-xs' 
+                                            : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                      >
+                                        Set Cumulative Total
+                                      </button>
+                                    </div>
+
+                                    <span className="text-xs font-extrabold text-[#0B5FFF] bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
+                                      New Total: {newCalculatedTotal} {st.unit || 'units'} {targetQty > 0 ? `(${newPct}%)` : ''}
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {input.mode === 'shift' ? (
+                                      <div>
+                                        <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                                          Today's Shift Output ({st.unit || 'units'})
+                                        </label>
+                                        <div className="relative">
+                                          <span className="absolute left-3 top-2.5 font-bold text-emerald-600">+</span>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            placeholder="e.g. 150"
+                                            value={input.shiftOutput || ''}
+                                            onChange={(e) => {
+                                              const val = Number(e.target.value);
+                                              const updated = { ...logProgressSubtaskInputs };
+                                              const newTot = prevQty + val;
+                                              const autoStatus = (targetQty > 0 && newTot >= targetQty) ? 'Completed' : (newTot > 0 ? 'In Progress' : input.status);
+                                              updated[st.id] = { ...input, shiftOutput: val, cumulativeOutput: newTot, status: autoStatus };
+                                              setLogProgressSubtaskInputs(updated);
+                                            }}
+                                            className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold text-[#0B5FFF] focus:outline-none focus:border-[#0B5FFF]"
+                                          />
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                                          Cumulative Output to Date ({st.unit || 'units'})
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="any"
+                                          value={input.cumulativeOutput}
+                                          onChange={(e) => {
+                                            const val = Number(e.target.value);
+                                            const updated = { ...logProgressSubtaskInputs };
+                                            const autoStatus = (targetQty > 0 && val >= targetQty) ? 'Completed' : (val > 0 ? 'In Progress' : input.status);
+                                            updated[st.id] = { ...input, cumulativeOutput: val, shiftOutput: Math.max(0, val - prevQty), status: autoStatus };
+                                            setLogProgressSubtaskInputs(updated);
+                                          }}
+                                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold text-[#0B5FFF] focus:outline-none focus:border-[#0B5FFF]"
+                                        />
+                                      </div>
+                                    )}
+
+                                    <div>
+                                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                                        Chainage / Section Span (Optional)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        placeholder="e.g. CH 0+150 to CH 0+300"
+                                        value={input.chainageSpan || ''}
+                                        onChange={(e) => {
+                                          const updated = { ...logProgressSubtaskInputs };
+                                          updated[st.id] = { ...input, chainageSpan: e.target.value };
+                                          setLogProgressSubtaskInputs(updated);
+                                        }}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Visual Mini Progress Bar */}
+                                  {targetQty > 0 && (
+                                    <div className="space-y-1.5 pt-1">
+                                      <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                                        <div 
+                                          className="h-full bg-blue-500" 
+                                          style={{ width: `${Math.min(100, Math.round((prevQty / targetQty) * 100))}%` }} 
+                                          title={`Previous Completed: ${prevQty} ${st.unit}`}
+                                        />
+                                        {input.mode === 'shift' && input.shiftOutput > 0 && (
+                                          <div 
+                                            className="h-full bg-emerald-500 animate-pulse" 
+                                            style={{ width: `${Math.min(100 - Math.round((prevQty / targetQty) * 100), Math.round((input.shiftOutput / targetQty) * 100))}%` }} 
+                                            title={`Today's Shift Gain: +${input.shiftOutput} ${st.unit}`}
+                                          />
+                                        )}
+                                      </div>
+                                      <div className="flex justify-between text-[11px] text-slate-500">
+                                        <span>Prior Logged: {prevQty} {st.unit}</span>
+                                        <span className="font-bold text-slate-700 dark:text-slate-300">
+                                          Target: {targetQty} {st.unit} ({newPct}% Total)
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* QA Hold Point Inspection Box */}
+                                {st.isHoldPoint && (
+                                  <div className="p-3.5 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-2xl space-y-2 text-xs">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
+                                        <ShieldCheck className="h-4 w-4 text-rose-600" />
+                                        QA Hold Point Quality Gate
+                                      </span>
+                                      <label className="flex items-center gap-2 cursor-pointer font-bold text-rose-900 dark:text-rose-200">
+                                        <input
+                                          type="checkbox"
+                                          checked={input.holdPointApproved}
+                                          onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            const updated = { ...logProgressSubtaskInputs };
+                                            updated[st.id] = { 
+                                              ...input, 
+                                              holdPointApproved: checked,
+                                              status: checked ? 'Completed' : input.status
+                                            };
+                                            setLogProgressSubtaskInputs(updated);
+                                          }}
+                                          className="h-4 w-4 text-emerald-600 rounded cursor-pointer"
+                                        />
+                                        <span>Clear & Approve Hold Point</span>
+                                      </label>
+                                    </div>
+                                    {input.holdPointApproved && (
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-rose-200/60">
+                                        <input
+                                          type="text"
+                                          placeholder="Inspector / Signee Name"
+                                          value={input.holdPointSignedBy}
+                                          onChange={(e) => {
+                                            const updated = { ...logProgressSubtaskInputs };
+                                            updated[st.id] = { ...input, holdPointSignedBy: e.target.value };
+                                            setLogProgressSubtaskInputs(updated);
+                                          }}
+                                          className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-800 rounded-xl text-xs text-slate-900 dark:text-white"
+                                        />
+                                        <span className="text-[11px] text-emerald-700 dark:text-emerald-300 flex items-center gap-1 font-semibold">
+                                          <CheckCircle2 className="h-3.5 w-3.5" /> Cleared for today's daily record
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Subtask Specific Remarks */}
+                                <div>
+                                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                                    Subtask Field Remarks & Observations
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Trench marked out along pegs 12-18, soil density tested..."
+                                    value={input.notes}
+                                    onChange={(e) => {
+                                      const updated = { ...logProgressSubtaskInputs };
+                                      updated[st.id] = { ...input, notes: e.target.value };
+                                      setLogProgressSubtaskInputs(updated);
+                                    }}
+                                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-[#0B5FFF]"
+                                  />
+                                </div>
+
+                                {/* Bottom Card Subtask Stepper Actions */}
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-200/80 dark:border-slate-700/80 gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={activeSubtaskIndex <= 0}
+                                    onClick={() => {
+                                      if (activeSubtaskIndex > 0) {
+                                        setLogProgressActiveSubtaskId(logProgressSubtasks[activeSubtaskIndex - 1].id);
+                                      }
+                                    }}
+                                    className="text-xs text-slate-600 dark:text-slate-300 gap-1 rounded-xl cursor-pointer disabled:opacity-40"
+                                  >
+                                    <ChevronLeft className="h-3.5 w-3.5" /> Previous Subtask
+                                  </Button>
+
+                                  <div className="text-[11px] font-semibold text-slate-400 text-center">
+                                    {stagedSubtasks.some(s => s.subtask.id === st.id) ? (
+                                      <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-bold">
+                                        <Check className="h-3.5 w-3.5" /> Staged & Remembered
+                                      </span>
+                                    ) : (
+                                      <span>Not modified yet</span>
+                                    )}
+                                  </div>
+
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (activeSubtaskIndex < logProgressSubtasks.length - 1) {
+                                        setLogProgressActiveSubtaskId(logProgressSubtasks[activeSubtaskIndex + 1].id);
+                                      }
+                                    }}
+                                    disabled={activeSubtaskIndex >= logProgressSubtasks.length - 1}
+                                    className="text-xs bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 gap-1 rounded-xl font-bold cursor-pointer disabled:opacity-40"
+                                  >
+                                    <span>Next Subtask</span>
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Master Activity Live Rollup Indicator Banner */}
+                          <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800/80 rounded-2xl flex items-center justify-between flex-wrap gap-2 text-xs">
+                            <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
+                              <Sparkles className="h-4 w-4 text-[#0B5FFF]" />
+                              <span>Auto Master Activity Rollup:</span>
+                              <span className="text-[#0B5FFF] font-extrabold text-sm">{previewRollup.overallProgress}% Complete</span>
+                              {loggingProgressActivity.targetQuantity ? (
+                                <span className="text-slate-500 font-normal">
+                                  ({previewRollup.actualQuantity} / {loggingProgressActivity.targetQuantity} {loggingProgressActivity.unit || 'units'})
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="flex items-center gap-2 font-semibold text-slate-600 dark:text-slate-300">
+                              <span>{previewRollup.completedSubtasksCount} / {previewRollup.totalSubtasksCount} Subtasks Completed</span>
+                              {stagedSubtasks.length > 0 && (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-bold">
+                                  {stagedSubtasks.length} Staged for Report
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  /* MACRO ACTIVITY PROGRESS (Direct Completion Slider) */
+                  <div className="space-y-4">
+                    <div className="p-4 bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/60 rounded-2xl space-y-3.5">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                          <TrendingUp className="h-4 w-4 text-[#0B5FFF]" /> Master Activity Output
+                        </label>
+                        <span className="text-sm font-black text-[#0B5FFF]">{logProgressPercent}%</span>
+                      </div>
 
-                        {/* Actual Output */}
-                        <div className="space-y-1.5">
-                          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            Actual Output ({loggingProgressActivity.unit || 'units'})
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                            Actual Quantity Completed ({loggingProgressActivity.unit || 'units'})
                           </label>
-                          <input 
+                          <input
                             type="number"
                             min="0"
+                            step="any"
                             value={logProgressActualQty}
                             onChange={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
+                              const val = Number(e.target.value);
                               setLogProgressActualQty(val);
                               if (loggingProgressActivity.targetQuantity && loggingProgressActivity.targetQuantity > 0) {
-                                const calculatedPct = Math.min(100, Math.round((val / loggingProgressActivity.targetQuantity) * 100));
-                                setLogProgressPercent(calculatedPct);
+                                const calculated = Math.min(100, Math.round((val / loggingProgressActivity.targetQuantity) * 100));
+                                setLogProgressPercent(calculated);
+                                if (calculated === 100) setLogProgressStatus('Completed');
+                                else if (calculated > 0) setLogProgressStatus('In Progress');
                               }
                             }}
-                            className="w-full h-11 px-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none transition-shadow"
-                            placeholder={`Target: ${loggingProgressActivity.targetQuantity || 0}`}
+                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#0B5FFF]"
                           />
                         </div>
 
-                        {/* Activity Status */}
-                        <div className="space-y-1.5">
-                          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            Activity Status
+                        <div>
+                          <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                            Activity Master Status
                           </label>
-                          <select 
+                          <select
                             value={logProgressStatus}
-                            onChange={(e) => setLogProgressStatus(e.target.value as ActivityStatus)}
-                            className="w-full h-11 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none transition-shadow"
+                            onChange={(e) => setLogProgressStatus(e.target.value as any)}
+                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#0B5FFF]"
                           >
-                            <option value="Not Started">⚪ Not Started</option>
-                            <option value="In Progress">🔵 In Progress</option>
-                            <option value="Completed">🟢 Completed</option>
-                            <option value="Blocked">🔴 Blocked</option>
+                            <option value="Not Started">Not Started</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Blocked">Blocked</option>
                           </select>
                         </div>
                       </div>
 
-                      {/* Progress Slider & Quick Jump Markers */}
-                      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/50 space-y-2.5">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-semibold text-slate-600 dark:text-slate-300">Quick Adjust Slider</span>
-                          <span className="font-mono font-black text-sm text-[#0B5FFF]">{logProgressPercent}%</span>
-                        </div>
-                        <input 
+                      <div>
+                        <input
                           type="range"
                           min="0"
                           max="100"
                           value={logProgressPercent}
                           onChange={(e) => {
-                            const pct = parseInt(e.target.value);
-                            setLogProgressPercent(pct);
+                            const val = Number(e.target.value);
+                            setLogProgressPercent(val);
                             if (loggingProgressActivity.targetQuantity && loggingProgressActivity.targetQuantity > 0) {
-                              setLogProgressActualQty(Math.round((pct / 100) * loggingProgressActivity.targetQuantity));
+                              setLogProgressActualQty(Math.round((val / 100) * loggingProgressActivity.targetQuantity));
                             }
-                            if (pct === 100) setLogProgressStatus('Completed');
-                            else if (pct > 0) setLogProgressStatus('In Progress');
+                            if (val === 100) setLogProgressStatus('Completed');
+                            else if (val > 0) setLogProgressStatus('In Progress');
+                            else setLogProgressStatus('Not Started');
                           }}
-                          className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#0B5FFF]"
+                          className="w-full accent-[#0B5FFF] cursor-pointer"
                         />
-                        {/* Quick Presets */}
-                        <div className="flex items-center justify-between gap-1.5 pt-1">
-                          {[0, 25, 50, 75, 100].map((preset) => (
-                            <button
-                              key={preset}
-                              type="button"
-                              onClick={() => {
-                                setLogProgressPercent(preset);
-                                if (loggingProgressActivity.targetQuantity && loggingProgressActivity.targetQuantity > 0) {
-                                  setLogProgressActualQty(Math.round((preset / 100) * loggingProgressActivity.targetQuantity));
-                                }
-                                if (preset === 100) setLogProgressStatus('Completed');
-                                else if (preset > 0) setLogProgressStatus('In Progress');
-                                else if (preset === 0) setLogProgressStatus('Not Started');
-                              }}
-                              className={`flex-1 py-1 text-[11px] font-bold rounded-lg transition-all border ${
-                                logProgressPercent === preset
-                                  ? 'bg-[#0B5FFF] text-white border-[#0B5FFF] shadow-sm'
-                                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                              }`}
-                            >
-                              {preset}%
-                            </button>
-                          ))}
-                        </div>
                       </div>
                     </div>
+                  </div>
+                )}
 
-                    {/* Weather, Date & Conditions */}
-                    <div className="p-4 sm:p-5 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-3.5">
-                      <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Shift & Site Conditions
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Report Date</label>
-                          <input 
-                            type="date"
-                            required
-                            value={logProgressDate}
-                            onChange={(e) => setLogProgressDate(e.target.value)}
-                            className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Weather</label>
-                          <select 
-                            value={logProgressWeather}
-                            onChange={(e) => setLogProgressWeather(e.target.value)}
-                            className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-                          >
-                            <option value="Sunny">☀️ Sunny / Clear</option>
-                            <option value="Partly Cloudy">⛅ Partly Cloudy</option>
-                            <option value="Overcast">☁️ Overcast</option>
-                            <option value="Rain">🌧️ Rain / Wet</option>
-                            <option value="Stormy">⛈️ Stormy / Suspended</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Temperature</label>
-                          <input 
-                            type="text"
-                            value={logProgressTemp}
-                            onChange={(e) => setLogProgressTemp(e.target.value)}
-                            placeholder="e.g. 24°C"
-                            className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none"
-                          />
-                        </div>
-                      </div>
+                {/* Shift & Site Environmental Conditions */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                      <CalendarDays className="h-4 w-4 text-[#0B5FFF]" /> Shift & Site Environmental Context
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-medium">Auto-populates to Daily Reports</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">Shift Date</label>
+                      <input
+                        type="date"
+                        value={logProgressDate}
+                        onChange={(e) => setLogProgressDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200"
+                      />
                     </div>
-
-                    {/* Supervisor Remarks */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Supervisor Field Remarks
-                      </label>
-                      <textarea 
-                        rows={3}
-                        value={logProgressNotes}
-                        onChange={(e) => setLogProgressNotes(e.target.value)}
-                        placeholder="Record shift production summary, weather impacts, inspection approvals, or contractor handover notes..."
-                        className="w-full p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-[#0B5FFF] focus:outline-none transition-shadow"
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">Weather Conditions</label>
+                      <select
+                        value={logProgressWeather}
+                        onChange={(e) => setLogProgressWeather(e.target.value)}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200"
+                      >
+                        <option value="Sunny">☀️ Sunny / Clear</option>
+                        <option value="Partly Cloudy">⛅ Partly Cloudy</option>
+                        <option value="Overcast">☁️ Overcast</option>
+                        <option value="Rain">🌧️ Rain / Wet</option>
+                        <option value="Windy">💨 High Winds</option>
+                        <option value="Extreme Heat">🔥 Extreme Heat</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">Ambient Temperature</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 24°C"
+                        value={logProgressTemp}
+                        onChange={(e) => setLogProgressTemp(e.target.value)}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200"
                       />
                     </div>
                   </div>
 
-                  {/* Right Column: Active Subtasks & Quality Hold Points (5 Cols) */}
-                  <div className="lg:col-span-5 flex flex-col space-y-4">
-                    {logProgressSubtasks.length > 0 ? (
-                      <div className="p-4 sm:p-5 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl flex flex-col flex-1">
-                        <div className="flex items-center justify-between pb-3 border-b border-slate-200/70 dark:border-slate-700/60 flex-shrink-0">
-                          <div>
-                            <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                              <CheckSquare className="h-4 w-4 text-[#0B5FFF]" />
-                              Active Subtasks
-                            </label>
-                            <span className="text-[11px] font-semibold text-[#0B5FFF]">
-                              {logProgressSubtasks.filter(s => s.status === 'Completed').length} of {logProgressSubtasks.length} Completed
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLogProgressSubtasks(prev => prev.map(st => ({
-                                  ...st,
-                                  status: 'Completed',
-                                  completed: true,
-                                  completedQuantity: st.targetQuantity || 1
-                                })));
-                              }}
-                              className="text-[10px] font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-950/60 text-[#0B5FFF] hover:bg-blue-200 transition-colors"
-                            >
-                              All
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLogProgressSubtasks(prev => prev.map(st => ({
-                                  ...st,
-                                  status: 'Not Started',
-                                  completed: false,
-                                  completedQuantity: 0
-                                })));
-                              }}
-                              className="text-[10px] font-bold px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 transition-colors"
-                            >
-                              Reset
-                            </button>
-                          </div>
-                        </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                      Site & Access Conditions
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Ground firm, crane pad stable, access haul road open"
+                      value={logProgressSiteConditions}
+                      onChange={(e) => setLogProgressSiteConditions(e.target.value)}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                </div>
 
-                        {/* Scrollable Subtasks Container */}
-                        <div className="mt-3 overflow-y-auto max-h-[380px] pr-1 space-y-2 flex-1 custom-scrollbar">
-                          {logProgressSubtasks.map((st) => {
-                            const isCompleted = st.status === 'Completed';
-                            return (
-                              <div 
-                                key={st.id}
-                                onClick={() => handleToggleLogSubtask(st.id)}
-                                className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-3 text-xs ${
-                                  isCompleted 
-                                    ? 'bg-emerald-50/70 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900/50' 
-                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 shadow-sm'
-                                }`}
-                              >
-                                <div className="flex items-start gap-2.5 min-w-0">
-                                  <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
-                                    isCompleted ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'
-                                  }`}>
-                                    {isCompleted && <Check className="h-3 w-3 stroke-[3]" />}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <span className={`font-semibold block truncate ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white'}`}>
-                                      {st.title}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                      {st.category || 'General'} • {st.completedQuantity || 0}/{st.targetQuantity || 1} {st.unit || 'units'}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-                                  {st.isMilestone && (
-                                    <span className="text-[9px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 rounded">
-                                      🎯 Milestone
-                                    </span>
-                                  )}
-                                  {st.isHoldPoint && (
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                                      st.holdPointSignOff?.approved 
-                                        ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-950/60'
-                                        : 'text-rose-700 bg-rose-100 dark:bg-rose-950/60'
-                                    }`}>
-                                      🔒 {st.holdPointSignOff?.approved ? 'QA Approved' : 'Hold Point'}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-6 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-2 flex-1">
-                        <CheckSquare className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-                        <p className="text-xs font-bold text-slate-500">No subtasks configured</p>
-                        <p className="text-[11px] text-slate-400 max-w-[200px]">Use the activity detail view to configure step-by-step method subtasks and hold points.</p>
-                      </div>
-                    )}
+                {/* Delay & Blocker Capture */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    Blockers or Delay Causes (Optional)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-1.5">
+                    {['🌧️ Rain / Weather', '🚜 Plant Breakdown', '📦 Material Delivery Delay', '🛑 QA Hold / Re-work', '🚧 Site Access Obstruction'].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => setLogProgressDelayReason(logProgressDelayReason === tag ? '' : tag)}
+                        className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold border transition-all cursor-pointer ${
+                          logProgressDelayReason === tag 
+                            ? 'bg-amber-500 text-white border-amber-600 shadow-xs font-bold' 
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                  {logProgressDelayReason && (
+                    <input
+                      type="text"
+                      placeholder="Specific blocker note (e.g. Ready-mix truck delayed by 2 hours due to highway congestion)..."
+                      value={logProgressDelayReason}
+                      onChange={(e) => setLogProgressDelayReason(e.target.value)}
+                      className="w-full px-3 py-2 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-slate-900 dark:text-slate-100"
+                    />
+                  )}
+                </div>
 
-                    {/* Automatic Report Notice */}
-                    <div className="p-3.5 bg-blue-50/80 dark:bg-blue-950/40 rounded-2xl border border-blue-100 dark:border-blue-900/60 flex items-start gap-2.5 text-xs text-blue-900 dark:text-blue-200">
-                      <FileText className="h-4 w-4 text-[#0B5FFF] shrink-0 mt-0.5" />
-                      <p className="text-[11px] leading-relaxed">
-                        Saving this progress log will automatically generate and publish a verified <strong>Executive Daily Site Report</strong> with complete subtask status, workforce hours, and plant allocations.
-                      </p>
+                {/* Supervisor Field Remarks */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <FileText className="h-4 w-4 text-[#0B5FFF]" />
+                    Supervisor Production Summary & Remarks
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Enter overall shift summary, surveyor sign-offs, contractor handover notes, or key milestone achievements..."
+                    value={logProgressNotes}
+                    onChange={(e) => setLogProgressNotes(e.target.value)}
+                    className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#0B5FFF] shadow-xs"
+                  />
+                </div>
+
+                {/* Auto Daily Report Notice & Checkbox */}
+                <div className="p-3.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <FileText className="h-5 w-5 text-[#0B5FFF] shrink-0" />
+                    <div className="text-xs">
+                      <span className="font-bold text-slate-900 dark:text-white block">
+                        Auto-Post to Executive Daily Site Reports
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Compiles itemized shift output, daily run-rates, QA certifications, plant & labour records into official project logs.
+                      </span>
                     </div>
                   </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-bold text-xs text-[#0B5FFF] shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={logProgressPostReport}
+                      onChange={(e) => setLogProgressPostReport(e.target.checked)}
+                      className="h-4 w-4 text-[#0B5FFF] rounded cursor-pointer"
+                    />
+                    <span>Post Report</span>
+                  </label>
                 </div>
 
               </div>
 
               {/* Modal Actions Footer */}
-              <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 bg-slate-50/50 dark:bg-slate-900/60 flex-shrink-0">
+              <div className="px-5 py-3.5 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-3 bg-slate-50/60 dark:bg-slate-900/60 flex-shrink-0">
                 <Button 
                   type="button" 
                   variant="outline" 
                   onClick={() => setLoggingProgressActivity(null)}
-                  className="rounded-xl px-5 text-xs font-semibold"
+                  className="rounded-xl px-5 text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
-                  className="rounded-xl px-6 text-xs font-bold bg-[#0B5FFF] hover:bg-blue-700 text-white gap-2 shadow-sm"
+                  className="rounded-xl px-6 text-xs font-bold bg-[#0B5FFF] hover:bg-blue-600 text-white gap-2 shadow-sm cursor-pointer"
                 >
                   <Save className="h-4 w-4" /> Save Progress & Post Report
                 </Button>
