@@ -79,6 +79,7 @@ export function QAMeasurementModal({ inspection, isOpen, onClose, onSave }: QAMe
 
   // Auto calculate calculations
   const approvalPercentage = inspectedQuantity > 0 ? Math.round((approvedQuantity / inspectedQuantity) * 100) : 0;
+  const overallApprovalPercentage = targetQuantity > 0 ? Math.round((approvedQuantity / targetQuantity) * 100) : 0;
   const rejectionPercentage = inspectedQuantity > 0 ? Math.round((rejectedQuantity / inspectedQuantity) * 100) : 0;
   const scopeInspectedPercentage = targetQuantity > 0 ? Math.round((inspectedQuantity / targetQuantity) * 100) : 0;
   const remainingScope = Math.max(targetQuantity - inspectedQuantity, 0);
@@ -367,11 +368,20 @@ export function QAMeasurementModal({ inspection, isOpen, onClose, onSave }: QAMe
 
             {/* Visual Multi-Segment Quality Progress Bar */}
             <div className="space-y-1.5 pt-2">
-              <div className="flex items-center justify-between text-xs font-bold">
-                <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                  <span>Pass Rate:</span>
-                  <strong className="text-emerald-600 font-mono">{approvalPercentage}%</strong>
-                </span>
+              <div className="flex items-center justify-between text-xs font-bold flex-wrap gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                    <span>Overall Scope Approved:</span>
+                    <strong className="text-emerald-600 font-mono">
+                      {targetQuantity > 0 ? `${overallApprovalPercentage}% of scope` : `${approvalPercentage}%`}
+                    </strong>
+                  </span>
+                  {targetQuantity > 0 && inspectedQuantity > 0 && (
+                    <span className="text-slate-400 font-normal text-[11px]">
+                      ({approvalPercentage}% of inspected cleared)
+                    </span>
+                  )}
+                </div>
                 {rejectedQuantity > 0 && (
                   <span className="text-rose-600 font-mono text-[11px]">
                     {rejectionPercentage}% Defective ({rejectedQuantity} {unit})
@@ -379,7 +389,7 @@ export function QAMeasurementModal({ inspection, isOpen, onClose, onSave }: QAMe
                 )}
                 {targetQuantity > 0 && (
                   <span className="text-slate-400 font-mono text-[11px]">
-                    Remaining: {remainingScope} {unit}
+                    Remaining Scope: {remainingScope} {unit}
                   </span>
                 )}
               </div>

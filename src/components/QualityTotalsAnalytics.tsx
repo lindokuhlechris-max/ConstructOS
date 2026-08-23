@@ -449,6 +449,7 @@ export function QualityTotalsAnalytics({ onSelectInspection, onBackToInspections
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {Object.entries(stats.measurementBreakdown).map(([label, m]) => {
                 const passRate = m.inspected > 0 ? Math.round((m.approved / m.inspected) * 100) : 0;
+                const overallApprovedRate = m.target > 0 ? Math.round((m.approved / m.target) * 100) : 0;
                 const scopeRate = m.target > 0 ? Math.round((m.inspected / m.target) * 100) : 0;
 
                 return (
@@ -459,9 +460,17 @@ export function QualityTotalsAnalytics({ onSelectInspection, onBackToInspections
                           {label}
                         </span>
                       </div>
-                      <Badge variant="outline" className="text-xs font-mono font-bold">
-                        {passRate}% Cleared
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        {m.target > 0 ? (
+                          <Badge variant="outline" className="text-xs font-mono font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
+                            {overallApprovedRate}% Overall ({passRate}% Insp.)
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs font-mono font-bold">
+                            {passRate}% Cleared
+                          </Badge>
+                        )}
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 text-xs">
@@ -494,7 +503,7 @@ export function QualityTotalsAnalytics({ onSelectInspection, onBackToInspections
                         />
                       </div>
                       <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                        <span>{scopeRate}% of target inspected</span>
+                        <span>{overallApprovedRate}% of target approved ({scopeRate}% inspected)</span>
                         {m.rejected > 0 && <span className="text-rose-500">{m.rejected} {m.unit} defective</span>}
                       </div>
                     </div>

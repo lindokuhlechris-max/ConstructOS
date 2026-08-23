@@ -1067,12 +1067,19 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
 
                 {/* Progress bar */}
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[11px] font-bold">
-                    <span className="text-slate-600 dark:text-slate-300">
-                      Clearance: <strong className="text-emerald-600 font-mono">
-                        {inspection.inspectedQuantity ? Math.round(((inspection.approvedQuantity || 0) / inspection.inspectedQuantity) * 100) : 0}% Pass Rate
-                      </strong>
-                    </span>
+                  <div className="flex items-center justify-between text-[11px] font-bold flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-slate-600 dark:text-slate-300">
+                        Overall Approved: <strong className="text-emerald-600 font-mono">
+                          {inspection.targetQuantity ? Math.round(((inspection.approvedQuantity || 0) / inspection.targetQuantity) * 100) : (inspection.inspectedQuantity ? Math.round(((inspection.approvedQuantity || 0) / inspection.inspectedQuantity) * 100) : 0)}% of scope
+                        </strong>
+                      </span>
+                      {inspection.targetQuantity && inspection.inspectedQuantity ? (
+                        <span className="text-slate-400 font-normal">
+                          ({Math.round(((inspection.approvedQuantity || 0) / inspection.inspectedQuantity) * 100)}% of inspected cleared)
+                        </span>
+                      ) : null}
+                    </div>
                     {inspection.toleranceSpec && (
                       <span className="text-slate-500 font-mono">
                         Spec: {inspection.toleranceSpec}
@@ -1083,10 +1090,12 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                     <div 
                       className="h-full bg-emerald-500 transition-all duration-300"
                       style={{ width: `${inspection.targetQuantity ? ((inspection.approvedQuantity || 0) / inspection.targetQuantity) * 100 : ((inspection.approvedQuantity || 0) / (inspection.inspectedQuantity || 1)) * 100}%` }}
+                      title={`Approved: ${inspection.approvedQuantity || 0} ${inspection.unit || 'm'}`}
                     />
                     <div 
                       className="h-full bg-rose-500 transition-all duration-300"
                       style={{ width: `${inspection.targetQuantity ? ((inspection.rejectedQuantity || 0) / inspection.targetQuantity) * 100 : ((inspection.rejectedQuantity || 0) / (inspection.inspectedQuantity || 1)) * 100}%` }}
+                      title={`Rejected: ${inspection.rejectedQuantity || 0} ${inspection.unit || 'm'}`}
                     />
                   </div>
                 </div>

@@ -882,6 +882,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             const mType = item.measurementType || 'Length';
 
             const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
+            const overallApprovedPercent = targetQty > 0 ? Math.round((approvedQty / targetQty) * 100) : 0;
             const rejectionPercent = inspectedQty > 0 ? Math.round((rejectedQty / inspectedQty) * 100) : 0;
 
             const docNumbers = (item.documentNumbers && item.documentNumbers.length > 0)
@@ -976,9 +977,23 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                         
                         <div className="flex items-center gap-2 text-xs font-mono">
                           {approvedQty > 0 && (
-                            <span className="text-emerald-600 font-bold">
-                              ✓ {approvedQty} {itemUnit} ({approvalPercent}%)
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-emerald-600 font-bold flex items-center gap-1">
+                                ✓ {approvedQty} {itemUnit}
+                              </span>
+                              {targetQty > 0 ? (
+                                <span 
+                                  className="text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md text-[11px] border border-emerald-200 dark:border-emerald-800 shadow-2xs" 
+                                  title={`Overall Scope: ${approvedQty}/${targetQty} ${itemUnit} (${overallApprovedPercent}%), Inspected Clearance: ${approvedQty}/${inspectedQty} ${itemUnit} (${approvalPercent}%)`}
+                                >
+                                  {overallApprovedPercent}% overall ({approvalPercent}% of inspected)
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 font-bold">
+                                  ({approvalPercent}%)
+                                </span>
+                              )}
+                            </div>
                           )}
                           {rejectedQty > 0 && (
                             <span className="text-rose-600 font-bold">
@@ -1176,7 +1191,19 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                       </div>
 
                       <div className="flex items-center justify-between text-[10px] font-mono font-bold">
-                        <span className="text-emerald-600">✓ {approvedQty} {itemUnit} ({approvalPercent}%)</span>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-emerald-600">✓ {approvedQty} {itemUnit}</span>
+                          {targetQty > 0 ? (
+                            <span 
+                              className="text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800"
+                              title={`Overall Scope: ${approvedQty}/${targetQty} ${itemUnit} (${targetQty > 0 ? Math.round((approvedQty / targetQty) * 100) : 0}%), Inspected Clearance: ${approvedQty}/${inspectedQty} ${itemUnit} (${approvalPercent}%)`}
+                            >
+                              {targetQty > 0 ? Math.round((approvedQty / targetQty) * 100) : 0}% overall ({approvalPercent}% insp.)
+                            </span>
+                          ) : (
+                            <span className="text-emerald-600">({approvalPercent}%)</span>
+                          )}
+                        </div>
                         {rejectedQty > 0 && <span className="text-rose-600">✗ {rejectedQty} {itemUnit}</span>}
                       </div>
                     </div>

@@ -20858,6 +20858,18 @@
       "entityType": "QA",
       "entityId": "QA-536",
       "actionType": "update"
+    },
+    {
+      "id": "AL-mt60trlz-wff4",
+      "projectId": "PRJ-5401",
+      "userId": "Lindokuhle Chris (Admin) (Admin)",
+      "userRole": "Admin",
+      "action": "QA Inspection Item Created",
+      "details": "Created QA inspection \"Survey and Excavation of MV Cable Trench: PTS19 - Road crossing (240mm²)\" (Survey)",
+      "timestamp": "2026-08-23T16:28:03.719Z",
+      "entityType": "QA",
+      "entityId": "QA-903",
+      "actionType": "create"
     }
   ],
   "allocations": [],
@@ -22061,6 +22073,46 @@
       "dueDate": "",
       "clientQCNotes": "",
       "measurementItems": []
+    },
+    {
+      "id": "QA-903",
+      "projectId": "PRJ-5401",
+      "activityId": "ACT-6487",
+      "linkedActivityId": "ACT-6487",
+      "linkedActivityIds": [
+        "ACT-6487"
+      ],
+      "title": "Survey and Excavation of MV Cable Trench: PTS19 - Road crossing (240mm²)",
+      "location": "Block 20 to Block 21",
+      "inspector": "Advocate Khoza",
+      "date": "2026-08-23",
+      "inspectionTime": "18:26",
+      "submissionDate": "2026-08-23",
+      "status": "Pending Approval",
+      "category": "Survey",
+      "client": "Red Rocket",
+      "epc": "HDEC",
+      "subcontractor": "MBEU Engineering",
+      "documentNumber": "MVT-HDEC-MBEU-RFI-003, MVT-HDEC-MBEU-RFI-006",
+      "documentNumbers": [
+        "MVT-HDEC-MBEU-RFI-003",
+        "MVT-HDEC-MBEU-RFI-006"
+      ],
+      "referenceDrawingNumber": "RRT-HDC-08-IDR-PDE-CAB-002",
+      "referenceDrawingNumbers": [
+        "RRT-HDC-08-IDR-PDE-CAB-002"
+      ],
+      "clientQCRepresentative": "Obakeng Mogadi",
+      "clientQCStatus": "Pending Client Review",
+      "clientQCSignoffDate": "2026-08-23",
+      "linkedDocumentIds": [],
+      "measurementType": "Length",
+      "unit": "m",
+      "targetQuantity": 433,
+      "inspectedQuantity": 0,
+      "approvedQuantity": 0,
+      "rejectedQuantity": 0,
+      "toleranceSpec": "±10mm / SANS 1200"
     }
   ],
   "userProfiles": [
