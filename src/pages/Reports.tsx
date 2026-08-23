@@ -10,6 +10,7 @@ import { UniversalReportModal } from '../components/reports/UniversalReportModal
 import { UniversalReportDetail } from '../components/reports/UniversalReportDetail';
 import { ProgressReportCompilerModal } from '../components/reports/ProgressReportCompilerModal';
 import { ProgressReportDetail } from '../components/reports/ProgressReportDetail';
+import { UniversalReportPrintStudioModal } from '../components/reports/UniversalReportPrintStudioModal';
 import {
   FileBarChart,
   Plus,
@@ -86,6 +87,7 @@ export function Reports() {
   const [selectedDailyReport, setSelectedDailyReport] = useState<DailyReport | null>(null);
   const [selectedUniversalReport, setSelectedUniversalReport] = useState<UniversalReportItem | null>(null);
   const [selectedProgressReport, setSelectedProgressReport] = useState<UniversalReportItem | null>(null);
+  const [selectedReportForPrint, setSelectedReportForPrint] = useState<UniversalReportItem | DailyReport | null>(null);
 
   // Creation & Wizard Modals
   const [isDailyCreating, setIsDailyCreating] = useState(false);
@@ -772,6 +774,18 @@ export function Reports() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedReportForPrint(item);
+                    }}
+                    className="p-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-[#0B5FFF] dark:bg-slate-800 dark:hover:bg-blue-950/60 text-slate-500 transition-colors"
+                    title="Open Print & PDF Studio"
+                  >
+                    <Printer className="h-4 w-4" />
+                  </button>
+
                   <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 group-hover:text-[#0B5FFF] font-semibold">
                     <span>View Detail</span>
                     <ChevronRight className="h-4 w-4" />
@@ -843,7 +857,20 @@ export function Reports() {
                       <Clock className="h-3.5 w-3.5 text-blue-500" /> {formatReportTime(item.createdAt, item.date)}
                     </span>
                   </div>
-                  <span className="font-sans font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[130px]">{item.author}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-sans font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[110px]">{item.author}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedReportForPrint(item);
+                      }}
+                      className="p-1 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-[#0B5FFF] dark:bg-slate-800 dark:hover:bg-blue-950/60 text-slate-500 transition-colors"
+                      title="Print & PDF Studio"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -898,6 +925,16 @@ export function Reports() {
         <ProjectSummaryPdfModal
           isOpen={isProjectSummaryPdfModalOpen}
           onClose={() => setIsProjectSummaryPdfModalOpen(false)}
+        />
+      )}
+
+      {/* Universal Report Print & PDF Studio Modal */}
+      {selectedReportForPrint && (
+        <UniversalReportPrintStudioModal
+          isOpen={!!selectedReportForPrint}
+          onClose={() => setSelectedReportForPrint(null)}
+          report={selectedReportForPrint}
+          reportType={('category' in selectedReportForPrint && selectedReportForPrint.category === 'DailySite') || 'weather' in selectedReportForPrint ? 'daily' : 'universal'}
         />
       )}
     </div>

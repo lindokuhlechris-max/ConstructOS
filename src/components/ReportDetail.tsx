@@ -35,6 +35,7 @@ import { useAppContext } from '../context/AppContext';
 import { DailyReport, Activity, LabourLog, SafetyIncident, Equipment, MaterialReceipt } from '../types';
 import { exportSingleReportPDF, parseSupervisorNotes } from '../lib/pdfReportExport';
 import { normalizeLabourAssignments, getSubtaskProgressionNumber, getPersonInitials } from '../lib/labourUtils';
+import { UniversalReportPrintStudioModal } from './reports/UniversalReportPrintStudioModal';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -54,6 +55,9 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
   // Edit Report Modal State
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState<DailyReport>({ ...report });
+
+  // Print Studio Modal State
+  const [isPrintStudioOpen, setIsPrintStudioOpen] = useState(false);
 
   // Supervisor Notes State
   const [supervisorNotes, setSupervisorNotes] = useState(report.supervisorNotes || '');
@@ -88,15 +92,13 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
     alert('Daily report supervisor notes saved successfully!');
   };
 
-  // Export PDF
+  // Export PDF / Print Studio
   const handleExportPDF = () => {
-    const proj = projects.find(p => p.id === report.projectId);
-    const projectName = proj?.name || report.projectId;
-    exportSingleReportPDF(report, projectName);
+    setIsPrintStudioOpen(true);
   };
 
   const handlePrint = () => {
-    handleExportPDF();
+    setIsPrintStudioOpen(true);
   };
 
   return (
@@ -1023,6 +1025,16 @@ export function ReportDetail({ report, onSave, onClose, onDelete }: ReportDetail
             </form>
           </Card>
         </div>
+      )}
+
+      {/* Universal Report Print & PDF Studio Modal */}
+      {isPrintStudioOpen && (
+        <UniversalReportPrintStudioModal
+          isOpen={isPrintStudioOpen}
+          onClose={() => setIsPrintStudioOpen(false)}
+          report={report}
+          reportType="daily"
+        />
       )}
     </div>
   );

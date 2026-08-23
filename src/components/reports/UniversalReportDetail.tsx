@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { UniversalReportItem, FinanceReportData, SurveyReportData, FleetReportData, MaterialsReportData, AccommodationReportData, CustomReportData } from '../../types';
 import { useAppContext } from '../../context/AppContext';
+import { UniversalReportPrintStudioModal } from './UniversalReportPrintStudioModal';
 
 interface UniversalReportDetailProps {
   report: UniversalReportItem;
@@ -38,6 +39,7 @@ interface UniversalReportDetailProps {
 export function UniversalReportDetail({ report, onClose, onEdit, onDelete, onSave }: UniversalReportDetailProps) {
   const { currentUserProfile } = useAppContext();
   const [isSignoffModalOpen, setIsSignoffModalOpen] = useState(false);
+  const [isPrintStudioOpen, setIsPrintStudioOpen] = useState(false);
   const [signoffNotes, setSignoffNotes] = useState('');
 
   const handleApproveSignoff = () => {
@@ -173,13 +175,13 @@ export function UniversalReportDetail({ report, onClose, onEdit, onDelete, onSav
           {/* Action Buttons */}
           <div className="flex items-center gap-2 self-start lg:self-center flex-wrap">
             <button
-              onClick={() => window.print()}
+              onClick={() => setIsPrintStudioOpen(true)}
               className="group h-9 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all duration-300 flex items-center shadow-2xs overflow-hidden"
-              title="Print Report"
+              title="Print & PDF Studio"
             >
               <Printer className="h-4 w-4 shrink-0 text-slate-600 dark:text-slate-300 group-hover:text-[#0B5FFF]" />
-              <span className="max-w-0 opacity-0 group-hover:max-w-[100px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
-                Print
+              <span className="max-w-0 opacity-0 group-hover:max-w-[120px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
+                Print Studio
               </span>
             </button>
 
@@ -533,6 +535,16 @@ export function UniversalReportDetail({ report, onClose, onEdit, onDelete, onSav
             </div>
           </div>
         </div>
+      )}
+
+      {/* Universal Report Print & PDF Studio Modal */}
+      {isPrintStudioOpen && (
+        <UniversalReportPrintStudioModal
+          isOpen={isPrintStudioOpen}
+          onClose={() => setIsPrintStudioOpen(false)}
+          report={report}
+          reportType="universal"
+        />
       )}
     </div>
   );
