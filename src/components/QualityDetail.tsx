@@ -514,38 +514,52 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
           </div>
         </div>
 
-        {/* Header Action Buttons */}
+        {/* Header Action Buttons - Expandable Icons */}
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          {/* Print Inspection - Expandable Icon */}
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
-            title="Print quality inspection report using browser print"
+            className="group h-9 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all duration-300 flex items-center shadow-2xs overflow-hidden"
+            title="Print Inspection Report"
           >
-            <Printer className="h-4 w-4 text-slate-500" /> Print Inspection
+            <Printer className="h-4 w-4 shrink-0 text-slate-600 dark:text-slate-300 group-hover:text-[#0B5FFF]" />
+            <span className="max-w-0 opacity-0 group-hover:max-w-[120px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
+              Print Inspection
+            </span>
           </button>
 
+          {/* Measurements & Quantities - Expandable Icon */}
           {canEditQuality && (
-            <Button
+            <button
               onClick={() => setIsMeasurementModalOpen(true)}
-              variant="outline"
-              className="gap-1.5 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl text-xs font-semibold"
+              className="group h-9 px-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 transition-all duration-300 flex items-center shadow-2xs overflow-hidden"
+              title="Measurements & Quantities"
             >
-              <Ruler className="h-4 w-4 text-emerald-600" /> Measurements & Quantities
-            </Button>
+              <Ruler className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[180px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
+                Measurements & Quantities
+              </span>
+            </button>
           )}
 
+          {/* Upload Document - Expandable Icon */}
           {canEditQuality && (
             <button
               onClick={() => {
                 setUploadModalCategory('QA/QC Inspections');
                 setIsUploadDocModalOpen(true);
               }}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-[#0B5FFF] dark:text-blue-300 text-xs font-semibold transition-colors border border-blue-200 dark:border-blue-800"
+              className="group h-9 px-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-[#0B5FFF] dark:text-blue-300 transition-all duration-300 flex items-center shadow-2xs overflow-hidden"
+              title="Upload Document"
             >
-              <UploadCloud className="h-4 w-4" /> Upload Document
+              <UploadCloud className="h-4 w-4 shrink-0 text-[#0B5FFF] dark:text-blue-400" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[140px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
+                Upload Document
+              </span>
             </button>
           )}
 
+          {/* Edit Inspection - Expandable Icon */}
           {canEditQuality && (
             <button
               onClick={() => {
@@ -555,6 +569,13 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   location: inspection.location,
                   inspector: inspection.inspector,
                   date: inspection.date,
+                  inspectionTime: inspection.inspectionTime || '',
+                  dueDate: inspection.dueDate || '',
+                  client: inspection.client || '',
+                  epc: inspection.epc || '',
+                  subcontractor: inspection.subcontractor || '',
+                  documentNumber: inspection.documentNumber || '',
+                  referenceDrawingNumber: inspection.referenceDrawingNumber || '',
                   activityId: inspection?.activityId,
                   clientQCRepresentative: inspection.clientQCRepresentative || '',
                   clientQCStatus: inspection.clientQCStatus || 'Pending Client Review',
@@ -563,24 +584,45 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 });
                 setIsEditModalOpen(true);
               }}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
+              className="group h-9 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all duration-300 flex items-center shadow-2xs overflow-hidden"
+              title="Edit QA/QC Inspection"
             >
-              <Edit3 className="h-4 w-4 text-[#0B5FFF]" /> Edit Inspection
+              <Edit3 className="h-4 w-4 shrink-0 text-[#0B5FFF]" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[120px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
+                Edit Inspection
+              </span>
             </button>
           )}
 
+          {/* Approve QA Signoff - Expandable Icon */}
           {inspection.status !== 'Passed' && canEditQuality && (
-            <Button onClick={() => setIsSignoffModalOpen(true)} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold">
-              <CheckCircle2 className="h-4 w-4" /> Approve QA Signoff
-            </Button>
+            <button
+              onClick={() => setIsSignoffModalOpen(true)}
+              className="group h-9 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-300 flex items-center shadow-2xs overflow-hidden"
+              title="Approve QA Clearance Signoff"
+            >
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-white" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[150px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
+                Approve QA Signoff
+              </span>
+            </button>
           )}
 
+          {/* Issue NCR - Expandable Icon */}
           {inspection.status !== 'Failed' && canEditQuality && (
-            <Button onClick={() => setIsNCRModalOpen(true)} variant="outline" className="gap-1.5 border-rose-200 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-semibold">
-              <AlertTriangle className="h-4 w-4" /> Issue Non-Conformance (NCR)
-            </Button>
+            <button
+              onClick={() => setIsNCRModalOpen(true)}
+              className="group h-9 px-2.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 transition-all duration-300 flex items-center shadow-2xs overflow-hidden"
+              title="Issue Non-Conformance Report (NCR)"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[180px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
+                Issue Non-Conformance (NCR)
+              </span>
+            </button>
           )}
 
+          {/* Delete Inspection - Expandable Icon */}
           {onDelete && canManage(userRole) && (
             <button
               onClick={() => {
@@ -588,9 +630,13 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   onDelete(inspection.id);
                 }
               }}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 text-rose-600 text-xs font-semibold transition-colors"
+              className="group h-9 px-2.5 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 text-rose-600 text-xs font-semibold transition-all duration-300 flex items-center shadow-2xs overflow-hidden"
+              title="Delete QA Record"
             >
-              <Trash2 className="h-4 w-4" /> Delete
+              <Trash2 className="h-4 w-4 shrink-0 text-rose-600" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[80px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-semibold overflow-hidden">
+                Delete
+              </span>
             </button>
           )}
         </div>
