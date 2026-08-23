@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
-import { Button, CustomSelect } from '../components/ui';
+import { Button, CustomSelect, Badge } from '../components/ui';
 import { 
   FileText, 
   UploadCloud, 
@@ -35,9 +35,13 @@ import {
   ChevronsLeft,
   ChevronsRight,
   SlidersHorizontal,
-  FileCheck
+  FileCheck,
+  GitBranch,
+  ShieldCheck,
+  Building2,
+  HardHat
 } from 'lucide-react';
-import { DocumentCategory, DocumentFileType, DocumentItem, DocumentStatus } from '../types';
+import { DocumentCategory, DocumentFileType, DocumentItem, DocumentStatus, DocumentIssueStatus, DocumentDiscipline } from '../types';
 import { printDocumentsSummary } from '../lib/pdfPrint';
 import { exportDocumentsToCSV } from '../lib/csvExport';
 import { downloadDocument, deleteDocumentFile } from '../lib/documentStorage';
@@ -45,6 +49,7 @@ import { DocumentUploadModal } from '../components/documents/DocumentUploadModal
 import { DocumentPreviewModal } from '../components/documents/DocumentPreviewModal';
 import { DocumentEditModal } from '../components/documents/DocumentEditModal';
 import { DocumentActivityAssignModal } from '../components/documents/DocumentActivityAssignModal';
+import { MasterDocumentRegisterModal } from '../components/documents/MasterDocumentRegisterModal';
 
 const CATEGORIES: ('All' | DocumentCategory)[] = [
   'All',
@@ -57,6 +62,19 @@ const CATEGORIES: ('All' | DocumentCategory)[] = [
   'Material Data Sheets (MSDS)',
   'Daily Logs & Site Records',
   'Method Statements',
+  'General'
+];
+
+const DISCIPLINES: ('All' | DocumentDiscipline)[] = [
+  'All',
+  'Civil',
+  'Structural',
+  'Electrical & MEP',
+  'Mechanical',
+  'Geotechnical & Survey',
+  'Architectural',
+  'HSE & Safety',
+  'Commercial & Contracts',
   'General'
 ];
 
@@ -77,8 +95,10 @@ export function Documents() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'All' | DocumentCategory>('All');
+  const [selectedDiscipline, setSelectedDiscipline] = useState<'All' | DocumentDiscipline>('All');
   const [selectedFileType, setSelectedFileType] = useState<'all' | DocumentFileType>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedIssueStatus, setSelectedIssueStatus] = useState<'all' | DocumentIssueStatus>('all');
   const [activityFilter, setActivityFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
@@ -92,6 +112,8 @@ export function Documents() {
 
   // Modals state
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isMdrModalOpen, setIsMdrModalOpen] = useState(false);
+  const [targetDocForRevision, setTargetDocForRevision] = useState<DocumentItem | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
   const [editDoc, setEditDoc] = useState<DocumentItem | null>(null);
   const [assignDoc, setAssignDoc] = useState<DocumentItem | null>(null);
@@ -125,9 +147,14 @@ export function Documents() {
     const filtered = documents.filter(doc => {
       // Fast Tokenized Multi-Term Search
       if (queryTokens.length > 0) {
-        const searchableText = `${doc.title} ${doc.fileName} ${doc.id} ${doc.description || ''} ${doc.uploadedBy} ${(doc.tags || []).join(' ')} ${doc.linkedActivityName || ''} ${doc.category} ${doc.status}`.toLowerCase();
+        const searchableText = `${doc.title} ${doc.fileName} ${doc.documentNumber || ''} ${doc.id} ${doc.description || ''} ${doc.uploadedBy} ${(doc.tags || []).join(' ')} ${doc.linkedActivityName || ''} ${doc.category} ${doc.discipline || ''} ${doc.status} ${doc.issueStatus || ''} ${doc.revision || ''}`.toLowerCase();
         const matchesAllTokens = queryTokens.every(token => searchableText.includes(token));
         if (!matchesAllTokens) return false;
+      }
+
+      // Discipline
+      if (selectedDiscipline !== 'All' && doc.discipline !== selectedDiscipline) {
+        return false;
       }
 
       // Category
@@ -142,6 +169,11 @@ export function Documents() {
 
       // Status
       if (selectedStatus !== 'all' && doc.status !== selectedStatus) {
+        return false;
+      }
+
+      // Issue Status (IFC, IFA, AB, SUP)
+      if (selectedIssueStatus !== 'all' && doc.issueStatus !== selectedIssueStatus) {
         return false;
       }
 
@@ -179,12 +211,12 @@ export function Documents() {
           return 0;
       }
     });
-  }, [documents, searchQuery, selectedCategory, selectedFileType, selectedStatus, activityFilter, sortBy]);
+  }, [documents, searchQuery, selectedCategory, selectedDiscipline, selectedFileType, selectedStatus, selectedIssueStatus, activityFilter, sortBy]);
 
   // Auto-reset to page 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategory, selectedFileType, selectedStatus, activityFilter, sortBy, pageSize]);
+  }, [searchQuery, selectedCategory, selectedDiscipline, selectedFileType, selectedStatus, selectedIssueStatus, activityFilter, sortBy, pageSize]);
 
   // Paginated Window for high-volume document performance
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedDocuments.length / pageSize));
@@ -201,11 +233,11 @@ export function Documents() {
 
   // KPI Metrics Calculation
   const totalCount = documents.length;
-  const approvedCount = documents.filter(d => d.status === 'Approved').length;
-  const underReviewCount = documents.filter(d => d.status === 'Under Review').length;
-  const assignedCount = documents.filter(d => !!d.linkedActivityId).length;
+  const ifcCount = documents.filter(d => d.issueStatus === 'IFC' || d.status === 'Approved').length;
+  const ifaCount = documents.filter(d => d.issueStatus === 'IFA' || d.status === 'Under Review').length;
+  const asBuiltCount = documents.filter(d => d.issueStatus === 'AB').length;
+  const supersededCount = documents.filter(d => d.issueStatus === 'SUP' || d.status === 'Superseded').length;
   const drawingsCount = documents.filter(d => d.category === 'Drawings & Blueprints' || d.fileType === 'cad').length;
-  const spreadsheetsCount = documents.filter(d => d.fileType === 'excel').length;
 
   const handlePrint = () => {
     printDocumentsSummary({
@@ -275,41 +307,42 @@ export function Documents() {
     }
   };
 
-  const getStatusBadge = (status: DocumentStatus) => {
-    switch (status) {
-      case 'Approved':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 text-[11px] font-bold">
-            <CheckCircle2 className="h-3 w-3" />
-            Approved
-          </span>
-        );
-      case 'Under Review':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 text-[11px] font-bold">
-            <Clock className="h-3 w-3" />
-            Under Review
-          </span>
-        );
-      case 'Draft':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 text-[11px] font-bold">
-            Draft
-          </span>
-        );
-      case 'Archived':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 text-[11px] font-bold">
-            Archived
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold">
-            {status}
-          </span>
-        );
+  const getStatusBadge = (status: DocumentStatus, issueStatus?: DocumentIssueStatus) => {
+    if (issueStatus === 'IFC' || status === 'Approved') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 text-[11px] font-bold">
+          <CheckCircle2 className="h-3 w-3" />
+          IFC Approved
+        </span>
+      );
     }
+    if (issueStatus === 'IFA' || status === 'Under Review') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 text-[11px] font-bold">
+          <Clock className="h-3 w-3" />
+          IFA In Review
+        </span>
+      );
+    }
+    if (issueStatus === 'SUP' || status === 'Superseded') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800 text-[11px] font-bold">
+          Superseded
+        </span>
+      );
+    }
+    if (issueStatus === 'AB') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800 text-[11px] font-bold">
+          As-Built
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 text-[11px] font-bold">
+        {status}
+      </span>
+    );
   };
 
   return (
@@ -319,15 +352,20 @@ export function Documents() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-[#0B5FFF]">
+            <div className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-[#0B5FFF] shadow-xs">
               <FolderOpen className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                Documents Hub
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                  Documents Hub & Control
+                </h1>
+                <Badge variant="outline" className="text-[10px] font-mono uppercase bg-teal-50 dark:bg-teal-950/60 text-teal-600 border-teal-200 dark:border-teal-800">
+                  ISO 19650 EDMS
+                </Badge>
+              </div>
               <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-                Centralized register for drawings, technical specs, spreadsheets, and contracts with activity linking.
+                Centralized drawing register, revision tracking, IFC certification, and activity linking.
               </p>
             </div>
           </div>
@@ -336,13 +374,12 @@ export function Documents() {
         {/* Global Hub Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           <Button
-            variant="outline"
-            onClick={handlePrint}
-            className="rounded-xl px-3.5 py-2 font-bold text-xs sm:text-sm gap-2 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-            title="Generate executive PDF printout of document register"
+            onClick={() => setIsMdrModalOpen(true)}
+            className="rounded-xl px-4 py-2 font-bold text-xs sm:text-sm gap-2 bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white shadow-sm"
+            title="Open Executive Master Document Register (MDR) Studio"
           >
-            <Printer className="h-4 w-4 text-slate-500" />
-            <span>Print Register</span>
+            <FileCheck className="h-4 w-4 text-teal-400 dark:text-teal-600" />
+            <span>Master Register (MDR) Studio</span>
           </Button>
 
           <Button
@@ -351,13 +388,16 @@ export function Documents() {
             className="rounded-xl px-3.5 py-2 font-bold text-xs sm:text-sm gap-2 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
             title="Export full document register to Excel / CSV"
           >
-            <Download className="h-4 w-4 text-emerald-600" />
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
             <span>Export Excel</span>
           </Button>
 
           {canEditDocuments && (
             <Button
-              onClick={() => setIsUploadOpen(true)}
+              onClick={() => {
+                setTargetDocForRevision(null);
+                setIsUploadOpen(true);
+              }}
               className="bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl px-4 py-2 font-bold text-xs sm:text-sm shadow-sm gap-2"
             >
               <Plus className="h-4 w-4" />
@@ -376,21 +416,21 @@ export function Documents() {
         </div>
 
         <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Approved</div>
-          <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{approvedCount}</div>
-          <div className="text-[10px] text-slate-500 mt-0.5">IFC & Verified</div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">IFC Approved</div>
+          <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{ifcCount}</div>
+          <div className="text-[10px] text-slate-500 mt-0.5">Construction Ready</div>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">In Review</div>
-          <div className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">{underReviewCount}</div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">IFA In Review</div>
+          <div className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">{ifaCount}</div>
           <div className="text-[10px] text-slate-500 mt-0.5">Pending Signoff</div>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-[#0B5FFF]">Activity Linked</div>
-          <div className="text-xl font-bold text-[#0B5FFF] mt-1">{assignedCount}</div>
-          <div className="text-[10px] text-slate-500 mt-0.5">Assigned to Tasks</div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">As-Built Survey</div>
+          <div className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1">{asBuiltCount}</div>
+          <div className="text-[10px] text-slate-500 mt-0.5">Survey Verified</div>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
@@ -400,15 +440,40 @@ export function Documents() {
         </div>
 
         <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Spreadsheets</div>
-          <div className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1">{spreadsheetsCount}</div>
-          <div className="text-[10px] text-slate-500 mt-0.5">BOQ & Excel Logs</div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Superseded</div>
+          <div className="text-xl font-bold text-red-600 dark:text-red-400 mt-1">{supersededCount}</div>
+          <div className="text-[10px] text-slate-500 mt-0.5">Archived Revisions</div>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3.5">
         
+        {/* Quick Issue Status Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs select-none">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1.5 shrink-0">Issue Status:</span>
+          {[
+            { key: 'all', label: 'All Statuses' },
+            { key: 'IFC', label: 'IFC (Construction Ready)' },
+            { key: 'IFA', label: 'IFA (In Review)' },
+            { key: 'AB', label: 'As-Built' },
+            { key: 'SUP', label: 'Superseded' }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setSelectedIssueStatus(tab.key as any)}
+              className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 text-xs border ${
+                selectedIssueStatus === tab.key
+                  ? 'bg-blue-50 dark:bg-blue-950/50 border-[#0B5FFF] text-[#0B5FFF]'
+                  : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           {/* Search Input & Mobile Filter Toggle */}
           <div className="flex items-center gap-2 flex-1">
@@ -418,7 +483,7 @@ export function Documents() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by title, file name, tags, author, activity..."
+                placeholder="Search by drawing number, title, discipline, author, activity..."
                 className="w-full h-10 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
               />
               {searchQuery && (
@@ -432,12 +497,12 @@ export function Documents() {
               )}
             </div>
 
-            {/* Mobile / Tablet Filter Toggle Button */}
+            {/* Mobile Filter Toggle */}
             <button
               type="button"
               onClick={() => setShowFiltersMobile(!showFiltersMobile)}
               className={`lg:hidden flex items-center gap-1.5 px-3 h-10 rounded-xl border text-xs font-bold transition-colors shrink-0 ${
-                showFiltersMobile || selectedCategory !== 'All' || selectedFileType !== 'all' || selectedStatus !== 'all' || activityFilter !== 'all'
+                showFiltersMobile
                   ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-200 dark:border-blue-800 text-[#0B5FFF]'
                   : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
               }`}
@@ -448,34 +513,25 @@ export function Documents() {
             </button>
           </div>
 
-          {/* Controls: Sort By, Category, File Type, Status, Activity, Page Size, View Mode */}
+          {/* Controls: Sort By, Discipline, Category, Format, Activity, View Mode */}
           <div className={`flex items-center gap-2 flex-wrap ${showFiltersMobile ? 'flex' : 'hidden lg:flex'}`}>
             
-            {/* Sort Dropdown */}
-            <div className="w-40 sm:w-44">
+            {/* Discipline Dropdown */}
+            <div className="w-36 sm:w-40">
               <CustomSelect
-                value={sortBy}
-                onChange={(val) => setSortBy(val as any)}
-                options={[
-                  { value: 'date-desc', label: 'Newest Uploads' },
-                  { value: 'date-asc', label: 'Oldest Uploads' },
-                  { value: 'title-asc', label: 'Title (A → Z)' },
-                  { value: 'title-desc', label: 'Title (Z → A)' },
-                  { value: 'size-desc', label: 'Size (Largest)' },
-                  { value: 'size-asc', label: 'Size (Smallest)' },
-                  { value: 'category', label: 'Category' },
-                  { value: 'status', label: 'Status' }
-                ]}
+                value={selectedDiscipline}
+                onChange={(val) => setSelectedDiscipline(val as any)}
+                options={DISCIPLINES.map(d => ({ value: d, label: d === 'All' ? 'All Disciplines' : d }))}
                 className="w-full"
               />
             </div>
 
             {/* Category Dropdown */}
-            <div className="w-40 sm:w-44">
+            <div className="w-36 sm:w-40">
               <CustomSelect
                 value={selectedCategory}
                 onChange={(val) => setSelectedCategory(val as any)}
-                options={CATEGORIES.map(c => ({ value: c, label: c }))}
+                options={CATEGORIES.map(c => ({ value: c, label: c === 'All' ? 'All Categories' : c }))}
                 className="w-full"
               />
             </div>
@@ -489,7 +545,7 @@ export function Documents() {
                   { value: 'all', label: 'All Formats' },
                   { value: 'pdf', label: 'PDF Documents' },
                   { value: 'excel', label: 'Excel / CSV' },
-                  { value: 'cad', label: 'CAD & Drawings' },
+                  { value: 'cad', label: 'CAD & Blueprints' },
                   { value: 'word', label: 'Word (.docx)' },
                   { value: 'image', label: 'Images' }
                 ]}
@@ -498,46 +554,14 @@ export function Documents() {
             </div>
 
             {/* Activity Link Filter */}
-            <div className="w-36 sm:w-40">
+            <div className="w-32 sm:w-36">
               <CustomSelect
                 value={activityFilter}
                 onChange={(val) => setActivityFilter(val as any)}
                 options={[
-                  { value: 'all', label: 'All Assignments' },
-                  { value: 'assigned', label: 'Linked to Activity' },
-                  { value: 'unassigned', label: 'Unassigned Only' }
-                ]}
-                className="w-full"
-              />
-            </div>
-
-            {/* Status Filter */}
-            <div className="w-32 sm:w-36">
-              <CustomSelect
-                value={selectedStatus}
-                onChange={(val) => setSelectedStatus(val)}
-                options={[
-                  { value: 'all', label: 'All Statuses' },
-                  { value: 'Approved', label: 'Approved' },
-                  { value: 'Under Review', label: 'Under Review' },
-                  { value: 'Draft', label: 'Draft' },
-                  { value: 'Archived', label: 'Archived' }
-                ]}
-                className="w-full"
-              />
-            </div>
-
-            {/* Page Size Select */}
-            <div className="w-28">
-              <CustomSelect
-                value={String(pageSize)}
-                onChange={(val) => setPageSize(Number(val))}
-                options={[
-                  { value: '12', label: '12 / page' },
-                  { value: '24', label: '24 / page' },
-                  { value: '48', label: '48 / page' },
-                  { value: '96', label: '96 / page' },
-                  { value: '999999', label: 'All Items' }
+                  { value: 'all', label: 'All Tasks' },
+                  { value: 'assigned', label: 'Linked to Tasks' },
+                  { value: 'unassigned', label: 'Unassigned' }
                 ]}
                 className="w-full"
               />
@@ -575,13 +599,19 @@ export function Documents() {
         </div>
 
         {/* Active Filter Chips */}
-        {(selectedCategory !== 'All' || selectedFileType !== 'all' || selectedStatus !== 'all' || activityFilter !== 'all' || searchQuery || sortBy !== 'date-desc') && (
+        {(selectedCategory !== 'All' || selectedDiscipline !== 'All' || selectedFileType !== 'all' || selectedStatus !== 'all' || selectedIssueStatus !== 'all' || activityFilter !== 'all' || searchQuery) && (
           <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
             <span className="text-slate-400 font-semibold">Active filters:</span>
-            {searchQuery && (
+            {selectedDiscipline !== 'All' && (
               <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-[#0B5FFF] font-medium flex items-center gap-1">
-                Keyword: &quot;{searchQuery}&quot;
-                <button onClick={() => setSearchQuery('')} className="hover:text-red-500">×</button>
+                Discipline: {selectedDiscipline}
+                <button onClick={() => setSelectedDiscipline('All')} className="hover:text-red-500">×</button>
+              </span>
+            )}
+            {selectedIssueStatus !== 'all' && (
+              <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-[#0B5FFF] font-medium flex items-center gap-1">
+                Issue: {selectedIssueStatus}
+                <button onClick={() => setSelectedIssueStatus('all')} className="hover:text-red-500">×</button>
               </span>
             )}
             {selectedCategory !== 'All' && (
@@ -590,30 +620,20 @@ export function Documents() {
                 <button onClick={() => setSelectedCategory('All')} className="hover:text-red-500">×</button>
               </span>
             )}
-            {selectedFileType !== 'all' && (
+            {searchQuery && (
               <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-[#0B5FFF] font-medium flex items-center gap-1">
-                Format: {selectedFileType.toUpperCase()}
-                <button onClick={() => setSelectedFileType('all')} className="hover:text-red-500">×</button>
-              </span>
-            )}
-            {activityFilter !== 'all' && (
-              <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-[#0B5FFF] font-medium flex items-center gap-1">
-                {activityFilter === 'assigned' ? 'Linked to Activity' : 'Unassigned'}
-                <button onClick={() => setActivityFilter('all')} className="hover:text-red-500">×</button>
-              </span>
-            )}
-            {sortBy !== 'date-desc' && (
-              <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium flex items-center gap-1">
-                Sorted
-                <button onClick={() => setSortBy('date-desc')} className="hover:text-red-500">×</button>
+                &quot;{searchQuery}&quot;
+                <button onClick={() => setSearchQuery('')} className="hover:text-red-500">×</button>
               </span>
             )}
             <button
               onClick={() => {
                 setSearchQuery('');
                 setSelectedCategory('All');
+                setSelectedDiscipline('All');
                 setSelectedFileType('all');
                 setSelectedStatus('all');
+                setSelectedIssueStatus('all');
                 setActivityFilter('all');
                 setSortBy('date-desc');
               }}
@@ -628,18 +648,21 @@ export function Documents() {
 
       {/* Main Content Area: Grid View or Table View with Paginated Window */}
       {filteredAndSortedDocuments.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-12 text-center">
           <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-900/20 text-[#0B5FFF] inline-block mb-3">
             <FolderOpen className="h-8 w-8" />
           </div>
           <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">No documents found</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-5">
-            No files matched your search or active filter combination. You can adjust your filters or upload a new project document.
+            No files matched your active filter or search query. You can reset filters or upload a new project drawing/document.
           </p>
           {canEditDocuments && (
             <Button
-              onClick={() => setIsUploadOpen(true)}
-              className="bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl px-4 py-2 font-bold text-xs gap-2"
+              onClick={() => {
+                setTargetDocForRevision(null);
+                setIsUploadOpen(true);
+              }}
+              className="bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl px-4 py-2 font-bold text-xs gap-2 shadow-sm"
             >
               <Plus className="h-4 w-4" />
               <span>Upload Document</span>
@@ -648,7 +671,7 @@ export function Documents() {
         </div>
       ) : viewMode === 'grid' ? (
         
-        /* Grid Layout: Responsive across Phones, 7-10" Tablets, and Desktops */
+        /* Grid Layout */
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {paginatedDocuments.map((doc) => {
@@ -657,27 +680,24 @@ export function Documents() {
               return (
                 <div
                   key={doc.id}
-                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
+                  className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
                 >
                   <div className="p-4 space-y-3">
                     
                     {/* Card Header Top */}
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {getFormatBadge(doc.fileType, doc.fileExtension)}
-                        <span className="text-[10px] font-mono text-slate-400 font-bold">{doc.id}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
-                          {doc.version}
+                        <span className="text-[10px] font-mono text-slate-600 dark:text-slate-300 font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                          {doc.documentNumber || doc.id}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800 font-mono">
+                          {doc.revision || doc.version || 'Rev 0'}
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        {getStatusBadge(doc.status)}
-                        {doc.confidential && (
-                          <span title="Confidential" className="p-1 text-red-500">
-                            <ShieldAlert className="h-3.5 w-3.5" />
-                          </span>
-                        )}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {getStatusBadge(doc.status, doc.issueStatus)}
                       </div>
                     </div>
 
@@ -697,22 +717,27 @@ export function Documents() {
                       </div>
                     </div>
 
-                    {/* Category Pill */}
-                    <div className="text-xs text-slate-500 font-medium">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">{doc.category}</span>
+                    {/* Discipline & Category */}
+                    <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5 flex-wrap">
+                      {doc.discipline && (
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[10px]">
+                          {doc.discipline}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-slate-500">{doc.category}</span>
                     </div>
 
-                    {/* Linked Activity Badge / Button */}
+                    {/* Linked Activity Badge */}
                     <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
                           <LinkIcon className="h-3 w-3 text-blue-500" />
                           Activity
                         </span>
                         {canEditDocuments && (
                           <button
                             onClick={() => setAssignDoc(doc)}
-                            className="text-[11px] text-[#0B5FFF] hover:underline font-bold"
+                            className="text-[10px] text-[#0B5FFF] hover:underline font-bold"
                           >
                             {hasActivity ? 'Change' : '+ Assign'}
                           </button>
@@ -739,8 +764,8 @@ export function Documents() {
                           onClick={() => canEditDocuments && setAssignDoc(doc)}
                           className={`mt-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-center ${canEditDocuments ? 'cursor-pointer hover:border-[#0B5FFF] transition-colors' : ''}`}
                         >
-                          <span className="text-[11px] text-slate-400 italic">
-                            {canEditDocuments ? 'Click to link this document to an activity' : 'No activity linked'}
+                          <span className="text-[10px] text-slate-400 italic">
+                            {canEditDocuments ? 'Click to link document to activity' : 'No activity linked'}
                           </span>
                         </div>
                       )}
@@ -764,25 +789,6 @@ export function Documents() {
                       </div>
                     )}
 
-                    {/* Tags */}
-                    {doc.tags && doc.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {doc.tags.slice(0, 3).map(t => (
-                          <span
-                            key={t}
-                            className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-semibold"
-                          >
-                            #{t}
-                          </span>
-                        ))}
-                        {doc.tags.length > 3 && (
-                          <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-400 text-[10px]">
-                            +{doc.tags.length - 3}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
                   </div>
 
                   {/* Card Action Footer */}
@@ -792,16 +798,30 @@ export function Documents() {
                     </div>
 
                     <div className="flex items-center gap-1">
+                      {canEditDocuments && (
+                        <button
+                          onClick={() => {
+                            setTargetDocForRevision(doc);
+                            setIsUploadOpen(true);
+                          }}
+                          className="px-2 py-1 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 text-[10px] font-bold border border-blue-200 dark:border-blue-800 flex items-center gap-1 transition-colors"
+                          title="Upload new revision for this document"
+                        >
+                          <GitBranch className="h-3 w-3" />
+                          <span>Rev</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => setPreviewDoc(doc)}
-                        className="p-2 rounded-lg text-slate-500 hover:text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
                         title="Preview Document"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDownloadSingle(doc)}
-                        className="p-2 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
                         title="Download Document"
                       >
                         <Download className="h-4 w-4" />
@@ -810,14 +830,14 @@ export function Documents() {
                         <>
                           <button
                             onClick={() => setEditDoc(doc)}
-                            className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700 transition-colors"
                             title="Edit Document"
                           >
                             <Edit3 className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => setDeleteConfirmId(doc.id)}
-                            className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
                             title="Delete Document"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -835,18 +855,18 @@ export function Documents() {
       ) : (
         
         /* Table View */
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="p-3.5">ID / Format</th>
+                  <th className="p-3.5">Drawing / Doc No</th>
                   <th className="p-3.5">Document Title & File</th>
+                  <th className="p-3.5">Discipline</th>
                   <th className="p-3.5">Category</th>
-                  <th className="p-3.5">Assigned Activity</th>
-                  <th className="p-3.5">Version</th>
-                  <th className="p-3.5">Status</th>
-                  <th className="p-3.5">Uploader</th>
+                  <th className="p-3.5">Revision</th>
+                  <th className="p-3.5">Issue Purpose</th>
+                  <th className="p-3.5">Activity</th>
                   <th className="p-3.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -854,7 +874,7 @@ export function Documents() {
                 {paginatedDocuments.map((doc) => (
                   <tr key={doc.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="p-3.5 whitespace-nowrap">
-                      <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{doc.id}</div>
+                      <div className="font-mono font-bold text-slate-900 dark:text-slate-100">{doc.documentNumber || doc.id}</div>
                       <div className="mt-1">{getFormatBadge(doc.fileType, doc.fileExtension)}</div>
                     </td>
 
@@ -869,7 +889,19 @@ export function Documents() {
                     </td>
 
                     <td className="p-3.5 whitespace-nowrap font-medium text-slate-700 dark:text-slate-300">
+                      {doc.discipline || 'General'}
+                    </td>
+
+                    <td className="p-3.5 whitespace-nowrap font-medium text-slate-500 text-[11px]">
                       {doc.category}
+                    </td>
+
+                    <td className="p-3.5 whitespace-nowrap font-mono font-bold text-blue-600">
+                      {doc.revision || doc.version || 'Rev 0'}
+                    </td>
+
+                    <td className="p-3.5 whitespace-nowrap">
+                      {getStatusBadge(doc.status, doc.issueStatus)}
                     </td>
 
                     <td className="p-3.5">
@@ -894,31 +926,31 @@ export function Documents() {
                       )}
                     </td>
 
-                    <td className="p-3.5 whitespace-nowrap font-mono font-semibold text-slate-700 dark:text-slate-300">
-                      {doc.version}
-                    </td>
-
-                    <td className="p-3.5 whitespace-nowrap">
-                      {getStatusBadge(doc.status)}
-                    </td>
-
-                    <td className="p-3.5 whitespace-nowrap text-slate-500">
-                      <div>{doc.uploadedBy}</div>
-                      <div className="text-[10px] text-slate-400">{doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('en-GB') : '-'}</div>
-                    </td>
-
                     <td className="p-3.5 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
+                        {canEditDocuments && (
+                          <button
+                            onClick={() => {
+                              setTargetDocForRevision(doc);
+                              setIsUploadOpen(true);
+                            }}
+                            className="px-2 py-1 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 text-[10px] font-bold border border-blue-200 dark:border-blue-800 flex items-center gap-1 transition-colors mr-1"
+                            title="New Revision"
+                          >
+                            <GitBranch className="h-3 w-3" />
+                            <span>Rev</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => setPreviewDoc(doc)}
-                          className="p-2 rounded-lg text-slate-500 hover:text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-[#0B5FFF] hover:bg-blue-50 dark:hover:bg-blue-900/30"
                           title="Preview"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleDownloadSingle(doc)}
-                          className="p-2 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
                           title="Download"
                         >
                           <Download className="h-4 w-4" />
@@ -927,14 +959,14 @@ export function Documents() {
                           <>
                             <button
                               onClick={() => setEditDoc(doc)}
-                              className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                               title="Edit"
                             >
                               <Edit3 className="h-4 w-4" />
                             </button>
                             <button
                               onClick={() => setDeleteConfirmId(doc.id)}
-                              className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
                               title="Delete"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -953,16 +985,13 @@ export function Documents() {
 
       {/* Touch-Friendly High-Volume Pagination Controls Bar */}
       {filteredAndSortedDocuments.length > 0 && totalPages > 1 && (
-        <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
           
-          {/* Pagination Counter Info */}
           <div className="text-slate-500 dark:text-slate-400 text-center sm:text-left">
             Showing <span className="font-bold text-slate-900 dark:text-white">{(validCurrentPage - 1) * pageSize + 1}</span>–<span className="font-bold text-slate-900 dark:text-white">{Math.min(validCurrentPage * pageSize, filteredAndSortedDocuments.length)}</span> of <span className="font-bold text-slate-900 dark:text-white">{filteredAndSortedDocuments.length}</span> documents • Page <span className="font-bold text-[#0B5FFF]">{validCurrentPage}</span> of <span className="font-bold">{totalPages}</span>
           </div>
 
-          {/* Navigation Pill Buttons */}
           <div className="flex items-center gap-1.5 flex-wrap justify-center">
-            {/* First Page */}
             <button
               onClick={() => setCurrentPage(1)}
               disabled={validCurrentPage === 1}
@@ -972,7 +1001,6 @@ export function Documents() {
               <ChevronsLeft className="h-4 w-4" />
             </button>
 
-            {/* Previous Page */}
             <button
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={validCurrentPage === 1}
@@ -982,7 +1010,6 @@ export function Documents() {
               <span className="hidden sm:inline">Prev</span>
             </button>
 
-            {/* Numbered Page Buttons with Smart Ellipsis */}
             {Array.from({ length: totalPages }, (_, i) => i + 1)
               .filter(p => p === 1 || p === totalPages || (p >= validCurrentPage - 2 && p <= validCurrentPage + 2))
               .map((pageNum, idx, arr) => {
@@ -1008,7 +1035,6 @@ export function Documents() {
                 );
               })}
 
-            {/* Next Page */}
             <button
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={validCurrentPage === totalPages}
@@ -1018,7 +1044,6 @@ export function Documents() {
               <ChevronRight className="h-4 w-4" />
             </button>
 
-            {/* Last Page */}
             <button
               onClick={() => setCurrentPage(totalPages)}
               disabled={validCurrentPage === totalPages}
@@ -1034,8 +1059,8 @@ export function Documents() {
       {/* Delete Confirmation Modal */}
       {deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 max-w-sm w-full space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-3 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 w-fit">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 max-w-sm w-full space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-3 rounded-2xl bg-red-50 dark:bg-red-900/30 text-red-600 w-fit">
               <Trash2 className="h-6 w-6" />
             </div>
             <div>
@@ -1070,11 +1095,23 @@ export function Documents() {
       {/* Upload Modal */}
       <DocumentUploadModal
         isOpen={isUploadOpen}
-        onClose={() => setIsUploadOpen(false)}
-        onUpload={(newDoc) => addDocument(newDoc)}
+        onClose={() => {
+          setIsUploadOpen(false);
+          setTargetDocForRevision(null);
+        }}
+        onUpload={(newDoc) => {
+          // If revising an existing document, update it
+          if (documents.some(d => d.id === newDoc.id)) {
+            updateDocument(newDoc);
+          } else {
+            addDocument(newDoc);
+          }
+        }}
         activities={activities}
         currentUser={currentUserProfile?.name || 'Lindokuhle Chris (Admin)'}
-        projectId={activeProject?.id || 'PRJ-9348'}
+        projectId={activeProject?.id || 'PRJ-001'}
+        existingDocuments={documents}
+        initialTargetDocForRevision={targetDocForRevision}
       />
 
       {/* Preview Modal */}
@@ -1085,6 +1122,10 @@ export function Documents() {
         activities={activities}
         onEdit={(doc) => setEditDoc(doc)}
         onAssignActivity={(doc) => setAssignDoc(doc)}
+        onUploadNewRevision={(doc) => {
+          setTargetDocForRevision(doc);
+          setIsUploadOpen(true);
+        }}
       />
 
       {/* Edit Modal */}
@@ -1103,6 +1144,14 @@ export function Documents() {
         document={assignDoc}
         activities={activities}
         onAssign={(docId, actId, actName) => assignDocumentToActivity(docId, actId, actName)}
+      />
+
+      {/* Master Document Register (MDR) Studio Modal */}
+      <MasterDocumentRegisterModal
+        isOpen={isMdrModalOpen}
+        onClose={() => setIsMdrModalOpen(false)}
+        documents={documents}
+        projects={projects}
       />
 
     </div>

@@ -1,7 +1,27 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button, CustomSelect } from '../ui';
-import { X, UploadCloud, FileText, FileSpreadsheet, Image as ImageIcon, FileCode, CheckCircle2, AlertCircle, ShieldAlert, Link as LinkIcon, Plus, Tag, Loader2, HardDrive } from 'lucide-react';
-import { Activity, DocumentCategory, DocumentFileType, DocumentItem, DocumentStatus } from '../../types';
+import { 
+  X, 
+  UploadCloud, 
+  FileText, 
+  FileSpreadsheet, 
+  Image as ImageIcon, 
+  FileCode, 
+  CheckCircle2, 
+  AlertCircle, 
+  ShieldAlert, 
+  Link as LinkIcon, 
+  Plus, 
+  Tag, 
+  Loader2, 
+  HardDrive,
+  GitBranch,
+  Layers,
+  Compass,
+  FileCheck,
+  RefreshCw
+} from 'lucide-react';
+import { Activity, DocumentCategory, DocumentFileType, DocumentItem, DocumentStatus, DocumentIssueStatus, DocumentDiscipline, DocumentRevisionRecord } from '../../types';
 import { formatFileSize } from '../../lib/documentUtils';
 import { saveDocumentFile } from '../../lib/documentStorage';
 
@@ -17,6 +37,8 @@ interface DocumentUploadModalProps {
   defaultQAInspectionId?: string;
   defaultQAInspectionTitle?: string;
   lockCategory?: boolean;
+  existingDocuments?: DocumentItem[];
+  initialTargetDocForRevision?: DocumentItem | null;
 }
 
 const CATEGORIES: DocumentCategory[] = [
@@ -32,26 +54,57 @@ const CATEGORIES: DocumentCategory[] = [
   'General'
 ];
 
+const DISCIPLINES: DocumentDiscipline[] = [
+  'Civil',
+  'Structural',
+  'Electrical & MEP',
+  'Mechanical',
+  'Geotechnical & Survey',
+  'Architectural',
+  'HSE & Safety',
+  'Commercial & Contracts',
+  'General'
+];
+
+const ISSUE_STATUSES: { code: DocumentIssueStatus; label: string; desc: string }[] = [
+  { code: 'IFC', label: 'IFC - Issued For Construction', desc: 'Approved for active physical site execution' },
+  { code: 'IFA', label: 'IFA - Issued For Approval', desc: 'Submitted for consultant / engineer review' },
+  { code: 'IFI', label: 'IFI - Issued For Information', desc: 'Reference and coordination copy' },
+  { code: 'AB', label: 'AB - As-Built Record', desc: 'Survey-verified final completed installation' },
+  { code: 'TND', label: 'TND - Tender / Bid', desc: 'Procurement and tender package' },
+  { code: 'SUP', label: 'SUP - Superseded / Void', desc: 'Archived historical revision' }
+];
+
 export function DocumentUploadModal({
   isOpen,
   onClose,
   onUpload,
   activities,
   currentUser,
-  projectId = 'PRJ-9348',
+  projectId = 'PRJ-001',
   defaultActivityId,
   defaultCategory,
   defaultQAInspectionId,
   defaultQAInspectionTitle,
-  lockCategory = false
+  lockCategory = false,
+  existingDocuments = [],
+  initialTargetDocForRevision = null
 }: DocumentUploadModalProps) {
+  const [uploadMode, setUploadMode] = useState<'new' | 'revision'>(initialTargetDocForRevision ? 'revision' : 'new');
+  const [targetDocId, setTargetDocId] = useState<string>(initialTargetDocForRevision?.id || '');
+
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
+  const [documentNumber, setDocumentNumber] = useState('');
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<DocumentCategory>(defaultCategory || 'Specifications & Specs');
+  const [category, setCategory] = useState<DocumentCategory>(defaultCategory || 'Drawings & Blueprints');
+  const [discipline, setDiscipline] = useState<DocumentDiscipline>('Civil');
+  const [issueStatus, setIssueStatus] = useState<DocumentIssueStatus>('IFC');
   const [status, setStatus] = useState<DocumentStatus>('Approved');
+  const [revision, setRevision] = useState('Rev 0');
   const [version, setVersion] = useState('v1.0');
+  const [changeSummary, setChangeSummary] = useState('');
   const [linkedActivityId, setLinkedActivityId] = useState<string>(defaultActivityId || '');
   const [description, setDescription] = useState('');
   const [confidential, setConfidential] = useState(false);
@@ -68,6 +121,46 @@ export function DocumentUploadModal({
   const [errorMsg, setErrorMsg] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // If initial target doc changed
+  useEffect(() => {
+    if (initialTargetDocForRevision) {
+      setUploadMode('revision');
+      setTargetDocId(initialTargetDocForRevision.id);
+      populateFromTargetDoc(initialTargetDocForRevision);
+    }
+  }, [initialTargetDocForRevision]);
+
+  const populateFromTargetDoc = (doc: DocumentItem) => {
+    setDocumentNumber(doc.documentNumber || `DOC-${doc.id.slice(-6)}`);
+    setTitle(doc.title);
+    setCategory(doc.category);
+    if (doc.discipline) setDiscipline(doc.discipline as DocumentDiscipline);
+    setLinkedActivityId(doc.linkedActivityId || '');
+    // Bump revision e.g. Rev 0 -> Rev 1, Rev A -> Rev B
+    const currentRev = doc.revision || 'Rev 0';
+    if (currentRev.startsWith('Rev ')) {
+      const num = parseInt(currentRev.replace('Rev ', ''), 10);
+      if (!isNaN(num)) {
+        setRevision(`Rev ${num + 1}`);
+      } else {
+        const letter = currentRev.replace('Rev ', '');
+        const nextChar = String.fromCharCode(letter.charCodeAt(0) + 1);
+        setRevision(`Rev ${nextChar}`);
+      }
+    } else {
+      setRevision('Rev 1');
+    }
+    setIssueStatus('IFC');
+  };
+
+  const handleTargetDocChange = (docId: string) => {
+    setTargetDocId(docId);
+    const found = existingDocuments.find(d => d.id === docId);
+    if (found) {
+      populateFromTargetDoc(found);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -86,7 +179,6 @@ export function DocumentUploadModal({
   const handleFileProcess = (file: File) => {
     setErrorMsg('');
 
-    // Safety check for extreme file size (e.g. > 150MB)
     const MAX_ALLOWED_SIZE = 150 * 1024 * 1024; // 150MB
     if (file.size > MAX_ALLOWED_SIZE) {
       setErrorMsg(`Selected file is too large (${formatFileSize(file.size)}). Maximum supported file size is 150 MB.`);
@@ -96,12 +188,18 @@ export function DocumentUploadModal({
     setSelectedFile(file);
 
     // Auto-generate title if empty
-    if (!title) {
+    if (!title && uploadMode === 'new') {
       const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
       const cleanTitle = nameWithoutExt
         .replace(/[_-]+/g, ' ')
         .replace(/\b\w/g, l => l.toUpperCase());
       setTitle(cleanTitle);
+
+      // Auto-suggest document number if empty
+      if (!documentNumber) {
+        const code = cleanTitle.slice(0, 8).toUpperCase().replace(/\s+/g, '-');
+        setDocumentNumber(`TSP-${code}-001`);
+      }
     }
 
     // Auto-guess category based on filename keywords
@@ -163,6 +261,11 @@ export function DocumentUploadModal({
       return;
     }
 
+    if (uploadMode === 'revision' && !targetDocId) {
+      setErrorMsg('Please select the existing document you wish to revise.');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMsg('');
 
@@ -174,9 +277,72 @@ export function DocumentUploadModal({
       const fileName = selectedFile?.name || `${title.toLowerCase().replace(/\s+/g, '_')}.${ext}`;
 
       const linkedActivity = activities.find(a => a.id === linkedActivityId);
+
+      // Handle Revision Mode: Update existing document and push old revision into history
+      if (uploadMode === 'revision' && targetDocId) {
+        const targetDoc = existingDocuments.find(d => d.id === targetDocId);
+        if (targetDoc) {
+          setUploadProgressText(`Securing revision file payload...`);
+          
+          // Save new binary
+          if (selectedFile) {
+            await saveDocumentFile(targetDoc.id, selectedFile, {
+              fileName,
+              mimeType: mime,
+              size: fileSize
+            });
+          }
+
+          // Build historical revision record for previous version
+          const prevRevisionRecord: DocumentRevisionRecord = {
+            revision: targetDoc.revision || targetDoc.version || 'Rev 0',
+            version: targetDoc.version || '1.0',
+            uploadedAt: targetDoc.uploadedAt,
+            uploadedBy: targetDoc.uploadedBy,
+            fileName: targetDoc.fileName,
+            fileSize: targetDoc.fileSize,
+            fileSizeFormatted: targetDoc.fileSizeFormatted,
+            fileUrl: targetDoc.fileUrl,
+            changeSummary: targetDoc.description || 'Initial Release',
+            status: 'Superseded',
+            issueStatus: 'SUP',
+            transmittalNumber: targetDoc.transmittalNumber
+          };
+
+          const existingHistory = targetDoc.revisionHistory || [];
+
+          const updatedDoc: DocumentItem = {
+            ...targetDoc,
+            title: title.trim() || targetDoc.title,
+            fileName,
+            fileType,
+            fileExtension: ext.toLowerCase(),
+            fileSize,
+            fileSizeFormatted: formatFileSize(fileSize),
+            discipline,
+            category,
+            revision: revision.trim() || 'Rev 1',
+            version: version.trim() || 'v2.0',
+            status: issueStatus === 'IFC' ? 'Approved' : (issueStatus === 'IFA' ? 'Under Review' : 'Approved'),
+            issueStatus,
+            isCurrentRevision: true,
+            revisionHistory: [prevRevisionRecord, ...existingHistory],
+            description: changeSummary.trim() || description.trim() || undefined,
+            uploadedBy: currentUser || 'Site Engineer',
+            uploadedAt: new Date().toISOString(),
+            lastModified: new Date().toISOString()
+          };
+
+          onUpload(updatedDoc);
+          setIsSubmitting(false);
+          onClose();
+          return;
+        }
+      }
+
+      // Handle New Document Mode
       const docId = `DOC-${Math.floor(100 + Math.random() * 900)}-${Date.now().toString(36).toUpperCase()}`;
 
-      // If a binary file was uploaded, store it securely in IndexedDB
       if (selectedFile) {
         setUploadProgressText(`Securing ${formatFileSize(fileSize)} binary payload...`);
         await saveDocumentFile(docId, selectedFile, {
@@ -186,11 +352,12 @@ export function DocumentUploadModal({
         });
       }
 
-      setUploadProgressText('Registering document metadata...');
+      setUploadProgressText('Registering ISO Document metadata...');
 
       const newDoc: DocumentItem = {
         id: docId,
         projectId,
+        documentNumber: documentNumber.trim() || `DOC-${docId.slice(-6)}`,
         title: title.trim() || fileName,
         fileName,
         fileType,
@@ -198,9 +365,14 @@ export function DocumentUploadModal({
         fileSize,
         fileSizeFormatted: formatFileSize(fileSize),
         category,
-        tags: tags.length > 0 ? tags : [category.split(' ')[0]],
+        discipline,
+        tags: tags.length > 0 ? tags : [category.split(' ')[0], discipline],
+        revision: revision.trim() || 'Rev 0',
         version: version.trim() || 'v1.0',
-        status,
+        status: issueStatus === 'IFC' ? 'Approved' : (issueStatus === 'IFA' ? 'Under Review' : 'Approved'),
+        issueStatus,
+        isCurrentRevision: true,
+        revisionHistory: [],
         linkedActivityId: linkedActivity ? linkedActivity.id : undefined,
         linkedActivityName: linkedActivity ? linkedActivity.name : undefined,
         linkedQAInspectionId: defaultQAInspectionId || undefined,
@@ -224,22 +396,22 @@ export function DocumentUploadModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         
         {/* Modal Header */}
         <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-[#0B5FFF]">
+            <div className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-900/40 text-[#0B5FFF]">
               <UploadCloud className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                {defaultQAInspectionId ? 'Attach Quality & QA/QC Document' : 'Upload Project Document'}
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <span>{uploadMode === 'new' ? 'Upload Controlled Document' : 'Upload New Revision (Supersede Previous)'}</span>
               </h2>
               <p className="text-xs text-slate-500">
-                {defaultQAInspectionId 
-                  ? 'Attach test certificates, lab reports, NDT results, or QA specs to this inspection.'
-                  : 'Attach blueprints, spreadsheets, specs, or contracts with activity linking.'}
+                {uploadMode === 'new'
+                  ? 'Attach drawings, specifications, contracts, and QA records with ISO numbering.'
+                  : 'Upload an updated drawing revision. The previous version will be automatically marked Superseded.'}
               </p>
             </div>
           </div>
@@ -252,15 +424,66 @@ export function DocumentUploadModal({
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4.5 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           
-          {defaultQAInspectionId && (
-            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                <span>Linking to QA/QC Inspection: <strong>{defaultQAInspectionId}</strong> {defaultQAInspectionTitle ? `(${defaultQAInspectionTitle})` : ''}</span>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/50 rounded-md">Document Hub Sync</span>
+          {/* Mode Selector */}
+          {existingDocuments.length > 0 && (
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setUploadMode('new')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  uploadMode === 'new'
+                    ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <Plus className="h-4 w-4" />
+                <span>Upload New Document</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setUploadMode('revision');
+                  if (!targetDocId && existingDocuments[0]) {
+                    handleTargetDocChange(existingDocuments[0].id);
+                  }
+                }}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  uploadMode === 'revision'
+                    ? 'bg-white dark:bg-slate-700 text-[#0B5FFF] shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <GitBranch className="h-4 w-4" />
+                <span>Upload Revision for Existing</span>
+              </button>
+            </div>
+          )}
+
+          {/* Existing Document Picker (If in Revision Mode) */}
+          {uploadMode === 'revision' && (
+            <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 space-y-2">
+              <label className="block text-xs font-bold text-blue-900 dark:text-blue-200 uppercase tracking-wider">
+                Select Existing Document to Revise <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={targetDocId}
+                onChange={e => handleTargetDocChange(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-blue-200 dark:border-blue-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white"
+              >
+                <option value="">-- Choose document to update --</option>
+                {existingDocuments.map(d => (
+                  <option key={d.id} value={d.id}>
+                    [{d.revision || 'Rev 0'}] {d.documentNumber || `DOC-${d.id.slice(-6)}`} - {d.title}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Uploading this new file will archive current revision to Superseded history.</span>
+              </p>
             </div>
           )}
 
@@ -319,219 +542,157 @@ export function DocumentUploadModal({
                   <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 ml-2" />
                 </div>
               ) : (
-                <div className="flex flex-col items-center">
-                  <div className="p-3 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#0B5FFF] mb-2.5">
+                <div className="space-y-2">
+                  <div className="h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-900/40 text-[#0B5FFF] flex items-center justify-center mx-auto">
                     <UploadCloud className="h-6 w-6" />
                   </div>
-                  <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                    Drag & drop your document here, or <span className="text-[#0B5FFF] hover:underline">browse files</span>
+                  <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                    Click to browse or drag & drop file here
                   </div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    Supports PDF, Excel (.xlsx, .csv), Word (.docx), CAD (.dwg), Images (.png, .jpg), and Archives (.zip)
-                  </div>
+                  <p className="text-xs text-slate-400">
+                    PDF, AutoCAD (.dwg, .dxf), Excel (.xlsx, .csv), Word, Images up to 150 MB
+                  </p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Title & Category Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Document Number & Revision Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                Document Title <span className="text-red-500">*</span>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                Document Number / Drawing Code <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Foundation Structural IFC Drawing Rev C"
-                required
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                value={documentNumber}
+                onChange={e => setDocumentNumber(e.target.value)}
+                placeholder="e.g. TSP-DWG-CIV-003"
+                className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                Category
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                Revision Code <span className="text-red-500">*</span>
               </label>
-              <CustomSelect
-                value={category}
-                onChange={(val) => setCategory(val as DocumentCategory)}
-                options={CATEGORIES.map(c => ({ value: c, label: c }))}
-                className="w-full"
+              <input
+                type="text"
+                value={revision}
+                onChange={e => setRevision(e.target.value)}
+                placeholder="e.g. Rev 0, Rev 1, Rev A"
+                className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-blue-600 focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
               />
             </div>
           </div>
 
-          {/* Version & Status */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                Version / Revision
-              </label>
-              <input
-                type="text"
-                value={version}
-                onChange={(e) => setVersion(e.target.value)}
-                placeholder="v1.0 or Rev C"
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                Review Status
-              </label>
-              <CustomSelect
-                value={status}
-                onChange={(val) => setStatus(val as DocumentStatus)}
-                options={[
-                  { value: 'Approved', label: 'Approved' },
-                  { value: 'Under Review', label: 'Under Review' },
-                  { value: 'Draft', label: 'Draft' },
-                  { value: 'Archived', label: 'Archived' }
-                ]}
-                className="w-full"
-              />
-            </div>
-
-            {/* Optional Activity Assignment */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                <span>Assign to Activity</span>
-                <span className="text-[10px] text-blue-600 font-semibold lowercase">optional</span>
-              </label>
-              <CustomSelect
-                value={linkedActivityId}
-                onChange={(val) => setLinkedActivityId(val)}
-                options={[
-                  { value: '', label: 'None (Unassigned)' },
-                  ...activities.map(a => ({
-                    value: a.id,
-                    label: `${a.name} (${a.status})`
-                  }))
-                ]}
-                className="w-full"
-              />
-            </div>
-          </div>
-
-          {/* Tags */}
+          {/* Title */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-              Tags & Keywords
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+              Document Title & Scope <span className="text-red-500">*</span>
             </label>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="relative flex-1">
-                <Tag className="h-4 w-4 absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddTag();
-                    }
-                  }}
-                  placeholder="Type tag (e.g. Rebar, Steel, SWMS) and press Enter or click Add"
-                  className="w-full h-10 pl-9 pr-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
-                />
-              </div>
-              <Button
-                type="button"
-                onClick={handleAddTag}
-                variant="outline"
-                className="h-10 px-3.5 rounded-xl font-bold text-xs"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                Add
-              </Button>
-            </div>
-
-            {tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {tags.map(t => (
-                  <span
-                    key={t}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-200 dark:border-blue-800"
-                  >
-                    <span>#{t}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(t)}
-                      className="hover:text-red-500 p-0.5"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="e.g. MV Cable Trench Layout & Cross-Section Details"
+              className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+            />
           </div>
 
-          {/* Description */}
+          {/* Discipline & Issue Status Purpose */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                Engineering Discipline
+              </label>
+              <select
+                value={discipline}
+                onChange={e => setDiscipline(e.target.value as DocumentDiscipline)}
+                className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+              >
+                {DISCIPLINES.map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                Issue Status / Purpose
+              </label>
+              <select
+                value={issueStatus}
+                onChange={e => setIssueStatus(e.target.value as DocumentIssueStatus)}
+                className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+              >
+                {ISSUE_STATUSES.map(s => (
+                  <option key={s.code} value={s.code}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Category & Activity Linking */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                Document Category
+              </label>
+              <select
+                value={category}
+                onChange={e => setCategory(e.target.value as DocumentCategory)}
+                disabled={lockCategory}
+                className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+              >
+                {CATEGORIES.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                Link to Activity (Optional)
+              </label>
+              <select
+                value={linkedActivityId}
+                onChange={e => setLinkedActivityId(e.target.value)}
+                className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+              >
+                <option value="">-- No Linked Activity --</option>
+                {activities.map(a => (
+                  <option key={a.id} value={a.id}>{a.name} ({a.status})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Change Summary (for Revisions) or Description */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-              Description & Notes
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+              {uploadMode === 'revision' ? 'Revision Change Summary / Transmittal Notes' : 'Description / Scope Remarks'}
             </label>
             <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Provide a brief summary of what this document covers, revisions made, or key specifications..."
               rows={2}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+              value={uploadMode === 'revision' ? changeSummary : description}
+              onChange={e => uploadMode === 'revision' ? setChangeSummary(e.target.value) : setDescription(e.target.value)}
+              placeholder={uploadMode === 'revision' ? 'e.g. Revised trench invert depths at chainage 0+450 following RFI-012.' : 'Key notes, drawing references, or specifications'}
+              className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
             />
           </div>
 
-          {/* Confidentiality Checkbox */}
-          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-            <input
-              type="checkbox"
-              id="confidential"
-              checked={confidential}
-              onChange={(e) => setConfidential(e.target.checked)}
-              className="h-4 w-4 rounded text-[#0B5FFF] focus:ring-[#0B5FFF] border-slate-300 cursor-pointer"
-            />
-            <label htmlFor="confidential" className="text-xs text-slate-700 dark:text-slate-300 font-semibold cursor-pointer select-none flex items-center gap-1.5">
-              <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
-              Mark as Confidential / Restricted Access Document
-            </label>
-          </div>
-
-          {/* Footer Actions */}
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2.5">
-            <div className="text-xs text-slate-500 font-medium truncate max-w-xs flex items-center gap-1.5">
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0B5FFF]" />
-                  <span className="text-[#0B5FFF] font-semibold">{uploadProgressText || 'Saving document...'}</span>
-                </>
-              ) : selectedFile ? (
-                <>
-                  <HardDrive className="h-3.5 w-3.5 text-emerald-500" />
-                  <span>Size: <strong>{formatFileSize(selectedFile.size)}</strong> (Max 150 MB)</span>
-                </>
-              ) : (
-                <span>Max file size: 150 MB</span>
-              )}
+          {/* Modal Footer Actions */}
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="text-xs text-slate-400 font-mono">
+              {uploadProgressText}
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className="rounded-xl px-4 py-2 font-semibold text-xs sm:text-sm"
-              >
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting} className="rounded-xl text-xs">
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="bg-[#0B5FFF] hover:bg-blue-600 text-white rounded-xl px-5 py-2 font-semibold text-xs sm:text-sm shadow-sm gap-2"
-              >
+              <Button type="submit" disabled={isSubmitting} className="rounded-xl text-xs bg-[#0B5FFF] hover:bg-blue-600 text-white font-bold gap-1.5 shadow-sm">
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -540,13 +701,15 @@ export function DocumentUploadModal({
                 ) : (
                   <>
                     <UploadCloud className="h-4 w-4" />
-                    <span>Save & Attach Document</span>
+                    <span>{uploadMode === 'new' ? 'Register Document' : 'Publish Revision'}</span>
                   </>
                 )}
               </Button>
             </div>
           </div>
+
         </form>
+
       </div>
     </div>
   );

@@ -87,7 +87,7 @@ export interface Comment {
   editedAt?: string;
 }
 
-export type SubTaskCategory = 
+export type SubTaskCategory =
   | 'Site Establishment'
   | 'Surveying & Set-out'
   | 'Surveying'
@@ -100,7 +100,7 @@ export type SubTaskCategory =
   | 'Quality Control & Hold Points'
   | 'Custom';
 
-export type SubTaskMeasurementType = 
+export type SubTaskMeasurementType =
   | 'Quantity'
   | 'Length'
   | 'Area'
@@ -316,7 +316,7 @@ export interface Activity {
   prerequisiteWorkstreamIds?: string[];
 }
 
-export type WorkstreamType = 
+export type WorkstreamType =
   | 'CONSTRUCTION'      // Civil & Physical Construction Execution
   | 'PTS_CONSTRUCTION'  // Legacy compatibility for Civil / Construction
   | 'SURVEYING'         // Topography, Setting-Out, Pegging, Benchmark, Elevation, As-Builts
@@ -693,20 +693,20 @@ export interface QAMeasurementRecord {
   testedBy?: string;
 }
 
-export type QARFIType = 
-  | 'Request For Inspection (WIR)' 
-  | 'Request For Information (Technical Query)' 
-  | 'Hold Point Clearance' 
+export type QARFIType =
+  | 'Request For Inspection (WIR)'
+  | 'Request For Information (Technical Query)'
+  | 'Hold Point Clearance'
   | 'Material Approval Request'
   | 'Method Statement Sign-off';
 
-export type QARFIStatus = 
-  | 'Draft' 
-  | 'Submitted' 
-  | 'Under Review' 
-  | 'Approved' 
-  | 'Approved with Comments' 
-  | 'Rejected / Revise' 
+export type QARFIStatus =
+  | 'Draft'
+  | 'Submitted'
+  | 'Under Review'
+  | 'Approved'
+  | 'Approved with Comments'
+  | 'Rejected / Revise'
   | 'Closed';
 
 export type QARFIPriority = 'Low' | 'Medium' | 'High' | 'Critical';
@@ -727,13 +727,13 @@ export interface QARFIItem {
   dateClosed?: string;
   status: QARFIStatus;
   priority: QARFIPriority;
-  
+
   // Scope & Quantities requested for inspection/clarification
   measurementType?: QAMeasurementType;
   unit?: string;
   quantity?: number;
   toleranceSpec?: string;
-  
+
   description: string;
   responseClarification?: string;
   linkedQAInspectionId?: string;
@@ -754,14 +754,14 @@ export interface QAInspectionItem {
   submissionDate?: string;
   dueDate?: string;
   status: 'Passed' | 'Failed' | 'Pending Approval';
-  
+
   // Stakeholder & Contractual Metadata
   client?: string;
   epc?: string;
   subcontractor?: string;
   documentNumber?: string;
   referenceDrawingNumber?: string;
-  
+
   // Measurement & Quality Inspection Scope
   measurementType?: QAMeasurementType;
   unit?: string;
@@ -818,7 +818,7 @@ export const DEFAULT_SECTION_PERMISSIONS: Record<UserRole, ProjectSectionPermiss
   Viewer: { activities: false, reports: false, labour: false, materials: false, safety: false, quality: false, equipment: false, documents: true, settings: false },
 };
 
-export type DocumentCategory = 
+export type DocumentCategory =
   | 'Drawings & Blueprints'
   | 'Contracts & Agreements'
   | 'Specifications & Specs'
@@ -832,10 +832,46 @@ export type DocumentCategory =
 
 export type DocumentFileType = 'pdf' | 'excel' | 'word' | 'image' | 'cad' | 'archive' | 'text' | 'other';
 export type DocumentStatus = 'Approved' | 'Draft' | 'Under Review' | 'Archived' | 'Superseded';
+export type DocumentIssueStatus = 'IFC' | 'IFA' | 'IFI' | 'AB' | 'TND' | 'SUP';
+export type DocumentDiscipline = 
+  | 'Civil'
+  | 'Structural'
+  | 'Electrical & MEP'
+  | 'Mechanical'
+  | 'Geotechnical & Survey'
+  | 'Architectural'
+  | 'HSE & Safety'
+  | 'Commercial & Contracts'
+  | 'General';
+
+export interface DocumentRevisionRecord {
+  revision: string;
+  version?: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  fileName: string;
+  fileSize: number;
+  fileSizeFormatted?: string;
+  fileUrl?: string;
+  changeSummary?: string;
+  status: DocumentStatus;
+  issueStatus: DocumentIssueStatus;
+  transmittalNumber?: string;
+}
+
+export interface DocumentSignoff {
+  role: string;
+  name: string;
+  date: string;
+  status: 'Approved' | 'Approved as Noted' | 'Under Review' | 'Rejected';
+  notes?: string;
+  signatureStamp?: string;
+}
 
 export interface DocumentItem {
   id: string;
   projectId: string;
+  documentNumber?: string;
   title: string;
   fileName: string;
   fileType: DocumentFileType;
@@ -844,12 +880,20 @@ export interface DocumentItem {
   fileSize: number; // in bytes
   fileSizeFormatted?: string; // e.g. 2.4 MB
   category: DocumentCategory;
+  discipline?: DocumentDiscipline | string;
   tags?: string[];
   version: string;
+  revision?: string;
   status: DocumentStatus;
+  issueStatus?: DocumentIssueStatus;
+  isCurrentRevision?: boolean;
+  revisionHistory?: DocumentRevisionRecord[];
+  transmittalNumber?: string;
+  signoffs?: DocumentSignoff[];
   fileUrl?: string; // base64 data URL or asset link for preview/download
   linkedActivityId?: string; // optional assignment to an Activity
   linkedActivityName?: string;
+  linkedSubtaskIds?: string[];
   linkedQAInspectionId?: string; // optional assignment to QA/QC Inspection
   linkedQAInspectionTitle?: string;
   uploadedBy: string;
@@ -990,7 +1034,7 @@ export interface MaterialUsage {
   notes?: string;
 }
 
-export type WeatherCondition = 
+export type WeatherCondition =
   | 'Sunny'
   | 'Clear'
   | 'Partly Cloudy'
@@ -1164,7 +1208,7 @@ export interface Team {
 
 export type EquipmentStatus = 'Operating' | 'Idle' | 'Maintenance' | 'Out of Service';
 
-export type EquipmentCategory = 
+export type EquipmentCategory =
   | 'Cars & Light Vehicles'
   | 'Heavy Machinery'
   | 'Haulage & Dump Trucks'
@@ -1172,7 +1216,7 @@ export type EquipmentCategory =
   | 'Lifting & Cranes'
   | 'Light Equipment & Tools';
 
-export type PrimaryUsageMetric = 
+export type PrimaryUsageMetric =
   | 'Engine Hours'
   | 'Mileage / Odometer'
   | 'Loads & Trips'
@@ -1293,7 +1337,7 @@ export type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'ZAR' | 'AUD' | 'CAD' | 'INR'
 
 export type AccommodationOwnership = 'Owned' | 'Rented';
 
-export type AccommodationType = 
+export type AccommodationType =
   | 'Site Camp / Modular Cabin'
   | 'Container Home / Unit'
   | 'Shared House / Flat'
@@ -1303,7 +1347,7 @@ export type AccommodationType =
 
 export type AccommodationStatus = 'Available' | 'Partially Occupied' | 'Full' | 'Under Maintenance' | 'Vacated';
 
-export type UtilityType = 
+export type UtilityType =
   | 'Electricity / Eskom Tokens'
   | 'Water & Sanitation'
   | 'Camp Generator Diesel'
@@ -1313,10 +1357,10 @@ export type UtilityType =
   | 'Waste & Septic Pump-out'
   | 'Repairs & Maintenance';
 
-export type RentalRateType = 
-  | 'Fixed Monthly' 
-  | 'Per Occupant / Bed (Monthly)' 
-  | 'Per Room (Monthly)' 
+export type RentalRateType =
+  | 'Fixed Monthly'
+  | 'Per Occupant / Bed (Monthly)'
+  | 'Per Room (Monthly)'
   | 'Daily / Per Night per Person';
 
 export interface AccommodationUnit {
@@ -1333,7 +1377,7 @@ export interface AccommodationUnit {
   bedsPerRoom?: number; // Configured beds per room
   occupantIds: string[]; // array of Employee IDs
   status: AccommodationStatus;
-  
+
   // Rental specific fields (when ownership === 'Rented')
   rentalVendor?: string; // Landlord or leasing agent
   rentalAgreementNumber?: string;
@@ -1403,7 +1447,7 @@ export interface NoteChecklistItem {
   completed: boolean;
 }
 
-export type NoteCategory = 
+export type NoteCategory =
   | 'Site Diary'
   | 'Site Observation'
   | 'Meeting Minutes'
@@ -1456,7 +1500,7 @@ export type FieldNote = ActivityNote;
 // UNIVERSAL REPORTS ENGINE & SCHEMAS
 // ==========================================
 
-export type ReportCategory = 
+export type ReportCategory =
   | 'DailySite'
   | 'WeeklyProgress'
   | 'MonthlyProgress'
@@ -1506,7 +1550,7 @@ export interface SurveyReportData {
   verticalDatum: string;           // e.g. 'Mean Sea Level (MSL) Bench Mark BM-04'
   benchmarkRef?: string;
   benchmarkElevation?: number;
-  
+
   // Earthworks Volumetrics (if applicable)
   surveyAreaM2?: number;
   designCutVolumeM3?: number;
@@ -1615,7 +1659,7 @@ export interface UniversalReportItem<TData = any> {
   author: string;                   // Inspector / Lead / Author name
   authorRole?: string;
   status: ReportStatus;
-  
+
   // Stakeholder & Contractual metadata
   client?: string;
   epc?: string;
