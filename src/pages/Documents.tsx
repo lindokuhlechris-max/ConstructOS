@@ -43,9 +43,11 @@ import {
   HardHat,
   Sidebar,
   CheckSquare,
-  Square
+  Square,
+  Briefcase,
+  Send
 } from 'lucide-react';
-import { DocumentCategory, DocumentFileType, DocumentItem, DocumentStatus, DocumentIssueStatus, DocumentDiscipline, DocumentFolder } from '../types';
+import { DocumentCategory, DocumentFileType, DocumentItem, DocumentStatus, DocumentIssueStatus, DocumentDiscipline, DocumentFolder, WorkPackageBinder, DocumentTransmittal } from '../types';
 import { printDocumentsSummary } from '../lib/pdfPrint';
 import { exportDocumentsToCSV } from '../lib/csvExport';
 import { downloadDocument, deleteDocumentFile } from '../lib/documentStorage';
@@ -57,6 +59,9 @@ import { MasterDocumentRegisterModal } from '../components/documents/MasterDocum
 import { DocumentFolderTree } from '../components/documents/DocumentFolderTree';
 import { DocumentBatchUploadModal } from '../components/documents/DocumentBatchUploadModal';
 import { DocumentBulkActionBar } from '../components/documents/DocumentBulkActionBar';
+import { WorkPackageBindersModal } from '../components/documents/WorkPackageBindersModal';
+import { DocumentTransmittalModal } from '../components/documents/DocumentTransmittalModal';
+import { TransmittalRegisterModal } from '../components/documents/TransmittalRegisterModal';
 
 const CATEGORIES: ('All' | DocumentCategory)[] = [
   'All',
@@ -99,6 +104,15 @@ export function Documents() {
     moveDocumentsToFolder,
     bulkUpdateDocuments,
     bulkDeleteDocuments,
+    workPackageBinders,
+    addWorkPackageBinder,
+    updateWorkPackageBinder,
+    deleteWorkPackageBinder,
+    toggleDocInWorkPackage,
+    documentTransmittals,
+    addDocumentTransmittal,
+    updateDocumentTransmittal,
+    deleteDocumentTransmittal,
     activities, 
     projects,
     currentUserProfile,
@@ -133,6 +147,9 @@ export function Documents() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isBatchUploadOpen, setIsBatchUploadOpen] = useState(false);
   const [isMdrModalOpen, setIsMdrModalOpen] = useState(false);
+  const [isWorkPackageModalOpen, setIsWorkPackageModalOpen] = useState(false);
+  const [isTransmittalModalOpen, setIsTransmittalModalOpen] = useState(false);
+  const [isTransmittalRegisterOpen, setIsTransmittalRegisterOpen] = useState(false);
   const [targetDocForRevision, setTargetDocForRevision] = useState<DocumentItem | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
   const [editDoc, setEditDoc] = useState<DocumentItem | null>(null);
@@ -453,11 +470,31 @@ export function Documents() {
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             onClick={() => setIsMdrModalOpen(true)}
-            className="rounded-xl px-4 py-2 font-bold text-xs sm:text-sm gap-2 bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white shadow-sm"
+            className="rounded-xl px-3.5 py-2 font-bold text-xs sm:text-sm gap-2 bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white shadow-sm"
             title="Open Executive Master Document Register (MDR) Studio"
           >
             <FileCheck className="h-4 w-4 text-teal-400 dark:text-teal-600" />
-            <span>Master Register (MDR)</span>
+            <span>MDR Studio</span>
+          </Button>
+
+          <Button
+            onClick={() => setIsWorkPackageModalOpen(true)}
+            variant="outline"
+            className="rounded-xl px-3.5 py-2 font-bold text-xs sm:text-sm gap-2 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 bg-blue-50/40 hover:bg-blue-100 dark:hover:bg-blue-950/60 shadow-2xs"
+            title="Manage Work Package Binders & Site Execution Dossiers"
+          >
+            <Briefcase className="h-4 w-4" />
+            <span>Work Packages ({workPackageBinders.length})</span>
+          </Button>
+
+          <Button
+            onClick={() => setIsTransmittalRegisterOpen(true)}
+            variant="outline"
+            className="rounded-xl px-3.5 py-2 font-bold text-xs sm:text-sm gap-2 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 bg-indigo-50/40 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 shadow-2xs"
+            title="View Document Transmittal Register (DTN Log)"
+          >
+            <Send className="h-4 w-4" />
+            <span>Transmittals ({documentTransmittals.length})</span>
           </Button>
 
           {canEditDocuments && (
@@ -1279,6 +1316,7 @@ export function Documents() {
           bulkDeleteDocuments(Array.from(selectedDocIds));
           setSelectedDocIds(new Set());
         }}
+        onOpenTransmittalModal={() => setIsTransmittalModalOpen(true)}
       />
 
       {/* Delete Single Confirmation Modal */}
@@ -1353,12 +1391,14 @@ export function Documents() {
         defaultFolderId={selectedFolderId}
       />
 
-      {/* Preview Modal */}
+      {/* Preview Modal with Cross-References & Work Packages */}
       <DocumentPreviewModal
         isOpen={!!previewDoc}
         onClose={() => setPreviewDoc(null)}
         document={previewDoc}
         activities={activities}
+        allDocuments={documents}
+        workPackageBinders={workPackageBinders}
         onEdit={(doc) => setEditDoc(doc)}
         onAssignActivity={(doc) => setAssignDoc(doc)}
         onUploadNewRevision={(doc) => {
@@ -1391,6 +1431,47 @@ export function Documents() {
         onClose={() => setIsMdrModalOpen(false)}
         documents={documents}
         projects={projects}
+      />
+
+      {/* Work Package Binders & Site Dossiers Manager */}
+      <WorkPackageBindersModal
+        isOpen={isWorkPackageModalOpen}
+        onClose={() => setIsWorkPackageModalOpen(false)}
+        binders={workPackageBinders}
+        documents={documents}
+        activities={activities}
+        currentUser={currentUserProfile?.name || 'Lindokuhle Chris (Admin)'}
+        onAddBinder={addWorkPackageBinder}
+        onUpdateBinder={updateWorkPackageBinder}
+        onDeleteBinder={deleteWorkPackageBinder}
+        onToggleDocInBinder={toggleDocInWorkPackage}
+        canEdit={canEditDocuments}
+      />
+
+      {/* Issue Document Transmittal Notice (DTN) Modal */}
+      <DocumentTransmittalModal
+        isOpen={isTransmittalModalOpen}
+        onClose={() => setIsTransmittalModalOpen(false)}
+        documents={documents}
+        initialSelectedDocIds={Array.from(selectedDocIds)}
+        projects={projects}
+        currentUser={currentUserProfile?.name || 'Lindokuhle Chris (Admin)'}
+        onIssueTransmittal={(transmittal) => {
+          addDocumentTransmittal(transmittal);
+          // Mark transmittalNumber on documents
+          bulkUpdateDocuments(transmittal.documentIds, { transmittalNumber: transmittal.transmittalNumber });
+        }}
+      />
+
+      {/* Historical Transmittal Register (DTN Log) Modal */}
+      <TransmittalRegisterModal
+        isOpen={isTransmittalRegisterOpen}
+        onClose={() => setIsTransmittalRegisterOpen(false)}
+        transmittals={documentTransmittals}
+        projects={projects}
+        currentUser={currentUserProfile?.name || 'Lindokuhle Chris (Admin)'}
+        onDeleteTransmittal={deleteDocumentTransmittal}
+        canEdit={canEditDocuments}
       />
 
     </div>

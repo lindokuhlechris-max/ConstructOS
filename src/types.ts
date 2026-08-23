@@ -880,6 +880,48 @@ export interface DocumentFolder {
   createdAt?: string;
 }
 
+export interface WorkPackageBinder {
+  id: string;
+  projectId: string;
+  code: string; // e.g. WPB-CIV-001
+  title: string; // e.g. Foundation Concrete Pour Dossier
+  discipline: DocumentDiscipline | string;
+  status: 'Drafting' | 'Active On-Site' | 'Under Revision' | 'Completed';
+  description?: string;
+  documentIds: string[];
+  linkedActivityId?: string;
+  linkedActivityName?: string;
+  createdDate: string;
+  createdBy: string;
+}
+
+export interface DocumentTransmittal {
+  id: string;
+  transmittalNumber: string; // e.g. TRN-PRJ-2026-001
+  projectId: string;
+  issueDate: string;
+  issuedBy: string;
+  issuedToCompany: string;
+  issuedToRecipient: string;
+  issuedToEmail?: string;
+  issuePurpose: DocumentIssueStatus | 'For Approval' | 'For Construction' | 'For Information' | 'As-Built';
+  transmissionMethod: 'Digital Portal' | 'Email Package' | 'Hard Copy Delivery';
+  subject: string;
+  remarks?: string;
+  documentIds: string[];
+  documentSnapshots: {
+    documentId: string;
+    documentNumber: string;
+    title: string;
+    revision: string;
+    issueStatus: string;
+    fileExtension: string;
+  }[];
+  status: 'Issued' | 'Draft' | 'Acknowledged';
+  acknowledgedBy?: string;
+  acknowledgedDate?: string;
+}
+
 export interface DocumentItem {
   id: string;
   projectId: string;
@@ -905,6 +947,7 @@ export interface DocumentItem {
   revisionHistory?: DocumentRevisionRecord[];
   transmittalNumber?: string;
   signoffs?: DocumentSignoff[];
+  relatedDocumentIds?: string[];
   fileUrl?: string; // base64 data URL or asset link for preview/download
   linkedActivityId?: string; // optional assignment to an Activity
   linkedActivityName?: string;

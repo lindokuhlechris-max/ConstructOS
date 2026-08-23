@@ -9,7 +9,8 @@ import {
   Archive, 
   Sliders, 
   Layers,
-  ChevronDown
+  ChevronDown,
+  Send
 } from 'lucide-react';
 import { DocumentItem, DocumentFolder, DocumentIssueStatus } from '../../types';
 import { getDocumentFile } from '../../lib/documentStorage';
@@ -25,6 +26,7 @@ interface DocumentBulkActionBarProps {
   onMoveToFolder: (folderId: string) => void;
   onBulkUpdateStatus: (issueStatus: DocumentIssueStatus) => void;
   onBulkDelete: () => void;
+  onOpenTransmittalModal?: () => void;
 }
 
 export function DocumentBulkActionBar({
@@ -34,7 +36,8 @@ export function DocumentBulkActionBar({
   onClearSelection,
   onMoveToFolder,
   onBulkUpdateStatus,
-  onBulkDelete
+  onBulkDelete,
+  onOpenTransmittalModal
 }: DocumentBulkActionBarProps) {
   const [isZipping, setIsZipping] = useState(false);
   const [zipProgressText, setZipProgressText] = useState('');
@@ -142,6 +145,20 @@ export function DocumentBulkActionBar({
               )}
               <span className="hidden sm:inline">Download ZIP</span>
             </Button>
+
+            {/* Issue Formal DTN Transmittal */}
+            {onOpenTransmittalModal && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={onOpenTransmittalModal}
+                className="h-8 px-3 rounded-xl text-xs font-bold gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm"
+                title="Generate contractual Document Transmittal Notice for selected files"
+              >
+                <Send className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Issue DTN</span>
+              </Button>
+            )}
 
             {/* Move to Folder */}
             <Button

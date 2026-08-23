@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, QARFIItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DocumentFolder, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority, UniversalReportItem, SurveyReportData, WeeklyProgressReportData, MonthlyProgressReportData, ReportCategory, ReportStatus, ReportSignoff, SurveyPointRecord, WeeklyActivitySnapshot, FinanceReportData, FleetReportData, MaterialsReportData, AccommodationReportData, CustomReportData, ReportTemplateDefinition } from '../types';
+import { Project, Activity, DailyReport, LabourLog, UserRole, AuditLog, ResourceAllocation, SafetyIncident, LabourAllocation, WorkerCheckIn, MaterialInventory, MaterialReceipt, MaterialUsage, CustomFieldDefinition, Employee, Equipment, EquipmentLog, Team, SafetyRequirement, SafetyPolicy, ActivitySafetyInspection, PPEMaterialItem, QAInspectionItem, QARFIItem, UserProfile, Reminder, WeatherLog, SyncConflict, AccessRequest, SiteInspectionPhoto, DocumentItem, DocumentFolder, WorkPackageBinder, DocumentTransmittal, DEFAULT_SECTION_PERMISSIONS, ProjectSectionPermissions, canUserEditSection, AccommodationUnit, AccommodationUtilityLog, AccommodationPaymentLog, SurveySectionRecord, ActivityNote, SubTask, Priority, UniversalReportItem, SurveyReportData, WeeklyProgressReportData, MonthlyProgressReportData, ReportCategory, ReportStatus, ReportSignoff, SurveyPointRecord, WeeklyActivitySnapshot, FinanceReportData, FleetReportData, MaterialsReportData, AccommodationReportData, CustomReportData, ReportTemplateDefinition } from '../types';
 import { subscribeToFirestoreState, saveFirestoreKey, onSyncStatusChange, saveFullFirestoreState } from '../lib/firestoreService';
 import { triggerNotification } from '../lib/reminderNotificationService';
 import { SyncNotificationToast, SyncToastState } from '../components/SyncNotificationToast';
@@ -183,6 +183,15 @@ interface AppContextType {
   moveDocumentsToFolder: (docIds: string[], folderId: string, folderPath?: string) => void;
   bulkUpdateDocuments: (docIds: string[], updates: Partial<DocumentItem>) => void;
   bulkDeleteDocuments: (docIds: string[]) => void;
+  workPackageBinders: WorkPackageBinder[];
+  addWorkPackageBinder: (binder: WorkPackageBinder) => void;
+  updateWorkPackageBinder: (binder: WorkPackageBinder) => void;
+  deleteWorkPackageBinder: (id: string) => void;
+  toggleDocInWorkPackage: (binderId: string, docId: string) => void;
+  documentTransmittals: DocumentTransmittal[];
+  addDocumentTransmittal: (transmittal: DocumentTransmittal) => void;
+  updateDocumentTransmittal: (transmittal: DocumentTransmittal) => void;
+  deleteDocumentTransmittal: (id: string) => void;
   addAccommodation: (acc: AccommodationUnit) => void;
   updateAccommodation: (acc: AccommodationUnit) => void;
   deleteAccommodation: (id: string) => void;
@@ -745,6 +754,83 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // ignore
     }
   }, [documentFolders]);
+
+  const DEFAULT_INITIAL_WORK_PACKAGES: WorkPackageBinder[] = [
+    {
+      id: 'WPB-01',
+      projectId: 'PRJ-001',
+      code: 'WPB-CIV-001',
+      title: 'Main Foundation & Rebar Pour Dossier',
+      discipline: 'Civil',
+      status: 'Active On-Site',
+      description: 'Civil structural drawing set, concrete mix design specs, rebar bending schedules, and ITP signoff pack.',
+      documentIds: [],
+      createdDate: '2026-08-20',
+      createdBy: 'Lindokuhle Chris'
+    },
+    {
+      id: 'WPB-02',
+      projectId: 'PRJ-001',
+      code: 'WPB-ELE-001',
+      title: 'MV Inverter & 33kV Substation Cable Pulling Pack',
+      discipline: 'Electrical & MEP',
+      status: 'Active On-Site',
+      description: 'Single line diagram (SLD), trench cross sections, cable schedule, and factory test reports.',
+      documentIds: [],
+      createdDate: '2026-08-21',
+      createdBy: 'Lindokuhle Chris'
+    },
+    {
+      id: 'WPB-03',
+      projectId: 'PRJ-001',
+      code: 'WPB-STR-001',
+      title: 'Structural Steel Tracker Framing & Torquing Dossier',
+      discipline: 'Structural',
+      status: 'Drafting',
+      description: 'Tracker structural framing blueprints, torque inspection log templates, and mill certificates.',
+      documentIds: [],
+      createdDate: '2026-08-22',
+      createdBy: 'Lindokuhle Chris'
+    }
+  ];
+
+  const [workPackageBinders, setWorkPackageBinders] = useState<WorkPackageBinder[]>(() => {
+    try {
+      const saved = localStorage.getItem('constructos_work_package_binders');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // fallback
+    }
+    return DEFAULT_INITIAL_WORK_PACKAGES;
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('constructos_work_package_binders', JSON.stringify(workPackageBinders));
+    } catch {}
+  }, [workPackageBinders]);
+
+  const [documentTransmittals, setDocumentTransmittals] = useState<DocumentTransmittal[]>(() => {
+    try {
+      const saved = localStorage.getItem('constructos_document_transmittals');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // fallback
+    }
+    return [];
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('constructos_document_transmittals', JSON.stringify(documentTransmittals));
+    } catch {}
+  }, [documentTransmittals]);
 
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [accommodations, setAccommodations] = useState<AccommodationUnit[]>([]);
@@ -2942,6 +3028,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncToServer('bulk_delete_documents', { docIds });
   };
 
+  const addWorkPackageBinder = (binder: WorkPackageBinder) => {
+    setWorkPackageBinders(prev => [binder, ...prev]);
+    syncToServer('add_work_package_binder', binder);
+  };
+
+  const updateWorkPackageBinder = (binder: WorkPackageBinder) => {
+    setWorkPackageBinders(prev => prev.map(b => b.id === binder.id ? binder : b));
+    syncToServer('update_work_package_binder', binder);
+  };
+
+  const deleteWorkPackageBinder = (id: string) => {
+    setWorkPackageBinders(prev => prev.filter(b => b.id !== id));
+    syncToServer('delete_work_package_binder', { id });
+  };
+
+  const toggleDocInWorkPackage = (binderId: string, docId: string) => {
+    setWorkPackageBinders(prev => prev.map(b => {
+      if (b.id === binderId) {
+        const exists = b.documentIds.includes(docId);
+        const updatedIds = exists ? b.documentIds.filter(id => id !== docId) : [...b.documentIds, docId];
+        return { ...b, documentIds: updatedIds };
+      }
+      return b;
+    }));
+    syncToServer('toggle_doc_in_work_package', { binderId, docId });
+  };
+
+  const addDocumentTransmittal = (transmittal: DocumentTransmittal) => {
+    setDocumentTransmittals(prev => [transmittal, ...prev]);
+    syncToServer('add_document_transmittal', transmittal);
+  };
+
+  const updateDocumentTransmittal = (transmittal: DocumentTransmittal) => {
+    setDocumentTransmittals(prev => prev.map(t => t.id === transmittal.id ? transmittal : t));
+    syncToServer('update_document_transmittal', transmittal);
+  };
+
+  const deleteDocumentTransmittal = (id: string) => {
+    setDocumentTransmittals(prev => prev.filter(t => t.id !== id));
+    syncToServer('delete_document_transmittal', { id });
+  };
+
   const addAccommodation = (acc: AccommodationUnit) => {
     setAccommodations(prev => [acc, ...prev]);
     syncToServer('add_accommodation', acc);
@@ -3973,6 +4101,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addWeatherLog, updateWeatherLog, deleteWeatherLog,
       documents, documentFolders, addDocument, updateDocument, deleteDocument, assignDocumentToActivity,
       addDocumentFolder, updateDocumentFolder, deleteDocumentFolder, moveDocumentsToFolder, bulkUpdateDocuments, bulkDeleteDocuments,
+      workPackageBinders, addWorkPackageBinder, updateWorkPackageBinder, deleteWorkPackageBinder, toggleDocInWorkPackage,
+      documentTransmittals, addDocumentTransmittal, updateDocumentTransmittal, deleteDocumentTransmittal,
       accommodations, accommodationUtilities, accommodationPayments,
       addAccommodation, updateAccommodation, deleteAccommodation,
       assignEmployeeToAccommodation, removeEmployeeFromAccommodation,

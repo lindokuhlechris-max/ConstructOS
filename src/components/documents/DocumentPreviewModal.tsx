@@ -8,7 +8,7 @@ import {
   AlertCircle, Sparkles, BookOpen, GitBranch, History, 
   ShieldCheck, AlertTriangle, PenTool, CheckCheck, RefreshCw, Plus 
 } from 'lucide-react';
-import { Activity, DocumentItem, DocumentRevisionRecord } from '../../types';
+import { Activity, DocumentItem, DocumentRevisionRecord, WorkPackageBinder } from '../../types';
 import { downloadDocument, getDocumentFile } from '../../lib/documentStorage';
 import { ImageViewer } from './viewers/ImageViewer';
 import { PdfViewer } from './viewers/PdfViewer';
@@ -25,6 +25,8 @@ interface DocumentPreviewModalProps {
   onAssignActivity?: (doc: DocumentItem) => void;
   onUploadNewRevision?: (doc: DocumentItem) => void;
   activities: Activity[];
+  allDocuments?: DocumentItem[];
+  workPackageBinders?: WorkPackageBinder[];
 }
 
 export function DocumentPreviewModal({
@@ -34,10 +36,12 @@ export function DocumentPreviewModal({
   onEdit,
   onAssignActivity,
   onUploadNewRevision,
-  activities
+  activities,
+  allDocuments = [],
+  workPackageBinders = []
 }: DocumentPreviewModalProps) {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'viewer' | 'history' | 'signoffs' | 'metadata'>('viewer');
+  const [activeTab, setActiveTab] = useState<'viewer' | 'history' | 'signoffs' | 'metadata' | 'references'>('viewer');
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [isLoadingBlob, setIsLoadingBlob] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -342,6 +346,18 @@ export function DocumentPreviewModal({
             >
               <FileCheck className="h-3.5 w-3.5" />
               <span>Transmittal & Audit</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('references')}
+              className={`py-3 border-b-2 transition-colors flex items-center gap-1.5 ${
+                activeTab === 'references'
+                  ? 'border-[#0B5FFF] text-[#0B5FFF]'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>Dossiers & Cross-References</span>
             </button>
           </div>
 
@@ -650,6 +666,77 @@ export function DocumentPreviewModal({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 5: Dossiers & Cross-References */}
+          {activeTab === 'references' && (
+            <div className="space-y-4">
+              
+              {/* Linked Work Package Binders */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Layers className="h-3.5 w-3.5 text-blue-500" />
+                  <span>Work Package Binders Containing This Document</span>
+                </div>
+
+                {workPackageBinders.filter(b => b.documentIds.includes(doc.id)).length === 0 ? (
+                  <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs text-slate-400 italic text-center">
+                    This document is not currently assigned to any site execution work package dossiers.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {workPackageBinders
+                      .filter(b => b.documentIds.includes(doc.id))
+                      .map(b => (
+                        <div key={b.id} className="p-3 rounded-2xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/40 dark:bg-blue-950/30">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.5 rounded">
+                              {b.code}
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-600">{b.status}</span>
+                          </div>
+                          <div className="font-bold text-xs text-slate-900 dark:text-slate-100 mt-1">
+                            {b.title}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">{b.discipline}</div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Related Discipline Drawings & Specs */}
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-teal-500" />
+                  <span>Related {doc.discipline || 'Project'} Drawings & Specifications</span>
+                </div>
+
+                {allDocuments.filter(d => d.id !== doc.id && (d.discipline === doc.discipline || d.linkedActivityId === doc.linkedActivityId)).length === 0 ? (
+                  <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs text-slate-400 italic text-center">
+                    No related cross-referenced drawings found in this discipline.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-xs">
+                    {allDocuments
+                      .filter(d => d.id !== doc.id && (d.discipline === doc.discipline || d.linkedActivityId === doc.linkedActivityId))
+                      .slice(0, 6)
+                      .map(d => (
+                        <div key={d.id} className="p-2.5 flex items-center justify-between bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <div>
+                            <span className="font-mono font-bold text-slate-800 dark:text-slate-200 mr-2">{d.documentNumber || d.id}</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-300">{d.title}</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-md">
+                            {d.revision || d.version}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+
             </div>
           )}
 
