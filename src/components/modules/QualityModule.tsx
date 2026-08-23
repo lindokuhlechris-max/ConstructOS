@@ -312,7 +312,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   }
 
   return (
-    <div className="flex flex-col gap-6 w-full h-full p-4 md:p-6 overflow-y-auto">
+    <div className="flex flex-col gap-6 w-full min-h-full p-4 md:p-6 pb-32 md:pb-40 overflow-y-auto overflow-x-hidden flex-1">
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full">
         <div className="flex items-center gap-3">
@@ -1306,8 +1306,8 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       ) : (
         /* TABLE VIEW */
         <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden bg-white dark:bg-slate-900 rounded-2xl w-full">
-          <div className="overflow-x-auto w-full">
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="overflow-x-auto w-full max-w-full touch-pan-x scrollbar-thin">
+            <table className="w-full text-left border-collapse text-xs min-w-[950px]">
               <thead>
                 <tr className="bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="py-3.5 px-4 whitespace-nowrap">Inspection ID & Date</th>

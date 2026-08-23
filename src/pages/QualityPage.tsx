@@ -6,7 +6,7 @@ export function QualityPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="w-full h-full flex flex-col overflow-y-auto">
+    <div className="w-full min-h-full flex flex-col flex-1">
       <QualityModule onBack={() => window.history.length > 1 ? navigate(-1) : navigate('/')} />
     </div>
   );
