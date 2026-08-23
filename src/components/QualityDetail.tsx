@@ -197,16 +197,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       const saved = localStorage.getItem(`constructos_qa_comments_${inspection.id}`);
       if (saved) return JSON.parse(saved);
     } catch {}
-    return [
-      {
-        id: `CMT-QA-${inspection.id}-1`,
-        author: inspection.inspector || 'David Smith (QA Engineer)',
-        userRole: 'QA Inspector',
-        userInitials: 'DS',
-        text: `Inspection recorded for ${inspection.title} at ${inspection.location}. Site parameters verified against engineering specification.`,
-        timestamp: new Date(Date.now() - 3600 * 1000 * 3).toISOString()
-      }
-    ];
+    return [];
   });
 
   // Checksheet & Hold-Points State
@@ -218,7 +209,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       const saved = localStorage.getItem(`constructos_qa_checksheet_${inspection.id}`);
       if (saved) return JSON.parse(saved);
     } catch {}
-    return getDefaultChecksheet(inspection.category || '', inspection.title || '');
+    return [];
   });
 
   const [newCheckItemText, setNewCheckItemText] = useState('');
@@ -2105,16 +2096,17 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                                     {item.item}
                                   </p>
 
-                                  <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                  <div className="flex items-center gap-2 flex-wrap mt-1.5">
                                     {item.specification && (
-                                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                                        Spec: {item.specification}
+                                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-mono tracking-tight shadow-2xs">
+                                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Spec:</span>
+                                        <span className="font-bold text-slate-900 dark:text-slate-100">{item.specification}</span>
                                       </span>
                                     )}
 
                                     {item.checkedBy && (
-                                      <span className="text-[9px] text-slate-400 flex items-center gap-0.5">
-                                        <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
+                                      <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                                         {item.checkedBy} {item.checkedAt && `(${item.checkedAt})`}
                                       </span>
                                     )}
@@ -2247,8 +2239,20 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                     );
                   })
                 ) : (
-                  <div className="p-6 text-center text-xs text-slate-400 italic bg-slate-50/50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700/60">
-                    No check items found for this filter.
+                  <div className="p-6 text-center text-xs text-slate-400 italic bg-slate-50/50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700/60 flex flex-col items-center justify-center gap-2">
+                    <ListChecks className="h-6 w-6 text-slate-300 dark:text-slate-600" />
+                    <span>No check items recorded yet.</span>
+                    {canEditQuality && (
+                      <div className="flex items-center gap-2 mt-1 not-italic">
+                        <Button
+                          size="sm"
+                          onClick={() => setIsAddingCheckItem(true)}
+                          className="h-7 text-xs px-2.5 bg-[#0B5FFF] text-white font-bold"
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Add Check Item
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
