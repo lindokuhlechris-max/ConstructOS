@@ -518,21 +518,21 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
   return (
     <div className="flex flex-col gap-6 w-full min-h-full p-4 md:p-6 pb-28 md:pb-36 overflow-y-auto">
       {/* Top Navigation & Status Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => onClose ? onClose() : (window.history.length > 1 ? navigate(-1) : navigate('/quality'))} className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200" title="Go back to previous page">
-            <ArrowLeft className="h-5 w-5" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => onClose ? onClose() : (window.history.length > 1 ? navigate(-1) : navigate('/quality'))} className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200" title="Go back to previous page">
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span className="text-xs font-mono font-bold tracking-wider text-emerald-600">{inspection.id}</span>
-              <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">{inspection.category}</Badge>
-              {inspection.ncrCode && <Badge variant="danger" className="text-[10px] font-mono">{inspection.ncrCode}</Badge>}
-              <Badge variant={inspection.status === 'Passed' ? 'success' : inspection.status === 'Failed' ? 'danger' : 'warning'}>
+            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+              <span className="text-[11px] font-mono font-bold tracking-wider text-emerald-600">{inspection.id}</span>
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">{inspection.category}</Badge>
+              {inspection.ncrCode && <Badge variant="danger" className="text-[9px] px-1.5 py-0 font-mono">{inspection.ncrCode}</Badge>}
+              <Badge variant={inspection.status === 'Passed' ? 'success' : inspection.status === 'Failed' ? 'danger' : 'warning'} className="text-[9px] px-1.5 py-0">
                 {inspection.status}
               </Badge>
               {attachedDocuments.length > 0 && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-[#0B5FFF] dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-[#0B5FFF] dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
                   <FolderOpen className="h-3 w-3" /> {attachedDocuments.length} Attached {attachedDocuments.length === 1 ? 'Doc' : 'Docs'}
                 </span>
               )}
@@ -547,12 +547,12 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                     : (inspection.referenceDrawingNumber ? [inspection.referenceDrawingNumber] : []));
 
               return (
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                <h1 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap leading-snug">
                   {docNumbers.length > 0 ? (
                     <>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {docNumbers.map((num, i) => (
-                          <span key={i} className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-xl border border-blue-200 dark:border-blue-800 text-base sm:text-lg font-bold shadow-2xs">
+                          <span key={i} className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 text-xs sm:text-sm font-bold shadow-2xs">
                             {num}
                           </span>
                         ))}
