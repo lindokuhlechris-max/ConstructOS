@@ -484,14 +484,14 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   />
                 </div>
 
-                {/* 4. Document Number */}
+                {/* 4. Drawing / RFI / Document Number */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                    4. Document Number
+                    4. Drawing / RFI / Document Number
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. QA-ITR-2026-089 / ITP-042"
+                    placeholder="e.g. MVT-HDEC-MBEU-RFI-002 / QA-ITR-042"
                     value={documentNumber}
                     onChange={e => setDocumentNumber(e.target.value)}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
@@ -535,7 +535,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                 {/* 7. Reference Drawing Number */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                    7. Reference Drawing Number
+                    7. Reference Plan / Layout Drawing
                   </label>
                   <input
                     type="text"
@@ -774,7 +774,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
             const rejectionPercent = inspectedQty > 0 ? Math.round((rejectedQty / inspectedQty) * 100) : 0;
 
-            const subjectDocNumber = item.referenceDrawingNumber || item.documentNumber;
+            const subjectDocNumber = item.documentNumber || item.referenceDrawingNumber;
 
             return (
               <Card 
@@ -834,7 +834,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors flex items-center gap-2 flex-wrap">
                     {subjectDocNumber ? (
                       <>
-                        <span className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-lg border border-purple-200 dark:border-purple-800 text-sm font-bold shadow-2xs">
+                        <span className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 text-sm font-bold shadow-2xs">
                           {subjectDocNumber}
                         </span>
                         <span className="text-slate-300 dark:text-slate-600 font-normal">|</span>
@@ -968,7 +968,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
             const rejectionPercent = inspectedQty > 0 ? Math.round((rejectedQty / inspectedQty) * 100) : 0;
 
-            const subjectDocNumber = item.referenceDrawingNumber || item.documentNumber;
+            const subjectDocNumber = item.documentNumber || item.referenceDrawingNumber;
 
             return (
               <Card 
@@ -1010,8 +1010,8 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   <div className="space-y-1">
                     {subjectDocNumber && (
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 text-[11px] font-bold">
-                          {item.referenceDrawingNumber ? `Dwg: ${item.referenceDrawingNumber}` : item.documentNumber}
+                        <span className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 text-xs font-bold">
+                          {subjectDocNumber}
                         </span>
                       </div>
                     )}

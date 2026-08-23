@@ -518,10 +518,10 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
               )}
             </div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-              {(inspection.referenceDrawingNumber || inspection.documentNumber) ? (
+              {(inspection.documentNumber || inspection.referenceDrawingNumber) ? (
                 <>
-                  <span className="font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-0.5 rounded-xl border border-purple-200 dark:border-purple-800 text-base sm:text-lg font-bold">
-                    {inspection.referenceDrawingNumber || inspection.documentNumber}
+                  <span className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-xl border border-blue-200 dark:border-blue-800 text-base sm:text-lg font-bold">
+                    {inspection.documentNumber || inspection.referenceDrawingNumber}
                   </span>
                   <span className="text-slate-300 dark:text-slate-600 font-normal">|</span>
                   <span>{inspection.title}</span>
@@ -829,7 +829,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">4. Document / ITR Number</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">4. Drawing / RFI / Doc Number</span>
                     <strong className="font-mono text-[#0B5FFF] font-bold">
                       {inspection.documentNumber || 'QA-ITR-2026-042'}
                     </strong>
@@ -848,7 +848,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">6. Reference Drawing Number</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">6. Reference Plan / Layout Drawing</span>
                     <strong className="font-mono text-purple-600 dark:text-purple-400 font-bold">
                       {inspection.referenceDrawingNumber || 'DWG-MV-201-REV-04'}
                     </strong>
@@ -2129,10 +2129,10 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Document Number</label>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">4. Drawing / RFI / Document Number</label>
                   <input
                     type="text"
-                    placeholder="e.g. QA-ITR-2026-089"
+                    placeholder="e.g. MVT-HDEC-MBEU-RFI-002 / QA-ITR-042"
                     value={editForm.documentNumber}
                     onChange={e => setEditForm({ ...editForm, documentNumber: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm font-mono font-bold"
@@ -2179,7 +2179,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
               {/* Date & Time, Due Date + Drawing Reference */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Inspection Date & Time</label>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">5. Inspection Date & Time</label>
                   <div className="grid grid-cols-2 gap-1.5">
                     <input
                       type="date"
@@ -2207,7 +2207,7 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Reference Drawing Number</label>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">6. Reference Plan / Layout Drawing</label>
                   <input
                     type="text"
                     placeholder="e.g. DWG-MV-201-REV-04"
