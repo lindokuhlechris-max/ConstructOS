@@ -11,6 +11,7 @@ import { UniversalReportDetail } from '../components/reports/UniversalReportDeta
 import { ProgressReportCompilerModal } from '../components/reports/ProgressReportCompilerModal';
 import { ProgressReportDetail } from '../components/reports/ProgressReportDetail';
 import { UniversalReportPrintStudioModal } from '../components/reports/UniversalReportPrintStudioModal';
+import { ReportsHubPrintStudioModal } from '../components/reports/ReportsHubPrintStudioModal';
 import {
   FileBarChart,
   Plus,
@@ -101,6 +102,7 @@ export function Reports() {
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [isProjectSummaryPdfModalOpen, setIsProjectSummaryPdfModalOpen] = useState(false);
   const [isNewReportDropdownOpen, setIsNewReportDropdownOpen] = useState(false);
+  const [isHubPrintStudioOpen, setIsHubPrintStudioOpen] = useState(false);
 
   const getProjectName = (projectId: string) => {
     const project = projects.find(p => p.id === projectId);
@@ -351,9 +353,9 @@ export function Reports() {
         <div className="flex flex-wrap items-center gap-2 relative">
           <Button 
             variant="outline"
-            onClick={() => window.print()}
+            onClick={() => setIsHubPrintStudioOpen(true)}
             className="flex items-center gap-1.5 border-slate-300 dark:border-slate-700 hover:bg-slate-100 text-slate-700 dark:text-slate-300 font-semibold"
-            title="Print report overview"
+            title="Open Executive Reports & Dossier Print Studio"
           >
             <Printer className="h-4 w-4 text-slate-600 dark:text-slate-400" />
             Print Hub
@@ -935,6 +937,18 @@ export function Reports() {
           onClose={() => setSelectedReportForPrint(null)}
           report={selectedReportForPrint}
           reportType={('category' in selectedReportForPrint && selectedReportForPrint.category === 'DailySite') || 'weather' in selectedReportForPrint ? 'daily' : 'universal'}
+        />
+      )}
+
+      {/* Executive Reports & Dossier Print Studio Modal */}
+      {isHubPrintStudioOpen && (
+        <ReportsHubPrintStudioModal
+          isOpen={isHubPrintStudioOpen}
+          onClose={() => setIsHubPrintStudioOpen(false)}
+          reports={allUnifiedItems}
+          allProjects={projects}
+          activeCategoryFilter={activeCategory}
+          activeProjectFilter={filterProject}
         />
       )}
     </div>

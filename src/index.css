@@ -59,20 +59,23 @@ html.dark, html.dark body {
 
 @media print {
   @page {
-    margin: 1cm;
+    margin: 8mm 6mm;
     size: auto;
-    @bottom-right {
-      content: "Page " counter(page) " of " counter(pages);
-      font-family: sans-serif;
-      font-size: 9pt;
-      color: #94a3b8;
-    }
   }
+  
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   body {
     background: white !important;
     color: black !important;
-    font-size: 11pt;
+    font-size: 10pt;
+    margin: 0 !important;
+    padding: 0 !important;
   }
+
   /* Hide app navigation and interactive elements */
   header, 
   nav, 
@@ -80,6 +83,63 @@ html.dark, html.dark body {
   .no-print,
   ::-webkit-scrollbar {
     display: none !important;
+  }
+
+  /* Target Print Area Isolation: Hide everything except #report-printable-area if present */
+  body:has(#report-printable-area) > *:not(:has(#report-printable-area)),
+  body:has(#report-printable-area) #root {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body:has(#report-printable-area) {
+    background: white !important;
+  }
+
+  /* Force modal wrappers to collapse and let #report-printable-area expand */
+  body:has(#report-printable-area) .fixed,
+  body:has(#report-printable-area) [class*="fixed"],
+  body:has(#report-printable-area) [class*="backdrop-blur"] {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Hide Studio Drawers, Zoom Controls and Top Toolbar in Print */
+  body:has(#report-printable-area) .w-80,
+  body:has(#report-printable-area) .w-96,
+  body:has(#report-printable-area) [class*="w-80"],
+  body:has(#report-printable-area) [class*="w-96"],
+  body:has(#report-printable-area) .sticky,
+  body:has(#report-printable-area) .border-b,
+  body:has(#report-printable-area) .border-r {
+    display: none !important;
+  }
+
+  #report-printable-area {
+    display: block !important;
+    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    page-break-after: auto;
+  }
+
+  #report-printable-area * {
+    visibility: visible !important;
   }
 
   /* Handle Print Modal Visibility overrides */
@@ -136,9 +196,6 @@ html.dark, html.dark body {
     background: transparent !important;
   }
   /* Expand hidden scroll areas */
-  .max-h-[300px],
-  .max-h-[400px],
-  .max-h-[500px],
   .max-h-96,
   .max-h-screen {
     max-height: none !important;
