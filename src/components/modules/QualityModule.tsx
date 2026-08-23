@@ -28,6 +28,7 @@ import {
   Calendar,
   LayoutGrid,
   List as ListIcon,
+  Table as TableIcon,
   Copy
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
@@ -88,7 +89,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Passed' | 'Failed' | 'Pending Approval'>('All');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'table'>('list');
 
   // Form state
   const [title, setTitle] = useState('');
@@ -337,7 +338,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             />
           </div>
 
-          {/* View Mode Toggle: List / Grid */}
+          {/* View Mode Toggle: List / Grid / Table */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
             <button
               type="button"
@@ -362,6 +363,18 @@ export function QualityModule({ onBack }: QualityModuleProps) {
               title="Grid View"
             >
               <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`p-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'table' 
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs' 
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+              title="Table View"
+            >
+              <TableIcon className="h-4 w-4" />
             </button>
           </div>
 
@@ -1084,7 +1097,7 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             );
           })}
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
         /* Grid / Card View */
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4.5 w-full">
           {filteredInspections.map(item => {
@@ -1278,6 +1291,237 @@ export function QualityModule({ onBack }: QualityModuleProps) {
             );
           })}
         </div>
+      ) : (
+        /* TABLE VIEW */
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden bg-white dark:bg-slate-900 rounded-2xl w-full">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="py-3.5 px-4 whitespace-nowrap">Inspection ID & Date</th>
+                  <th className="py-3.5 px-4 min-w-[280px]">Subject & Reference Drawings</th>
+                  <th className="py-3.5 px-4 min-w-[140px]">Discipline & Spec</th>
+                  <th className="py-3.5 px-4 min-w-[160px]">Location & Inspector</th>
+                  <th className="py-3.5 px-4 min-w-[220px]">Physical Scope & Quantities</th>
+                  <th className="py-3.5 px-4 text-center min-w-[120px]">Status</th>
+                  <th className="py-3.5 px-4 text-right min-w-[160px]">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredInspections.map(item => {
+                  const attachedDocCount = (documents || []).filter(d => 
+                    (item.linkedDocumentIds && item.linkedDocumentIds.includes(d.id)) ||
+                    d.linkedQAInspectionId === item.id ||
+                    (d.tags && d.tags.includes(item.id))
+                  ).length;
+
+                  const targetQty = item.targetQuantity || 0;
+                  const inspectedQty = item.inspectedQuantity || 0;
+                  const approvedQty = item.approvedQuantity || 0;
+                  const rejectedQty = item.rejectedQuantity || 0;
+                  const itemUnit = item.unit || 'm';
+                  const mType = item.measurementType || 'Length';
+
+                  const approvalPercent = inspectedQty > 0 ? Math.round((approvedQty / inspectedQty) * 100) : 0;
+                  const overallApprovedPercent = targetQty > 0 ? Math.round((approvedQty / targetQty) * 100) : 0;
+                  const rejectionPercent = inspectedQty > 0 ? Math.round((rejectedQty / inspectedQty) * 100) : 0;
+
+                  const docNumbers = (item.documentNumbers && item.documentNumbers.length > 0)
+                    ? item.documentNumbers
+                    : (item.documentNumber 
+                        ? item.documentNumber.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean) 
+                        : (item.referenceDrawingNumber ? [item.referenceDrawingNumber] : []));
+                  const subjectNumbers = docNumbers;
+
+                  return (
+                    <tr 
+                      key={item.id}
+                      onClick={() => setSelectedInspection(item)}
+                      className="hover:bg-slate-50/90 dark:hover:bg-slate-800/60 transition-colors cursor-pointer group"
+                    >
+                      {/* 1. ID & Dates */}
+                      <td className="py-3.5 px-4 align-top">
+                        <div className="font-mono font-bold text-emerald-600 text-xs">
+                          {item.id}
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-1">
+                          <Calendar className="h-3 w-3 text-slate-400 shrink-0" />
+                          {item.date}
+                        </div>
+                        {item.submissionDate && (
+                          <div className="text-[10px] text-blue-600 dark:text-blue-400 font-mono mt-0.5">
+                            Sub: {item.submissionDate}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 2. Subject & Drawings */}
+                      <td className="py-3.5 px-4 align-top">
+                        {subjectNumbers.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap mb-1">
+                            {subjectNumbers.map((num, i) => (
+                              <span key={i} className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.2 rounded border border-blue-200 dark:border-blue-800 text-[10px] font-bold shadow-2xs">
+                                {num}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors line-clamp-2">
+                          {item.title}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {item.client && <span className="text-[10px] text-slate-400">Client: <strong className="text-slate-600 dark:text-slate-300">{item.client}</strong></span>}
+                          {item.epc && <span className="text-[10px] text-slate-400">EPC: <strong className="text-slate-600 dark:text-slate-300">{item.epc}</strong></span>}
+                          {attachedDocCount > 0 && (
+                            <span className="text-[10px] font-bold text-[#0B5FFF] flex items-center gap-0.5 bg-blue-50 dark:bg-blue-950/50 px-1.5 py-0.2 rounded">
+                              <FolderOpen className="h-3 w-3" /> {attachedDocCount} doc{attachedDocCount === 1 ? '' : 's'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 3. Discipline & Tolerance */}
+                      <td className="py-3.5 px-4 align-top">
+                        <Badge variant="outline" className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                          {item.category}
+                        </Badge>
+                        <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                          <Ruler className="h-3 w-3 text-emerald-600 shrink-0" /> {mType} ({itemUnit})
+                        </div>
+                        {item.toleranceSpec && (
+                          <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                            Spec: {item.toleranceSpec}
+                          </div>
+                        )}
+                        {item.ncrCode && (
+                          <Badge variant="danger" className="text-[9px] font-mono mt-1 block w-fit">
+                            {item.ncrCode}
+                          </Badge>
+                        )}
+                      </td>
+
+                      {/* 4. Location & Inspector */}
+                      <td className="py-3.5 px-4 align-top">
+                        <div className="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[160px]">
+                          {item.location}
+                        </div>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5 truncate max-w-[160px]">
+                          <User className="h-3 w-3 text-slate-400 shrink-0" />
+                          {item.inspector}
+                        </div>
+                        {item.subcontractor && (
+                          <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[160px]">
+                            Subcon: {item.subcontractor}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 5. Physical Scope & Quantities */}
+                      <td className="py-3.5 px-4 align-top">
+                        {(targetQty > 0 || inspectedQty > 0) ? (
+                          <div className="space-y-1.5 bg-slate-50 dark:bg-slate-850/80 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                            <div className="flex items-center justify-between text-[11px] font-mono font-bold">
+                              <span className="text-slate-500 font-normal">Scope: {targetQty} {itemUnit}</span>
+                              <span className="text-blue-600">Insp: {inspectedQty} {itemUnit}</span>
+                            </div>
+
+                            {/* Segmented bar */}
+                            <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                              <div 
+                                className="h-full bg-emerald-500 transition-all duration-300"
+                                style={{ width: `${targetQty > 0 ? (approvedQty / targetQty) * 100 : approvalPercent}%` }}
+                                title={`Approved: ${approvedQty} ${itemUnit}`}
+                              />
+                              <div 
+                                className="h-full bg-rose-500 transition-all duration-300"
+                                style={{ width: `${targetQty > 0 ? (rejectedQty / targetQty) * 100 : rejectionPercent}%` }}
+                                title={`Rejected: ${rejectedQty} ${itemUnit}`}
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] font-mono font-bold">
+                              <span className="text-emerald-600 flex items-center gap-1">
+                                ✓ {approvedQty} {itemUnit}
+                                {targetQty > 0 ? (
+                                  <span 
+                                    className="text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1 py-0.2 rounded border border-emerald-200 dark:border-emerald-800 text-[9px]"
+                                    title={`Overall Scope: ${approvedQty}/${targetQty} ${itemUnit} (${overallApprovedPercent}%), Inspected Clearance: ${approvedQty}/${inspectedQty} ${itemUnit} (${approvalPercent}%)`}
+                                  >
+                                    {overallApprovedPercent}% overall ({approvalPercent}% insp.)
+                                  </span>
+                                ) : (
+                                  <span>({approvalPercent}%)</span>
+                                )}
+                              </span>
+                              {rejectedQty > 0 && <span className="text-rose-600">✗ {rejectedQty}</span>}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">No measurements</span>
+                        )}
+                      </td>
+
+                      {/* 6. Status */}
+                      <td className="py-3.5 px-4 align-top text-center">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                          item.status === 'Passed'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                            : item.status === 'Failed'
+                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                        }`}>
+                          {item.status === 'Passed' && <CheckCircle2 className="h-3 w-3" />}
+                          {item.status === 'Failed' && <XCircle className="h-3 w-3" />}
+                          {item.status === 'Pending Approval' && <Clock className="h-3 w-3" />}
+                          {item.status}
+                        </span>
+                      </td>
+
+                      {/* 7. Actions */}
+                      <td className="py-3.5 px-4 align-top text-right">
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMeasuringInspection(item);
+                            }}
+                            className="h-7 px-2 rounded-lg text-[11px] font-bold gap-1 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 shadow-2xs"
+                            title="Measure / Log Quantities"
+                          >
+                            <Ruler className="h-3 w-3" /> Measure
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopyInspection(item);
+                            }}
+                            className="h-7 px-2 rounded-lg text-[11px] font-bold gap-1 border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 shadow-2xs"
+                            title="Copy and Edit"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                          {item.status === 'Pending Approval' && (
+                            <Button
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); handleStatusChange(item.id, 'Passed'); }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] rounded-lg h-7 px-2 font-bold shadow-2xs"
+                            >
+                              Approve
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
       </>
       )}
