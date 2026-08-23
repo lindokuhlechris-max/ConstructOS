@@ -132,6 +132,12 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
     location: inspection.location,
     inspector: inspection.inspector,
     date: inspection.date,
+    inspectionTime: inspection.inspectionTime || '',
+    client: inspection.client || '',
+    epc: inspection.epc || '',
+    subcontractor: inspection.subcontractor || '',
+    documentNumber: inspection.documentNumber || '',
+    referenceDrawingNumber: inspection.referenceDrawingNumber || '',
     activityId: inspection?.activityId,
     clientQCRepresentative: inspection.clientQCRepresentative || '',
     clientQCStatus: inspection.clientQCStatus || 'Pending Client Review',
@@ -322,6 +328,12 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
       location: editForm.location || inspection.location,
       inspector: editForm.inspector || inspection.inspector,
       date: editForm.date || inspection.date,
+      inspectionTime: editForm.inspectionTime || inspection.inspectionTime,
+      client: editForm.client !== undefined ? editForm.client : inspection.client,
+      epc: editForm.epc !== undefined ? editForm.epc : inspection.epc,
+      subcontractor: editForm.subcontractor !== undefined ? editForm.subcontractor : inspection.subcontractor,
+      documentNumber: editForm.documentNumber !== undefined ? editForm.documentNumber : inspection.documentNumber,
+      referenceDrawingNumber: editForm.referenceDrawingNumber !== undefined ? editForm.referenceDrawingNumber : inspection.referenceDrawingNumber,
       activityId: editForm?.activityId,
       clientQCRepresentative: editForm.clientQCRepresentative,
       clientQCStatus: editForm.clientQCStatus as any,
@@ -683,9 +695,9 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
 
                 <div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase block mb-1">Inspection Date</span>
+                  <span className="text-xs font-semibold text-slate-400 uppercase block mb-1">Inspection Date & Time</span>
                   <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <Calendar className="h-4 w-4 text-[#0B5FFF]" /> {inspection.date}
+                    <Calendar className="h-4 w-4 text-[#0B5FFF]" /> {inspection.date} {inspection.inspectionTime ? `@ ${inspection.inspectionTime}` : ''}
                   </span>
                 </div>
 
@@ -694,6 +706,61 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                   <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                     <MapPin className="h-4 w-4 text-red-500" /> {inspection.location}
                   </span>
+                </div>
+              </div>
+
+              {/* Stakeholder & Engineering Reference Documents */}
+              <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 pb-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Building2 className="h-4 w-4 text-[#0B5FFF]" />
+                    <span>Contractual Parties & Engineering Reference Documents</span>
+                  </h4>
+                  <span className="text-[11px] text-slate-400">Formal Quality Submissions</span>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5 text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">1. Client</span>
+                    <strong className="text-slate-900 dark:text-white font-semibold">
+                      {inspection.client || linkedProject?.client || 'Not Specified'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">2. EPC Contractor</span>
+                    <strong className="text-slate-900 dark:text-white font-semibold">
+                      {inspection.epc || 'Scedih Engineering (EPC)'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">3. Subcontractor</span>
+                    <strong className="text-slate-900 dark:text-white font-semibold">
+                      {inspection.subcontractor || 'Specialist Civils Subcontractor'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">4. Document / ITR Number</span>
+                    <strong className="font-mono text-[#0B5FFF] font-bold">
+                      {inspection.documentNumber || 'QA-ITR-2026-042'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">5. Inspection Schedule</span>
+                    <strong className="font-mono text-slate-700 dark:text-slate-300">
+                      {inspection.date} {inspection.inspectionTime ? `@ ${inspection.inspectionTime}` : ''}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">6. Reference Drawing Number</span>
+                    <strong className="font-mono text-purple-600 dark:text-purple-400 font-bold">
+                      {inspection.referenceDrawingNumber || 'DWG-MV-201-REV-04'}
+                    </strong>
+                  </div>
                 </div>
               </div>
 
@@ -1968,13 +2035,81 @@ export function QualityDetail({ inspection, onSave, onClose, onDelete }: Quality
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Client QC Representative</label>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Document Number</label>
                   <input
                     type="text"
-                    placeholder="e.g. Acme Client QC Engineer"
-                    value={editForm.clientQCRepresentative}
-                    onChange={e => setEditForm({ ...editForm, clientQCRepresentative: e.target.value })}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm"
+                    placeholder="e.g. QA-ITR-2026-089"
+                    value={editForm.documentNumber}
+                    onChange={e => setEditForm({ ...editForm, documentNumber: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Stakeholders: Client, EPC, Subcontractor */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">1. Client</label>
+                  <input
+                    type="text"
+                    placeholder="Client Name"
+                    value={editForm.client}
+                    onChange={e => setEditForm({ ...editForm, client: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">2. EPC Contractor</label>
+                  <input
+                    type="text"
+                    placeholder="EPC Contractor"
+                    value={editForm.epc}
+                    onChange={e => setEditForm({ ...editForm, epc: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">3. Subcontractor</label>
+                  <input
+                    type="text"
+                    placeholder="Subcontractor"
+                    value={editForm.subcontractor}
+                    onChange={e => setEditForm({ ...editForm, subcontractor: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Date & Time + Drawing Reference */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Inspection Date & Time</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="date"
+                      value={editForm.date}
+                      onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                      className="w-full h-10 px-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-mono"
+                    />
+                    <input
+                      type="time"
+                      value={editForm.inspectionTime}
+                      onChange={e => setEditForm({ ...editForm, inspectionTime: e.target.value })}
+                      className="w-full h-10 px-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Reference Drawing Number</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. DWG-MV-201-REV-04"
+                    value={editForm.referenceDrawingNumber}
+                    onChange={e => setEditForm({ ...editForm, referenceDrawingNumber: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-mono font-bold"
                   />
                 </div>
               </div>

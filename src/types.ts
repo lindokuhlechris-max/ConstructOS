@@ -748,7 +748,15 @@ export interface QAInspectionItem {
   location: string;
   inspector: string;
   date: string;
+  inspectionTime?: string;
   status: 'Passed' | 'Failed' | 'Pending Approval';
+  
+  // Stakeholder & Contractual Metadata
+  client?: string;
+  epc?: string;
+  subcontractor?: string;
+  documentNumber?: string;
+  referenceDrawingNumber?: string;
   
   // Measurement & Quality Inspection Scope
   measurementType?: QAMeasurementType;

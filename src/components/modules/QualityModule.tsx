@@ -75,6 +75,16 @@ export function QualityModule({ onBack }: QualityModuleProps) {
   const [location, setLocation] = useState('');
   const [inspector, setInspector] = useState('David Smith (QA Engineer)');
   const [category, setCategory] = useState('Earthworks');
+  
+  // Stakeholder & Engineering Reference States
+  const [client, setClient] = useState('');
+  const [epc, setEpc] = useState('Scedih Engineering (EPC)');
+  const [subcontractor, setSubcontractor] = useState('');
+  const [documentNumber, setDocumentNumber] = useState(`QA-ITR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
+  const [inspectionDate, setInspectionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [inspectionTime, setInspectionTime] = useState(new Date().toTimeString().substring(0, 5));
+  const [referenceDrawingNumber, setReferenceDrawingNumber] = useState('');
+
   const [clientQCRepresentative, setClientQCRepresentative] = useState('');
   const [clientQCStatus, setClientQCStatus] = useState<'Approved' | 'Rejected' | 'Pending Client Review'>('Pending Client Review');
 
@@ -91,6 +101,11 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.inspector.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.documentNumber && item.documentNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (item.referenceDrawingNumber && item.referenceDrawingNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (item.client && item.client.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (item.epc && item.epc.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (item.subcontractor && item.subcontractor.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (item.location && item.location.toLowerCase().includes(searchTerm.toLowerCase()));
     
     if (statusFilter === 'All') return matchesSearch;
@@ -125,9 +140,18 @@ export function QualityModule({ onBack }: QualityModuleProps) {
       title,
       location: location || 'Site Wide',
       inspector: inspector || 'QA Inspector',
-      date: new Date().toISOString().split('T')[0],
+      date: inspectionDate || new Date().toISOString().split('T')[0],
+      inspectionTime: inspectionTime || new Date().toTimeString().substring(0, 5),
       status: initialStatus,
       category: category || 'Earthworks',
+      
+      // Stakeholder & Contractual Metadata
+      client: client.trim() || undefined,
+      epc: epc.trim() || undefined,
+      subcontractor: subcontractor.trim() || undefined,
+      documentNumber: documentNumber.trim() || undefined,
+      referenceDrawingNumber: referenceDrawingNumber.trim() || undefined,
+
       clientQCRepresentative,
       clientQCStatus,
       clientQCSignoffDate: new Date().toISOString().split('T')[0],
@@ -152,6 +176,9 @@ export function QualityModule({ onBack }: QualityModuleProps) {
     setIsAdding(false);
     setTitle('');
     setLocation('');
+    setClient('');
+    setSubcontractor('');
+    setReferenceDrawingNumber('');
     setClientQCRepresentative('');
     setTargetQuantity('100');
     setInspectedQuantity('0');
@@ -352,6 +379,110 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   customPlaceholder="Enter custom category..."
                 />
+              </div>
+            </div>
+
+            {/* Stakeholder & Engineering Reference Metadata */}
+            <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-[#0B5FFF]" />
+                  <span>Contractual Parties & Engineering Reference Documents</span>
+                </h4>
+                <span className="text-[11px] text-slate-400">Client, EPC, Subcontractor & Drawing reference</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {/* 1. Client */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                    1. Client
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Scatec Solar / Eskom / Anglo American"
+                    value={client}
+                    onChange={e => setClient(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                  />
+                </div>
+
+                {/* 2. EPC Contractor */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                    2. EPC Contractor
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Scedih Engineering (EPC)"
+                    value={epc}
+                    onChange={e => setEpc(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                  />
+                </div>
+
+                {/* 3. Subcontractor */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                    3. Subcontractor
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Civils Direct / Specialist Subcontractor"
+                    value={subcontractor}
+                    onChange={e => setSubcontractor(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                  />
+                </div>
+
+                {/* 4. Document Number */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                    4. Document Number
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. QA-ITR-2026-089 / ITP-042"
+                    value={documentNumber}
+                    onChange={e => setDocumentNumber(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                  />
+                </div>
+
+                {/* 5. Inspection Date and Time */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                    5. Inspection Date & Time
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="date"
+                      value={inspectionDate}
+                      onChange={e => setInspectionDate(e.target.value)}
+                      className="w-full h-10 px-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono font-semibold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                    />
+                    <input
+                      type="time"
+                      value={inspectionTime}
+                      onChange={e => setInspectionTime(e.target.value)}
+                      className="w-full h-10 px-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono font-semibold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Reference Drawing Number */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                    6. Reference Drawing Number
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. DWG-MV-201-REV-04 / SEC-B-B"
+                    value={referenceDrawingNumber}
+                    onChange={e => setReferenceDrawingNumber(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#0B5FFF]"
+                  />
+                </div>
               </div>
             </div>
 
@@ -591,6 +722,19 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                   {/* Tags line */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-mono font-bold text-emerald-600">{item.id}</span>
+                    
+                    {item.documentNumber && (
+                      <span className="text-[10px] font-mono font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+                        <FileText className="h-3 w-3" /> {item.documentNumber}
+                      </span>
+                    )}
+
+                    {item.referenceDrawingNumber && (
+                      <span className="text-[10px] font-mono font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800 flex items-center gap-1">
+                        <Layers className="h-3 w-3" /> Dwg: {item.referenceDrawingNumber}
+                      </span>
+                    )}
+
                     <Badge variant="outline" className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold">
                       {item.category}
                     </Badge>
@@ -621,11 +765,14 @@ export function QualityModule({ onBack }: QualityModuleProps) {
                     {item.title}
                   </h3>
 
-                  {/* Metadata: Location, Inspector, Date */}
-                  <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                  {/* Metadata: Location, Inspector, Date & Time, Stakeholders */}
+                  <div className="flex items-center gap-x-4 gap-y-1 text-xs text-slate-500 flex-wrap">
                     <span>Location: <strong className="text-slate-700 dark:text-slate-300">{item.location}</strong></span>
                     <span>Inspector: <strong className="text-slate-700 dark:text-slate-300">{item.inspector}</strong></span>
-                    <span>Date: <strong className="text-slate-700 dark:text-slate-300">{item.date}</strong></span>
+                    <span>Inspection Date: <strong className="text-slate-700 dark:text-slate-300">{item.date} {item.inspectionTime ? `@ ${item.inspectionTime}` : ''}</strong></span>
+                    {item.client && <span>Client: <strong className="text-slate-700 dark:text-slate-300">{item.client}</strong></span>}
+                    {item.epc && <span>EPC: <strong className="text-slate-700 dark:text-slate-300">{item.epc}</strong></span>}
+                    {item.subcontractor && <span>Subcontractor: <strong className="text-slate-700 dark:text-slate-300">{item.subcontractor}</strong></span>}
                   </div>
 
                   {/* QA Measurement Progress Breakdown */}
