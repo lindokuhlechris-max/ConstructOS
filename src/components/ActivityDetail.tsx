@@ -343,18 +343,20 @@ export function ActivityDetail({ activity: initialActivity, onSave, onClose, onD
   const [logProgressPostReport, setLogProgressPostReport] = useState<boolean>(true);
   const [logProgressDelayReason, setLogProgressDelayReason] = useState<string>('');
 
-  // Click outside listener for subtask select popout
+  // Click/Touch outside listener for subtask select popout
   useEffect(() => {
-    function handleClickOutsideSubtaskDropdown(event: MouseEvent) {
+    function handleClickOutsideSubtaskDropdown(event: MouseEvent | TouchEvent) {
       if (subtaskDropdownRef.current && !subtaskDropdownRef.current.contains(event.target as Node)) {
         setIsSubtaskDropdownOpen(false);
       }
     }
     if (isSubtaskDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutsideSubtaskDropdown);
+      document.addEventListener('touchstart', handleClickOutsideSubtaskDropdown);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutsideSubtaskDropdown);
+      document.removeEventListener('touchstart', handleClickOutsideSubtaskDropdown);
     };
   }, [isSubtaskDropdownOpen]);
 
@@ -3820,7 +3822,10 @@ ${subtaskSummaryLines}
       {/* Upgraded Granular Subtask & Shift Progress Modal */}
       {isLogProgressModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 rounded-3xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[94vh] overflow-hidden">
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 rounded-3xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[94vh] overflow-hidden"
+          >
             {/* Header */}
             <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/40">
               <div className="min-w-0 pr-3">
@@ -3847,7 +3852,16 @@ ${subtaskSummaryLines}
               </Button>
             </div>
 
-            <form onSubmit={handleLogProgressSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-6">
+            <form 
+              onSubmit={handleLogProgressSubmit} 
+              onKeyDown={(e) => {
+                // Prevent mobile keyboard 'Enter'/'Done'/'Go' key from prematurely submitting the form while typing in input fields
+                if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') {
+                  e.preventDefault();
+                }
+              }}
+              className="p-4 sm:p-6 overflow-y-auto space-y-6"
+            >
               {/* Mode Switcher: Granular Subtasks vs Macro Activity */}
               {logProgressSubtasks && logProgressSubtasks.length > 0 && (
                 <div className="flex items-center justify-between p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/80 gap-1">
