@@ -484,59 +484,79 @@ export function AccommodationDetail({ unit, onClose, onUpdate, onDelete }: Accom
           </div>
         </div>
 
-        {/* Header Action Buttons */}
+        {/* Header Action Buttons - Slide Expandable Icons */}
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           <button
             onClick={() => setIsPdfModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition shadow-sm"
+            className="group h-9 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
             title="Open Interactive Print Preview & PDF Builder"
           >
-            <Printer className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Print Monthly Report
+            <Printer className="w-4 h-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+            <span className="max-w-0 opacity-0 group-hover:max-w-[130px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+              Print Report
+            </span>
           </button>
 
           <button
             onClick={() => exportSingleAccommodationToExcel(unit, employees, unitUtilities, facilityPayments)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition shadow-sm"
+            className="group h-9 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
             title="Export Clean Multi-Sheet Excel (.xlsx)"
           >
-            <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Export Excel
+            <Download className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <span className="max-w-0 opacity-0 group-hover:max-w-[110px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+              Export Excel
+            </span>
           </button>
 
           {unit.ownership === 'Rented' && (
             <button
               onClick={() => handleOpenLogPayment()}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition shadow-sm"
+              className="group h-9 px-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
               title="Log Monthly Lease Payment"
             >
-              <CreditCard className="w-4 h-4" /> Log Payment
+              <CreditCard className="w-4 h-4 shrink-0 text-white" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[110px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+                Log Payment
+              </span>
             </button>
           )}
 
           <button
             onClick={() => setIsUtilityModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition shadow-sm"
+            className="group h-9 px-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
+            title="Post Utility Bill"
           >
-            <Zap className="w-4 h-4" /> Post Utility Bill
+            <Zap className="w-4 h-4 shrink-0 text-white" />
+            <span className="max-w-0 opacity-0 group-hover:max-w-[120px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+              Post Utility
+            </span>
           </button>
 
           <button
             onClick={() => setIsAssignModalOpen(true)}
             disabled={stats.vacantBeds === 0}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+            className={`group h-9 px-2.5 rounded-xl transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0 ${
               stats.vacantBeds === 0
-                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-200 dark:border-slate-700'
                 : 'bg-[#0B5FFF] hover:bg-blue-700 text-white'
             }`}
+            title="Allocate Employee to Facility Room"
           >
-            <UserPlus className="w-4 h-4" /> Allocate Staff
+            <UserPlus className="w-4 h-4 shrink-0" />
+            <span className="max-w-0 opacity-0 group-hover:max-w-[110px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+              Allocate Staff
+            </span>
           </button>
 
           <button
             onClick={handleOpenEditModal}
-            className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition"
+            className="group h-9 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
             title="Edit Facility Configuration"
           >
-            <Edit3 className="w-4 h-4" />
+            <Edit3 className="w-4 h-4 shrink-0 text-[#0B5FFF]" />
+            <span className="max-w-0 opacity-0 group-hover:max-w-[80px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+              Edit
+            </span>
           </button>
         </div>
       </div>

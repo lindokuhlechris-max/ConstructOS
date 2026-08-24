@@ -1404,9 +1404,10 @@ ${subtaskSummaryLines}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Header Action Buttons - Slide Expandable Icons */}
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
           {!isEditing && canEditActivities && (
-            <Button 
+            <button 
               onClick={() => {
                 const subtasks = activity.subtasks ? JSON.parse(JSON.stringify(activity.subtasks)) : [];
                 setLogProgressActualQty(activity.actualQuantity || 0);
@@ -1458,74 +1459,115 @@ ${subtaskSummaryLines}
                 setLogProgressIsGranularMode(subtasks.length > 0);
                 setIsLogProgressModalOpen(true);
               }} 
-              className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2 rounded-xl shadow-sm font-medium px-4"
+              className="group h-9 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
+              title="Log Daily Shift Progress & Granular Subtasks"
             >
-              <TrendingUp className="h-4 w-4" />
-              <span>Log Progress</span>
-            </Button>
+              <TrendingUp className="h-4 w-4 shrink-0 text-white" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[120px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+                Log Progress
+              </span>
+            </button>
           )}
+
           {!isEditing && canEditActivities && (
-            <Button onClick={() => setIsAssignModalOpen(true)} className="bg-[#0B5FFF] hover:bg-blue-600 text-white gap-2 rounded-xl shadow-sm font-medium px-4">
-              <UserCheck className="h-4 w-4" />
-              <span>Assign</span>
-            </Button>
+            <button 
+              onClick={() => setIsAssignModalOpen(true)} 
+              className="group h-9 px-2.5 rounded-xl bg-[#0B5FFF] hover:bg-blue-600 text-white transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
+              title="Assign Labour, Equipment & Materials"
+            >
+              <UserCheck className="h-4 w-4 shrink-0 text-white" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[90px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+                Assign
+              </span>
+            </button>
           )}
+
           {!isEditing && canEditActivities && onDuplicate && (
-            <Button 
-              variant="outline" 
+            <button 
               onClick={() => onDuplicate(activity)} 
-              className="gap-2 rounded-xl text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+              className="group h-9 px-2.5 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/70 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
               title="Duplicate activity with resources and edit minor differences"
             >
-              <Copy className="h-4 w-4" />
-              <span>Duplicate</span>
-            </Button>
+              <Copy className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[100px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+                Duplicate
+              </span>
+            </button>
           )}
+
           {!isEditing && canEditActivities && onDelete && (
-            <Button variant="outline" onClick={() => onDelete(activity.id)} className="gap-2 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/50">
-              <Trash2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Delete</span>
-            </Button>
+            <button 
+              onClick={() => onDelete(activity.id)} 
+              className="group h-9 px-2.5 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50/70 hover:bg-red-100 dark:bg-red-950/40 text-red-500 hover:text-red-600 transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
+              title="Delete Activity"
+            >
+              <Trash2 className="h-4 w-4 shrink-0 text-red-500 group-hover:text-red-600" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[90px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+                Delete
+              </span>
+            </button>
           )}
+
           {!isEditing && (
-            <Button 
-              variant="outline" 
+            <button 
               onClick={() => setIsAuditModalOpen(true)} 
-              className="gap-2 rounded-xl text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              className="group h-9 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
               title="View full audit trail & changelog for this activity and its subtasks"
             >
-              <History className="h-4 w-4 text-[#0B5FFF]" />
-              <span>Audit Trail</span>
-            </Button>
+              <History className="h-4 w-4 shrink-0 text-[#0B5FFF]" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[110px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+                Audit Trail
+              </span>
+            </button>
           )}
+
           {!isEditing && (
-            <Button 
-              variant="outline" 
+            <button 
               onClick={() => setIsShiftDispatchModalOpen(true)} 
-              className="gap-2 rounded-xl text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/50 cursor-pointer"
+              className="group h-9 px-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
               title="Dispatch Work Order & Shift Ticket (WhatsApp / PDF / Offline HTML)"
             >
-              <Share2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Dispatch Shift Ticket</span>
-            </Button>
+              <Share2 className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[170px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+                Dispatch Shift Ticket
+              </span>
+            </button>
           )}
+
           {!isEditing && (
-            <Button variant="outline" onClick={() => setIsPrintModalOpen(true)} className="gap-2 rounded-xl">
-              <FileText className="h-4 w-4" />
-              <span>Print</span>
-            </Button>
+            <button 
+              onClick={() => setIsPrintModalOpen(true)} 
+              className="group h-9 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
+              title="Print Activity Sheet"
+            >
+              <FileText className="h-4 w-4 shrink-0 text-slate-600 dark:text-slate-300 group-hover:text-[#0B5FFF]" />
+              <span className="max-w-0 opacity-0 group-hover:max-w-[90px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+                Print
+              </span>
+            </button>
           )}
+
           {isEditable && canEditActivities && (
             isEditing ? (
-              <Button onClick={handleSave} className="bg-[#0B5FFF] hover:bg-blue-700 text-white gap-2 rounded-xl">
-                <Save className="h-4 w-4" />
-                <span>Save Changes</span>
-              </Button>
+              <button 
+                onClick={handleSave} 
+                className="group h-9 px-3 rounded-xl bg-[#0B5FFF] hover:bg-blue-700 text-white transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
+                title="Save Changes"
+              >
+                <Save className="h-4 w-4 shrink-0 text-white" />
+                <span className="ml-1.5 text-xs font-bold whitespace-nowrap">Save Changes</span>
+              </button>
             ) : (
-              <Button variant="outline" onClick={() => setIsEditing(true)} className="gap-2 rounded-xl">
-                <Edit3 className="h-4 w-4" />
-                <span>Edit</span>
-              </Button>
+              <button 
+                onClick={() => setIsEditing(true)} 
+                className="group h-9 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all duration-300 flex items-center shadow-2xs overflow-hidden cursor-pointer shrink-0"
+                title="Edit Activity"
+              >
+                <Edit3 className="h-4 w-4 shrink-0 text-[#0B5FFF]" />
+                <span className="max-w-0 opacity-0 group-hover:max-w-[80px] group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 ease-in-out whitespace-nowrap text-xs font-bold overflow-hidden">
+                  Edit
+                </span>
+              </button>
             )
           )}
         </div>
