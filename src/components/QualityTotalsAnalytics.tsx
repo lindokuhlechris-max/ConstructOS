@@ -757,7 +757,7 @@ export function QualityTotalsAnalytics({ onSelectInspection, onBackToInspections
               </p>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto w-full max-w-full touch-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] scrollbar-thin">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50/60 dark:bg-slate-900/60 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-200 dark:border-slate-800">
                   <tr>
